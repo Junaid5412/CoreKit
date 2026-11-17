@@ -456,7 +456,11 @@ func pickerState(running func(id string) bool) map[string]any {
 		}
 		list = append(list, map[string]any{"id": p.ID, "name": p.Name, "color": p.Color, "proxy": px, "lastUsed": p.LastUsed, "running": running(p.ID)})
 	}
-	return map[string]any{"t": "state", "profiles": list, "colors": profileColors}
+	pxs := []map[string]any{}
+	for _, x := range c.Proxies {
+		pxs = append(pxs, map[string]any{"id": x.ID, "name": x.Name})
+	}
+	return map[string]any{"t": "state", "profiles": list, "colors": profileColors, "proxies": pxs, "default": c.Default}
 }
 
 // webrtcProbe starts ICE gathering (with a public STUN server) and records every candidate.

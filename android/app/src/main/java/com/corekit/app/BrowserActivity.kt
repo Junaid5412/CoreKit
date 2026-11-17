@@ -269,14 +269,36 @@ class BrowserActivity : Activity() {
                 val ps = JSONArray()
                 for (p in list(profiles())) ps.put(JSONObject().put("id", p.optString("id")).put("name", p.optString("name")).put("color", p.optString("color"))
                     .put("proxy", chosenProxy(p)?.optString("name") ?: "").put("lastUsed", p.optLong("lastUsed")).put("running", false))
-                post(JSONObject().put("t", "state").put("profiles", ps).put("colors", JSONArray(colors())))
+                val pxs = JSONArray()
+                for (x in list(proxies())) pxs.put(JSONObject().put("id", x.optString("id")).put("name", x.optString("name")))
+                post(JSONObject().put("t", "state").put("profiles", ps).put("colors", JSONArray(colors())).put("proxies", pxs).put("default", cfg.optString("default")))
             }
             "open" -> openProfile(m.optString("id"))
             "new" -> {
                 val name = m.optString("name").trim().take(32)
                 if (name.isEmpty()) return
+                // asked when the profile is made: proxy (none, a saved one or a new link) and ad blocker
                 val p = JSONObject().put("id", newId()).put("name", name).put("color", m.optString("color", "#60a5fa")).put("search", "google").put("created", now())
-                profiles().put(p); saveConfig(); openProfile(p.getString("id"))
+                    .put("noAdblock", !m.optBoolean("on"))
+                val choice = m.optString("id")
+                fun create() { profiles().put(p); saveConfig(); openProfile(p.getString("id")) }
+                when (choice) {
+                    "" -> create()
+                    "new" -> {
+                        val link = m.optString("link").trim()
+                        bg.execute {
+                            val r = helper.call("parse", JSONObject().put("link", link))
+                            main.post {
+                                if (r.has("error")) { post(JSONObject().put("t", "error").put("msg", r.optString("error")).put("field", "link")); return@post }
+                                val px = JSONObject().put("id", newId()).put("name", r.optString("name").ifEmpty { r.optString("kind").uppercase() }.take(40))
+                                    .put("link", link).put("kind", r.optString("kind")).put("added", now())
+                                proxies().put(px); if (cfg.optString("default").isEmpty()) cfg.put("default", px.optString("id"))
+                                p.put("proxy", px.optString("id")); create()
+                            }
+                        }
+                    }
+                    else -> { if (proxyById(choice) != null) p.put("proxy", choice); create() }
+                }
             }
         }
     }

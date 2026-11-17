@@ -149,6 +149,27 @@ func (c *brConfig) proxy(id string) *brProxy {
 }
 
 // proxyFor resolves the proxy a profile uses (nil = direct).
+// newProxy turns a pasted link into a saved-proxy entry; the name comes from the link when
+// none is given.
+func newProxy(name, link string) (*brProxy, error) {
+	link = strings.TrimSpace(link)
+	_, kind, autoName, err := parseProxy(link)
+	if err != nil {
+		return nil, err
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		name = autoName
+	}
+	if name == "" {
+		name = strings.ToUpper(kind)
+	}
+	if len([]rune(name)) > 40 {
+		name = string([]rune(name)[:40])
+	}
+	return &brProxy{ID: newID(), Name: name, Link: link, Added: time.Now().Unix()}, nil
+}
+
 func (c *brConfig) proxyFor(p *brProfile) *brProxy {
 	switch p.Proxy {
 	case "":

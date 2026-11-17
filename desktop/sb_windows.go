@@ -1760,23 +1760,11 @@ func (a *sbApp) deleteProfile(id string) {
 }
 
 func (a *sbApp) addProxy(name, link string) {
-	link = strings.TrimSpace(link)
-	_, kind, autoName, err := parseProxy(link)
+	px, err := newProxy(name, link)
 	if err != nil {
 		a.post(map[string]any{"t": "proxyAdded", "error": err.Error()})
 		return
 	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		name = autoName
-	}
-	if name == "" {
-		name = strings.ToUpper(kind)
-	}
-	if len([]rune(name)) > 40 {
-		name = string([]rune(name)[:40])
-	}
-	px := &brProxy{ID: newID(), Name: name, Link: link, Added: time.Now().Unix()}
 	brMutate(func(c *brConfig) {
 		c.Proxies = append(c.Proxies, px)
 		if c.Default == "" {
