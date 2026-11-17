@@ -6,13 +6,16 @@ package main
 
 import (
 	"bufio"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -79,7 +82,7 @@ type vmSnapMeta struct {
 	Image   string `json:"image"`
 	RAM     int    `json:"ram"`
 	CPUs    int    `json:"cpus"`
-	Version string `json:"version"` // CoreKit version: a new emulator can't load old saves
+	Version string `json:"version"` // emulator build: a different one can't load the save
 	Saved   int64  `json:"saved"`
 	Size    int64  `json:"size"`
 }
@@ -100,7 +103,7 @@ func vmSnapFor(m *vmMachine) (string, *vmSnapMeta) {
 		return "", nil
 	}
 	var meta vmSnapMeta
-	if json.Unmarshal(b, &meta) != nil || meta.Image != m.Image || meta.RAM != m.RAM || meta.CPUs != m.CPUs || meta.Version != appVersion {
+	if json.Unmarshal(b, &meta) != nil || meta.Image != m.Image || meta.RAM != m.RAM || meta.CPUs != m.CPUs || meta.Version != vmQemuID() {
 		vmDropSnap(m.ID)
 		return "", nil
 	}
@@ -184,7 +187,7 @@ func (e *vmEngine) doSuspend(r *vmRun) error {
 			if err := os.Rename(part, vmSnapPath(r.m.ID)); err != nil {
 				return err
 			}
-			meta, _ := json.Marshal(vmSnapMeta{Image: r.m.Image, RAM: r.m.RAM, CPUs: r.m.CPUs, Version: appVersion, Saved: time.Now().Unix(), Size: fi.Size()})
+			meta, _ := json.Marshal(vmSnapMeta{Image: r.m.Image, RAM: r.m.RAM, CPUs: r.m.CPUs, Version: vmQemuID(), Saved: time.Now().Unix(), Size: fi.Size()})
 			os.WriteFile(vmSnapMetaPath(r.m.ID), meta, 0600)
 			r.set("stopping", "Saved")
 			q.do("quit", nil)
@@ -242,4 +245,30 @@ func (e *vmEngine) afterResume(r *vmRun) bool {
 		}
 	}
 	return false
+}
+
+var (
+	vmQemuIDOnce sync.Once
+	vmQemuIDVal  string
+)
+
+// vmQemuID identifies the emulator build (size + hash of its first MB): saved states only
+// load in the exact build that made them.
+func vmQemuID() string {
+	vmQemuIDOnce.Do(func() {
+		q, err := vmFindQemu()
+		if err != nil {
+			return
+		}
+		f, err := os.Open(q.exe)
+		if err != nil {
+			return
+		}
+		defer f.Close()
+		st, _ := f.Stat()
+		h := sha256.New()
+		io.CopyN(h, f, 1<<20)
+		vmQemuIDVal = fmt.Sprintf("%d-%x", st.Size(), h.Sum(nil)[:8])
+	})
+	return vmQemuIDVal
 }

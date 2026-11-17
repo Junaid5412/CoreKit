@@ -1038,6 +1038,10 @@ func vmServeFile(path string) (port int, done chan error, err error) {
 		if tc, ok := c.(*net.TCPConn); ok {
 			tc.CloseWrite()
 		}
+		// the guest's netcat keeps sending (from /dev/zero) until it has read everything;
+		// swallow that so closing doesn't reset the connection under it
+		c.SetReadDeadline(time.Now().Add(2 * time.Minute))
+		io.Copy(io.Discard, c)
 		done <- err
 	}()
 	return l.Addr().(*net.TCPAddr).Port, done, nil
@@ -1094,12 +1098,13 @@ func (e *vmEngine) install(id, label string, files []string) (*vmJob, error) {
 			}
 			name := fmt.Sprintf("/data/local/tmp/ck/%d.apk", i)
 			e.jobSet(j, "running", fmt.Sprintf("Copying (%d of %d)", i+1, len(files)), int(sent*80/maxI64(total, 1)))
-			_, rc, err := a.run(fmt.Sprintf("toybox nc 10.0.2.2 %d </dev/null > %s", port, name), 10*time.Minute)
-			if derr := <-done; err != nil || rc != 0 || derr != nil {
+			st, _ := os.Stat(f)
+			// stdin must stay open, or netcat stops before the whole file has arrived
+			out, rc, err := a.run(fmt.Sprintf("toybox nc -w 30 10.0.2.2 %d </dev/zero > %s; wc -c < %s", port, name, name), 10*time.Minute)
+			if derr := <-done; err != nil || rc != 0 || derr != nil || strings.TrimSpace(out) != strconv.FormatInt(st.Size(), 10) {
 				e.jobSet(j, "error", "Copying into the virtual device failed. Is its network up?", 0)
 				return
 			}
-			st, _ := os.Stat(f)
 			sent += st.Size()
 			names = append(names, name)
 		}
@@ -1203,15 +1208,16 @@ func (e *vmEngine) enableARM(r *vmRun, j *vmJob) {
 		e.jobSet(j, "error", "Could not share the file", 0)
 		return
 	}
-	_, rc, err := a.run(fmt.Sprintf("mkdir -p /data/arm && toybox nc 10.0.2.2 %d </dev/null > /data/arm/houdini9_y.sfs", port), 5*time.Minute)
-	if derr := <-done; err != nil || rc != 0 || derr != nil {
+	hs, _ := os.Stat(dst)
+	out, rc, err := a.run(fmt.Sprintf("mkdir -p /data/arm && toybox nc -w 30 10.0.2.2 %d </dev/zero > /data/arm/houdini9_y.sfs; wc -c < /data/arm/houdini9_y.sfs", port), 5*time.Minute)
+	if derr := <-done; err != nil || rc != 0 || derr != nil || hs == nil || strings.TrimSpace(out) != strconv.FormatInt(hs.Size(), 10) {
 		e.jobSet(j, "error", "Copying into the virtual device failed. Is its network up?", 0)
 		return
 	}
 	e.jobSet(j, "running", "Turning it on", 85)
 	a.run("setprop persist.sys.nativebridge 1", 10*time.Second)
 	a.run("timeout 90 enable_nativebridge >/dev/null 2>&1", 2*time.Minute)
-	out, _, _ := a.run("ls /system/lib/arm 2>/dev/null | head -3", 10*time.Second)
+	out, _, _ = a.run("ls /system/lib/arm 2>/dev/null | head -3", 10*time.Second)
 	if strings.TrimSpace(out) == "" {
 		e.jobSet(j, "error", "ARM support could not be turned on", 0)
 		return
