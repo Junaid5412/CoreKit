@@ -110,6 +110,46 @@ class Host(private val act: MainActivity, private val web: WebView) {
         else -> notFound()
     }
 
+    // ---------------------------------------------------------------- Remote Access events → page
+
+    @Volatile private var remoteThread: Thread? = null
+    @Volatile private var stopped = false
+    private val framePending = AtomicBoolean(false)
+    @Volatile private var nextFrame: String? = null
+
+    private fun startRemotePush() {
+        if (remoteThread?.isAlive == true) return
+        remoteThread = Thread {
+            while (!stopped) {
+                val s = RemoteEngine.events(act, false)
+                if (s == null) { Thread.sleep(1000); continue }
+                try {
+                    s.bufferedReader().forEachLine { line ->
+                        if (stopped) throw InterruptedException()
+                        if (line.startsWith("data: ")) deliver(line.substring(6))
+                    }
+                } catch (_: Throwable) {}
+                if (!stopped) Thread.sleep(400)
+            }
+        }.apply { isDaemon = true; start() }
+    }
+
+    private fun deliver(json: String) {
+        if (json.startsWith("{\"d\":")) { // a screen frame: only the newest matters
+            nextFrame = json
+            if (framePending.compareAndSet(false, true)) act.runOnUiThread { pushFrame() }
+            return
+        }
+        act.runOnUiThread { web.evaluateJavascript("window.__re&&window.__re($json)", null) }
+    }
+
+    private fun pushFrame() {
+        val f = nextFrame
+        nextFrame = null
+        if (f == null) { framePending.set(false); return }
+        web.evaluateJavascript("window.__re&&window.__re($f)") { if (nextFrame != null) pushFrame() else framePending.set(false) }
+    }
+
     // ---------------------------------------------------------------- server-sent events
 
     class Sse(private val o: OutputStream) {
@@ -186,7 +226,7 @@ class Host(private val act: MainActivity, private val web: WebView) {
         try { act.startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Throwable) {}
     }
 
-    fun shutdown() { pool.shutdownNow() }
+    fun shutdown() { stopped = true; pool.shutdownNow() }
 
     // ---------------------------------------------------------------- JavaScript bridge
 
@@ -260,6 +300,11 @@ class Host(private val act: MainActivity, private val web: WebView) {
                 catch (_: Throwable) { try { act.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Throwable) {} }
             }
         }
+
+        /** Remote Access: engine events are pushed into the page (no streaming through the WebView). */
+        @JavascriptInterface fun remoteAttach() = startRemotePush()
+
+        @JavascriptInterface fun remoteState(): String = RemoteEngine.state()
 
         /** Remote Access: commands to the engine. "Start sharing" first asks Android for screen capture. */
         @JavascriptInterface fun remote(json: String) {
