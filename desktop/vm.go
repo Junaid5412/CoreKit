@@ -130,7 +130,6 @@ var vmCatalogue = []vmImage{
 			DiskURL: vmRelease + "android9-lite-started.ckt", DiskSHA: vmPin["android9-lite-started.ckt"], DiskSize: vmSize["android9-lite-started.ckt"]}},
 }
 
-
 func vmImageByID(id string) *vmImage {
 	for i := range vmCatalogue {
 		if vmCatalogue[i].ID == id {
