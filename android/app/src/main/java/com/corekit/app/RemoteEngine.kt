@@ -96,6 +96,15 @@ object RemoteEngine {
         } catch (_: Throwable) { null }
     }
 
+    /** Current engine state (JSON), or "" if the engine isn't running yet. Never starts it. */
+    fun state(): String {
+        if (port == 0 || proc?.isAlive != true) return ""
+        return try {
+            val c = open("state"); c.readTimeout = 2000
+            val s = c.inputStream.bufferedReader().readText(); c.disconnect(); s
+        } catch (_: Throwable) { "" }
+    }
+
     /** One captured screen frame (JPEG). Called on the capture thread. */
     fun frame(jpeg: ByteArray, w: Int, h: Int) {
         if (port == 0) return

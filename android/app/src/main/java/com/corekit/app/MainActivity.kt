@@ -163,7 +163,10 @@ class MainActivity : Activity() {
 
     private fun askScreenCapture() {
         val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        try { startActivityForResult(mpm.createScreenCaptureIntent(), REQ_PROJECTION) } catch (_: Throwable) { jsToast("Screen sharing is not available on this phone.") }
+        // Android 14+: offer only "entire screen" (no "a single app" choice)
+        val ask = if (Build.VERSION.SDK_INT >= 34) mpm.createScreenCaptureIntent(android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay())
+            else mpm.createScreenCaptureIntent()
+        try { startActivityForResult(ask, REQ_PROJECTION) } catch (_: Throwable) { jsToast("Screen sharing is not available on this phone.") }
     }
 
     fun stopRemoteSharing() = runOnUiThread {

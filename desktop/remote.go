@@ -1063,6 +1063,15 @@ func mountRemote(mux *http.ServeMux, prefix string, auth func(*http.Request) boo
 			serveEvents(w, r, true)
 		}
 	})
+	mux.HandleFunc(prefix+"state", func(w http.ResponseWriter, r *http.Request) {
+		if !ok(w, r) {
+			return
+		}
+		rEng.mu.Lock()
+		st := rEng.stateLocked()
+		rEng.mu.Unlock()
+		writeJSON(w, st)
+	})
 	mux.HandleFunc(prefix+"cmd", func(w http.ResponseWriter, r *http.Request) {
 		if !ok(w, r) {
 			return

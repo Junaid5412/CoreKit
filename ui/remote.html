@@ -16,7 +16,8 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke
 
 /* ---------- header ---------- */
 .top{display:flex;align-items:center;gap:12px;height:66px;padding:0 22px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0d131a,#0b1016)}
-.back{display:none;width:38px;height:38px;border:0;border-radius:11px;background:#141c26;color:var(--white);place-items:center;cursor:pointer}
+.back{display:none;width:38px;height:38px;border:0;border-radius:11px;background:#141c26;color:var(--white);place-items:center;cursor:pointer;flex:none}
+.back.show{display:grid}.back:hover{background:#1a2431}
 .logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#0f3b35,#0e2a3a);color:var(--acc);box-shadow:inset 0 0 0 1px #1d4a44;flex:none}
 .logo svg{width:21px;height:21px}
 .brand{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -220,7 +221,7 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke
 @media (max-width:600px){
   .top{height:58px;padding:0 12px;gap:10px}
   #home{height:calc(100% - 58px)}
-  .back{display:grid}.logo{display:none}
+  .back.show{display:grid}.logo{display:none}
   .top .chip{display:none}
   .wrap{padding:16px 12px 40px}
   .hero{margin-bottom:12px}.hero h1{font-size:20px}
@@ -264,11 +265,9 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke
     </div>
   </div></section>
   <section id="pShare" class="hidden"><div class="wrap narrow">
-    <button class="crumb" data-go="choose"><svg class="i" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>Back</button>
     <div class="card" id="shareCard"></div>
   </div></section>
   <section id="pConn" class="hidden"><div class="wrap narrow">
-    <button class="crumb" data-go="choose"><svg class="i" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>Back</button>
     <div class="card" id="connCard">
       <div class="ch"><span class="ci blue"><svg class="i" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg></span><div><h2>Connect to a device</h2><div class="cs">On the other device choose Share, then enter what it shows</div></div></div>
       <div id="connBody"></div>
@@ -363,7 +362,7 @@ const IC = {
 };
 const svg = k => `<svg class="i" viewBox="0 0 24 24">${IC[k] || IC.windows}</svg>`;
 const devWord = p => p === 'android' ? 'phone' : 'PC';
-const myPlat = () => (S.me && S.me.plat) || (ANDROID ? 'android' : 'windows');
+const myPlat = () => ANDROID ? 'android' : ((S.me && S.me.plat) || 'windows');
 
 /* ---------- engine link ---------- */
 let S = {me:{}, hosting:false};
@@ -405,6 +404,8 @@ function render() {
   if (S.hosting || (s0 && s0.role === 'shared')) pane = 'share';
   else if (S.stage || connBusy) pane = 'connect';
   $('#pChoose').classList.toggle('hidden', pane !== 'choose');
+  $('#back').classList.toggle('show', ANDROID || pane !== 'choose');
+  $('#back').title = pane !== 'choose' ? 'Back' : 'Home';
   $('#pShare').classList.toggle('hidden', pane !== 'share');
   $('#pConn').classList.toggle('hidden', pane !== 'connect');
   $('#shareT').textContent = 'Share this ' + devWord(myPlat());
@@ -432,7 +433,7 @@ function renderShare() {
   c.className = 'card';
   if (!S.hosting) {
     c.innerHTML = `<div class="ch"><span class="ci teal">${svg('share')}</span><div><h2>Share this ${word}</h2><div class="cs">Let a device you trust see and control it</div></div></div>
-      <p class="d">${ANDROID ? 'Android will ask to allow screen sharing. Tap <b>Start now</b> on that prompt.' : 'Starting…'}</p>${ANDROID ? checksHTML(false) : ''}
+      ${(a11yInfo && a11yInfo.sharing) || !ANDROID ? `<div class="stage"><span class="sp"></span><span>Getting your code…</span></div>` : `<p class="d">Android will ask to share your screen. Tap <b>Start now</b> on that prompt.</p>`}${ANDROID ? checksHTML(false) : ''}
       <div class="row"><button class="btn pri" data-a="share">${svg('share')}Start sharing</button></div>`;
     return;
   }
@@ -453,7 +454,7 @@ function renderShare() {
 function checksHTML(live) {
   const st = a11yInfo || {};
   const rows = [
-    [true, 'Screen sharing', live ? 'On: your screen is being shared' : 'Android asks when you start sharing', ''],
+    [live || !!st.sharing, 'Screen sharing', live || st.sharing ? 'On: your whole screen is shared' : 'Android asks when you start sharing', ''],
     [!!st.a11y, 'Remote control', st.a11y ? 'On: the other device can tap and type' : 'Needed to tap and type. Without it, view only.', st.a11y ? '' : `<button class="btn sm" data-a="a11y">Turn on</button>`],
   ];
   if (st.notifNeeded) rows.push([!!st.notif, 'Notifications', st.notif ? 'On: shows that sharing is active' : 'Shows a notice while sharing', st.notif ? '' : `<button class="btn sm" data-a="notif">Allow</button>`]);
@@ -881,7 +882,12 @@ function refreshAndroid() { if (!ANDROID) return; try { a11yInfo = JSON.parse(N.
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshAndroid(); });
 refreshAndroid();
 render();
-connectEvents();
+if (ANDROID) {
+  window.__re = onEvent;
+  try { N.remoteAttach(); } catch (e) {}
+  const poll = () => { try { const t = N.remoteState(); if (t) { const st = JSON.parse(t); if (st && st.t === 'state') onEvent(st); } } catch (e) {} setTimeout(poll, S.session ? 4000 : 1500); };
+  setTimeout(poll, 300);
+} else connectEvents();
 setTimeout(() => {
   if (gotState) return;
   let why = '';
