@@ -9,6 +9,7 @@ jobs:
       fail-fast: false
       matrix:
         comp: [gzip]
+        net: [wifi, ether]
     steps:
       - uses: actions/checkout@v4
       - run: |
@@ -22,17 +23,20 @@ jobs:
           done
           echo "f7eb8fc56f29ad5432335dc054183acf086c539f3990f0b6e9ff58bd6df4604e  /tmp/a9.iso" | sha256sum -c
         timeout-minutes: 25
+      - name: ARM support files
+        run: |
+          for v in 9_y 9_z; do curl -fsSL --max-time 120 -o /tmp/houdini$v.sfs "http://zebra-mirror.ddscentral.org/dl.android-x86.org/houdini/$v/houdini.sfs" && sha256sum /tmp/houdini$v.sfs && ls -la /tmp/houdini$v.sfs || echo "no $v"; done
       - name: Where do the ARM-support links point?
         run: for u in http://t.cn/EJrmzZv http://t.cn/EJrmYMH http://t.cn/EJrmrA7 http://tinyurl.com/y3nagyza http://tinyurl.com/y6azmjas http://tinyurl.com/y6g6cx27; do echo "== $u"; curl -sIL --max-time 20 "$u" | grep -iE '^(HTTP|location|content-length)' || true; done
       - name: Slim it
-        run: SQ_COMP=${{ matrix.comp }} TEST_APK=$PWD/test.apk bash tools/vm/slim.sh /tmp/a9.iso $PWD/android9-lite.iso; ls -la test.apk
+        run: NETMODE=${{ matrix.net }} SQ_COMP=${{ matrix.comp }} TEST_APK=$PWD/test.apk bash tools/vm/slim.sh /tmp/a9.iso $PWD/android9-lite.iso; ls -la test.apk
       - name: Boot test (KVM)
-        run: python3 -u tools/vm/probe2.py $PWD/android9-lite.iso "" kvm 10 $PWD/test.apk
+        run: NETMODE=${{ matrix.net }} python3 -u tools/vm/probe2.py $PWD/android9-lite.iso "" kvm 10 $PWD/test.apk
         timeout-minutes: 30
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: slim-${{ matrix.comp }}
+          name: slim-${{ matrix.comp }}-${{ matrix.net }}
           path: |
             android9-lite.iso
             test.apk

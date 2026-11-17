@@ -38,7 +38,11 @@ sudo find "$S"/lib/modules -path "*kernel/sound/*" -name '*.ko' -delete 2>/dev/n
 sudo rm -rf "$S"/media/audio "$S"/media/bootanimation.zip "$S"/media/*.mp4 2>/dev/null || true
 sudo rm -f "$S"/fonts/NotoSansCJK* "$S"/fonts/NotoSerifCJK* 2>/dev/null || true
 # wireless drivers aren't needed, except virt_wifi: Android-x86 shows the network as Wi-Fi through it
-sudo find "$S"/lib/modules -path "*kernel/drivers/net/wireless/*" -name '*.ko' ! -name 'virt_wifi.ko' ! -name 'mac80211_hwsim.ko' -delete 2>/dev/null || true
+if [ "${NETMODE:-wifi}" = ether ]; then
+  sudo find "$S"/lib/modules -path "*kernel/drivers/net/wireless/*" -name '*.ko' -delete 2>/dev/null || true
+else
+  sudo find "$S"/lib/modules -path "*kernel/drivers/net/wireless/*" -name '*.ko' ! -name 'virt_wifi.ko' ! -name 'mac80211_hwsim.ko' -delete 2>/dev/null || true
+fi
 echo "== enable_nativebridge"; sudo cat "$S"/bin/enable_nativebridge 2>/dev/null | head -80 || true
 echo "== size after"; sudo du -sh "$M"
 # free blocks still hold the deleted files: punch them out so they compress to nothing

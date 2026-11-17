@@ -18,7 +18,7 @@ def launch(port0, port1, ql):
         "-drive", f"file={iso},media=cdrom,readonly=on", "-drive", f"file={data},format=raw,if=virtio",
         "-display", "none", "-vga", "std", "-netdev", "user,id=n0", "-device", "virtio-net-pci,netdev=n0",
         "-serial", f"tcp:127.0.0.1:{port0},server=on,wait=off", "-serial", f"tcp:127.0.0.1:{port1},server=on,wait=off",
-        "-device", "virtio-serial-pci", "-chardev", "socket,id=ck,host=127.0.0.1,port=5602,server=on,wait=off", "-device", "virtserialport,chardev=ck,name=corekit",
+
         "-monitor", "none", "-no-reboot"]
     print(" ".join(q), flush=True)
     p = subprocess.Popen(q, stdout=open(ql, "ab"), stderr=subprocess.STDOUT); return p
@@ -74,15 +74,15 @@ def R(cmd, wait=30, ser=None):
 if bt:
     R("mount | grep -E ' /data '"); R("df -h /data"); R("echo persist-ok > /data/ck_marker; sync; cat /data/ck_marker")
     R("ip addr show eth0; ip route; getprop net.dns1")
-    R("ping -c1 -W2 10.0.2.2; ping -c1 -W3 8.8.8.8", 15)
+
     # automation shell on ttyS1
-    R("ls -la /dev/vport* /dev/hvc* /dev/virtio-ports 2>&1; stty -F /dev/ttyS1 -a 2>&1 | head -5")
-    c.send("setsid sh -c 'cat /dev/vport0p1 | sh >/dev/vport0p1 2>&1' &")
-    time.sleep(2); v = Ser(5602, f"{OUT}/vport-first.log", echo=False); R("id; echo vport-ok UPPER", 10, v)
     c.send("setsid sh -c 'cat /dev/ttyS1 | sh >/dev/ttyS1 2>&1' & clear")
     time.sleep(2); a = Ser(5601, f"{OUT}/serial1-first.log", echo=True); R("id; echo auto-ok UPPER", 10, a)
-    if "vport-ok UPPER" in open(f"{OUT}/vport-first.log", errors="replace").read(): a = v; print("USING VPORT", flush=True)
-    R("settings put global device_provisioned 1; settings put secure user_setup_complete 1; svc wifi enable", 30, a)
+
+    R("settings put global device_provisioned 1; settings put secure user_setup_complete 1", 30, a)
+    if os.environ.get("NETMODE") == "wifi":
+        xml = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "wificonfig.xml")).read().replace("'", "'\\''")
+        R("svc wifi disable; sleep 2; mkdir -p /data/misc/wifi; printf '%s' '" + xml + "' > /data/misc/wifi/WifiConfigStore.xml; chown system:system /data/misc/wifi/WifiConfigStore.xml; chmod 600 /data/misc/wifi/WifiConfigStore.xml; svc wifi enable", 40, a)
     for i in range(20):
         o, _ = R("ip -4 -o addr show | grep -v ' lo '", 10, a)
         if "inet" in o: break
@@ -94,10 +94,20 @@ if bt:
     def serve():
         k, _ = srv.accept(); k.sendall(blob); k.shutdown(socket.SHUT_WR); k.close()
     threading.Thread(target=serve, daemon=True).start()
+    R("printf 'GET / HTTP/1.0\\r\\nHost: example.com\\r\\n\\r\\n' | toybox nc -w 8 example.com 80 | head -1; getprop net.dns1", 30, a)
+    R("dumpsys connectivity | grep -iE 'Active default network|VALIDATED' | head -4", 20, a)
     R(f"toybox nc 10.0.2.2 {port} </dev/null > /data/local/tmp/t.apk; ls -l /data/local/tmp/t.apk; echo want {len(blob)}", 60, a)
     R("pm install -r /data/local/tmp/t.apk", 120, a)
     R("pm list packages -3", 20, a)
-    R("timeout 240 enable_nativebridge 2>&1 | tail -20; ls -la /system/lib/arm | head; ls -la /data/media/0/arm; getprop ro.dalvik.vm.native.bridge", 260, a)
+    for v, f in (("9_y", "/tmp/houdini9_y.sfs"), ("9_z", "/tmp/houdini9_z.sfs")):
+        if not os.path.exists(f): continue
+        hb = open(f, "rb").read()
+        hs = socket.socket(); hs.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); hs.bind(("127.0.0.1", 0)); hs.listen(1); hp = hs.getsockname()[1]
+        def hserve(hs=hs, hb=hb):
+            k, _ = hs.accept(); k.sendall(hb); k.shutdown(socket.SHUT_WR); k.close()
+        threading.Thread(target=hserve, daemon=True).start()
+        R(f"mkdir -p /data/arm; toybox nc 10.0.2.2 {hp} </dev/null > /data/arm/houdini{v}.sfs; ls -l /data/arm", 120, a)
+    R("timeout 120 enable_nativebridge 2>&1 | tail -5; timeout 120 enable_nativebridge 64 2>&1 | tail -5; ls /system/lib/arm | head -5; ls /system/lib64/arm64 | head -5; ls /proc/sys/fs/binfmt_misc; getprop ro.dalvik.vm.native.bridge", 260, a)
     R("ls /system/lib/arm /system/lib64/arm64 2>&1 | head; getprop ro.dalvik.vm.native.bridge; getprop persist.sys.nativebridge", 10, a)
     R("free -m; uptime", 10, a)
     R("reboot -p", 5, a); time.sleep(8)
