@@ -300,6 +300,15 @@ body.scanning .site-in,body.done .site-in{opacity:0;pointer-events:none}
 .dnsr .ip{color:var(--muted);font-variant-numeric:tabular-nums}
 .dnsr .ms{text-align:right;color:var(--white);font-weight:600;font-variant-numeric:tabular-nums}
 .dnsr .a{text-align:right}
+.dnsr .a .btn{white-space:nowrap}
+@media (max-width:600px){
+  .dnsr{grid-template-columns:1fr auto;grid-template-areas:"name act" "ip ms" "bar bar";column-gap:10px;row-gap:3px;padding:11px 0;font-size:12.5px}
+  .dnsr .n{grid-area:name;min-width:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .dnsr .ip{grid-area:ip;font-size:12px;align-self:center}
+  .dnsr .ms{grid-area:ms;align-self:center}
+  .dnsr .a{grid-area:act;align-self:center}
+  .dnsr .track{grid-area:bar;margin-top:2px}
+}
 
 .site{border-top:1px solid var(--row);padding:10px 0}
 .site:first-of-type{border-top:0;padding-top:2px}
