@@ -322,6 +322,23 @@ body.scanning .site-in,body.done .site-in{opacity:0;pointer-events:none}
 .srow2 .x{color:#ef4444}
 .tagc{font-size:9.5px;font-weight:700;letter-spacing:.8px;color:var(--acc);border:1px solid rgba(45,212,191,.4);border-radius:4px;padding:1px 5px;flex:none}
 .cause{margin:8px 0 0 15px;padding:9px 12px;border-radius:8px;font-size:12.5px;display:flex;gap:12px;align-items:center;justify-content:space-between}
+@media (max-width:640px){
+  .srow2.hd{display:none}
+  .srow2{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 10px}
+  .srow2 .h{grid-column:1/-1;font-size:14px}
+  .srow2 .h span{white-space:normal;overflow-wrap:anywhere}
+  .srow2 .m{display:block;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.025);border:1px solid var(--row);font-size:13px;min-width:0;overflow-wrap:anywhere}
+  .srow2 .m::before{content:attr(data-l);display:block;margin-bottom:2px;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);font-weight:700}
+  .srow2 .m.cert{grid-column:span 2;order:1}
+  .site{padding:14px 0}
+  .cause{margin-left:0;flex-wrap:wrap}
+  .ct:has(.addsite){flex-wrap:wrap;gap:10px}
+  .addsite{width:100%}
+  .addsite input{flex:1;width:auto;min-width:0;height:36px;font-size:14px}
+  .addsite .btn{height:36px}
+  .card table.kv{display:table;width:100%;overflow:visible}
+  table.kv td.v{overflow-wrap:anywhere}
+}
 .addsite{display:flex;gap:8px;align-items:center}
 .addsite input{height:28px;width:200px;border-radius:7px;border:1px solid #223042;background:#0c1219;color:var(--white);padding:0 10px;font:12.5px var(--font);outline:none}
 .addsite input:focus{border-color:var(--acc)}
@@ -666,9 +683,9 @@ function reportHTML() {
     const dnsTxt = s.dnsSys && s.dnsSys.ok ? `${s.dnsSys.ms} ms` : `<span class="x">Failed</span>`;
     const cert = t.subject ? `${esc(t.issuerOrg || t.issuer)}${has(t.daysLeft) ? ` <span style="color:var(--muted)">· ${t.daysLeft}d left</span>` : ''}` : '<span style="color:var(--muted)">-</span>';
     ws += `<div class="site"><div class="srow2"><span class="h"><span class="dot" style="background:${c};margin:0"></span><span>${esc(s.host)}</span>${s.custom ? '<span class="tagc">YOUR SITE</span>' : ''}</span>
-      <span class="m">${dnsTxt}</span><span class="m">${t.tcpOk ? t.tcpMs + ' ms' : s.ip ? '<span class="x">Blocked</span>' : '-'}</span>
-      <span class="m">${t.ok ? esc(t.protocol || 'Yes') : t.subject || t.error ? '<span class="x">Not secure</span>' : '-'}</span><span class="m">${cert}</span>
-      <span class="m">${ht.status ? `<span style="color:${ht.status < 400 ? 'var(--text)' : '#eab308'}">${ht.status}</span> · ${ht.ms} ms` : '-'}</span></div>`;
+      <span class="m" data-l="DNS">${dnsTxt}</span><span class="m" data-l="Connect">${t.tcpOk ? t.tcpMs + ' ms' : s.ip ? '<span class="x">Blocked</span>' : '-'}</span>
+      <span class="m" data-l="Secure">${t.ok ? esc(t.protocol || 'Yes') : t.subject || t.error ? '<span class="x">Not secure</span>' : '-'}</span><span class="m cert" data-l="Certificate">${cert}</span>
+      <span class="m" data-l="Response">${ht.status ? `<span style="color:${ht.status < 400 ? 'var(--text)' : '#eab308'}">${ht.status}</span> · ${ht.ms} ms` : '-'}</span></div>`;
     if (s.cause) { const fx = arr(s.fixes);
       ws += `<div class="cause" style="background:${c}12;border:1px solid ${c}33"><span style="color:var(--white)">${esc(s.cause)}</span>${fx.length ? `<button class="btn sm primary" data-fix="${esc(fx.join(','))}">${ico('wand')}Fix</button>` : ''}</div>`; }
     ws += '</div>';

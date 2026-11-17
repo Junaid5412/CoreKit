@@ -398,7 +398,18 @@ class Host(private val act: MainActivity, private val web: WebView) {
         /** Every-lens camera test (native screen); the result comes back to window.__camResult. */
         @JavascriptInterface fun cameraTest() = act.startCameraTest()
 
-        @JavascriptInterface fun exit() { act.runOnUiThread { act.finishAndRemoveTask() } }
+        /** Exit: end any Remote Access session and sharing, stop the engine, close CoreKit. */
+        @JavascriptInterface fun exit() {
+            try {
+                RemoteEngine.cmd(act, JSONObject().put("t", "disconnect").toString())
+                if (RemoteService.running) act.stopRemoteSharing()
+                SessionService.update(act, JSONObject().put("on", false).toString())
+            } catch (_: Throwable) {}
+            act.runOnUiThread {
+                act.setViewerMode(false, false)
+                web.postDelayed({ RemoteEngine.stop(); act.finishAndRemoveTask() }, 400)
+            }
+        }
     }
 
     private fun appVersion(): String = try {

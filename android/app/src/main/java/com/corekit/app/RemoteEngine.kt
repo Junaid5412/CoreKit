@@ -60,6 +60,14 @@ object RemoteEngine {
         return true
     }
 
+    /** Stops the engine process (Exit). It starts again on the next command. */
+    fun stop() {
+        io.execute {
+            try { proc?.destroy() } catch (_: Throwable) {}
+            proc = null; port = 0
+        }
+    }
+
     fun deviceName(ctx: Context): String = try {
         Settings.Global.getString(ctx.contentResolver, Settings.Global.DEVICE_NAME)?.takeIf { it.isNotBlank() }
     } catch (_: Throwable) { null } ?: "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
