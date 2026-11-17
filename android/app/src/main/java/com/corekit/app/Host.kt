@@ -273,7 +273,9 @@ class Host(private val act: MainActivity, private val web: WebView) {
             .put("notifNeeded", Build.VERSION.SDK_INT >= 33)
             .put("notif", Build.VERSION.SDK_INT < 33 || act.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED)
             .put("restricted", Build.VERSION.SDK_INT >= 33)
-            .put("sharing", RemoteService.running).toString()
+            .put("sharing", RemoteService.running)
+            .put("name", RemoteEngine.deviceName(act))
+            .put("engineError", RemoteEngine.lastError).toString()
 
         @JavascriptInterface fun remoteOpen(what: String) {
             act.runOnUiThread {

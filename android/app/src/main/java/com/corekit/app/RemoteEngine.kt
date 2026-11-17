@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 object RemoteEngine {
     @Volatile private var proc: Process? = null
     @Volatile var port = 0; private set
+    @Volatile var lastError = ""; private set
     val token: String = ByteArray(24).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
     private val io = Executors.newSingleThreadExecutor()
 
@@ -33,7 +34,8 @@ object RemoteEngine {
         val pb = ProcessBuilder(exe, "--remote").redirectErrorStream(true)
         pb.environment()["CK_TOKEN"] = token
         pb.environment()["CK_NAME"] = deviceName(ctx)
-        val p = try { pb.start() } catch (_: Throwable) { return false }
+        val p = try { pb.start() } catch (e: Throwable) { lastError = "could not run the engine (${e.message})"; return false }
+        val early = StringBuilder()
         proc = p
         val reader = p.inputStream.bufferedReader()
         val ready = java.util.concurrent.CountDownLatch(1)
@@ -41,13 +43,18 @@ object RemoteEngine {
             try {
                 reader.forEachLine { line ->
                     if (port == 0 && line.startsWith("READY ")) { port = line.removePrefix("READY ").trim().toIntOrNull() ?: 0; ready.countDown() }
+                    else if (port == 0 && early.length < 400) early.append(line.trim()).append(' ')
                     // keep reading: the engine's log lines must not fill the pipe
                 }
             } catch (_: Throwable) {}
             ready.countDown()
         }.apply { isDaemon = true }.start()
         ready.await(6, TimeUnit.SECONDS)
-        if (port == 0) { try { p.destroy() } catch (_: Throwable) {}; proc = null; return false }
+        if (port == 0) {
+            lastError = early.toString().trim().ifEmpty { if (p.isAlive) "the engine did not answer in time" else "the engine stopped (exit ${try { p.exitValue() } catch (_: Throwable) { -1 }})" }
+            try { p.destroy() } catch (_: Throwable) {}; proc = null; return false
+        }
+        lastError = ""
         // tell the engine whether tapping/typing is possible right now
         cmd(ctx, JSONObject().put("t", "glue").put("a11y", RemoteControlService.isOn(ctx)).toString())
         return true
