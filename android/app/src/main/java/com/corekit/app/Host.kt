@@ -231,6 +231,8 @@ class Host(private val act: MainActivity, private val web: WebView) {
             }
         }
 
+        @JavascriptInterface fun print(title: String) = act.printPage(title.take(80).ifBlank { "CoreKit Report" })
+
         @JavascriptInterface fun setShield(on: Boolean) {
             Prefs(act).captureShield = on
             act.setCaptureShield(on)

@@ -144,11 +144,23 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 @media (max-width:1000px){.grid2{grid-template-columns:1fr}.ov{flex-direction:column;align-items:flex-start}.specs{border-left:0;padding-left:6px}}
 /* phones (Android app) */
 @media (max-width:600px){
-.bar{height:auto;min-height:56px;flex-wrap:wrap;padding:8px 12px;gap:6px}
-.brand{width:100%;margin:0 0 2px}
-.bar .btn{flex:1 1 0;justify-content:center;padding:0 8px;font-size:12.5px;min-width:0}
+.bar{height:auto;min-height:56px;flex-wrap:wrap;padding:8px 10px;gap:6px;position:relative}
+.brand{flex:1;min-width:0;margin:0;font-size:0;gap:8px}
+.brand .mod{font:600 16px var(--fontd);color:var(--white);border:0;padding:0;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand .logo{width:30px;height:30px}
+.brand .back+.logo{display:none}
+.brand .back{width:34px;height:34px;border-radius:10px;border:0;background:transparent;color:var(--white);display:grid;place-items:center;margin-left:-4px}
+.brand .back svg{width:22px;height:22px}
+.bar>.btn{order:1;width:38px;height:38px;padding:0;justify-content:center;gap:0;font-size:0;border-radius:10px;flex:none}
+.bar>.btn svg{width:18px;height:18px}
+#bFixAll{width:auto;padding:0 12px;gap:6px;font-size:12.5px}
+#sheet{min-width:0;width:calc(100vw - 24px);padding:18px 16px 16px}
+#sheet .sh-f{flex-wrap:wrap}#sheet .sh-f .btn{flex:1 1 auto;justify-content:center}#sheet .sh-f .l{flex-basis:100%;margin:0 0 4px}
 .vsep{display:none}
-#testBtns{width:100%;gap:6px!important;overflow-x:auto}#testBtns .btn{flex:0 0 auto}
+#testBtns{order:2;flex-basis:100%;gap:6px!important;overflow-x:auto;scrollbar-width:none;padding:2px 0 2px;align-items:center}
+#testBtns::-webkit-scrollbar{display:none}
+#testBtns::before{content:"TESTS";font:700 10px var(--font);letter-spacing:1.4px;color:var(--muted);margin-right:2px;flex:none}
+#testBtns .btn{flex:0 0 auto;height:32px;border-radius:16px;padding:0 12px;font-size:12.5px;background:#121b26}
 .rep{padding:16px 12px 34px}
 .gauges{gap:6px;justify-content:space-around;flex-wrap:wrap;padding:0}
 .gauge svg{max-width:27vw;height:auto}
@@ -173,6 +185,10 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 .pad{margin-top:14px;display:grid;grid-template-columns:repeat(5,1fr);gap:6px;padding:8px;border-radius:12px;border:1px dashed #2a3a4d;cursor:crosshair}
 .pad .key{height:54px;width:auto}
 #scr{position:fixed;inset:0;z-index:100;background:#000;cursor:none;display:grid;place-items:center}
+#tch{position:fixed;inset:0;z-index:100;background:#05080b;display:grid;touch-action:none;user-select:none}
+#tch i{border:1px solid #131b25;transition:background .15s}#tch i.on{background:rgba(45,212,191,.55);border-color:rgba(45,212,191,.8)}
+#tch .tbar{position:fixed;left:50%;top:max(12px,env(safe-area-inset-top));transform:translateX(-50%);display:flex;gap:12px;align-items:center;background:rgba(16,22,30,.94);border:1px solid var(--line2);border-radius:22px;padding:6px 6px 6px 16px;color:var(--white);font-size:13px;z-index:2}
+#tch #tdone{height:30px;padding:0 14px;border-radius:15px;border:0;background:var(--acc);color:#04201c;font-weight:700}
 #scr .hint{background:rgba(16,22,30,.92);color:var(--white);padding:16px 26px;border-radius:12px;font-size:14px;text-align:center;border:1px solid var(--line2);transition:opacity .5s}
 .spk{display:flex;gap:26px;justify-content:center;margin:26px 0 6px}
 .spk div{width:120px;height:120px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:#141c26;border:1px solid var(--line2);color:var(--muted2);font-size:12px;font-weight:600;letter-spacing:1px;transition:all .25s}
@@ -254,6 +270,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /* ---------- icons ---------- */
 const I = {
+  touch:'<path d="M9 11V5a2 2 0 0 1 4 0v6"/><path d="M13 10a2 2 0 0 1 4 0v2"/><path d="M17 11a2 2 0 0 1 4 0v4a7 7 0 0 1-7 7h-1a7 7 0 0 1-6-3.4L4 15a2 2 0 0 1 3.4-2l1.6 2"/>',
+  back:'<path d="M15 18l-6-6 6-6"/>',
   keyboard:'<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M18 13h.01M10 13h4M7 16h10"/>',
   screen:'<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
   speaker:'<path d="M11 5 6 9H2v6h4l5 4V5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
@@ -290,10 +308,11 @@ const ANDROID = !!window.CoreKitNative; // same screen, Android app host
 const TESTS = [
   ['keyboard', 'Keyboard & Touchpad', 'keyboard'],
   ['screen', 'Screen / Dead Pixels', 'screen'],
+  ['touch', 'Touch Screen', 'touch'],
   ['speakers', 'Speakers (Left / Right)', 'speaker'],
   ['webcam', 'Webcam', 'camera'],
   ['mic', 'Microphone', 'mic'],
-].filter(t => !ANDROID || t[0] !== 'keyboard').map(t => ANDROID && t[0] === 'webcam' ? ['webcam', 'Camera', 'camera'] : t);
+].filter(t => !(ANDROID && t[0] === 'keyboard') && !(t[0] === 'touch' && !ANDROID && !(navigator.maxTouchPoints > 0))).map(t => ANDROID && t[0] === 'webcam' ? ['webcam', 'Camera', 'camera'] : t);
 
 function summary() {
   const secs = arr(DATA.sections);
@@ -659,7 +678,37 @@ async function micTest() {
   } catch (e) { $('#fl').textContent = 'No microphone found, or access was blocked.'; }
 }
 
-const RUN = {keyboard: keyboardTest, screen: screenTest, speakers: speakerTest, webcam: webcamTest, mic: micTest};
+/* touch screen: every area must react to the finger */
+function touchTest() {
+  closeModal();
+  const el = document.createElement('div'); el.id = 'tch';
+  const cols = innerWidth < 700 ? 6 : 12, rows = Math.max(6, Math.round(cols * innerHeight / innerWidth));
+  el.style.gridTemplateColumns = `repeat(${cols},1fr)`; el.style.gridTemplateRows = `repeat(${rows},1fr)`;
+  el.innerHTML = Array.from({length: cols * rows}, (_, i) => `<i data-i="${i}"></i>`).join('') +
+    `<div class="tbar"><span id="tpct">0%</span><span id="tmulti">1 finger</span><button id="tdone">Done</button></div>`;
+  document.body.appendChild(el);
+  const cells = el.querySelectorAll('i'), hit = new Set(), active = new Set();
+  let maxF = 0, done = false;
+  const mark = (x, y) => {
+    const c = document.elementFromPoint(x, y);
+    if (c && c.tagName === 'I' && !hit.has(c.dataset.i)) { hit.add(c.dataset.i); c.className = 'on'; $('#tpct').textContent = Math.round(hit.size * 100 / cells.length) + '%'; if (hit.size === cells.length) setTimeout(end, 350); }
+  };
+  const end = () => {
+    if (done) return; done = true; el.remove();
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    const pct = Math.round(hit.size * 100 / cells.length);
+    openModal(head('Touch screen', `${pct}% of the screen reacted · up to ${maxF} finger${maxF === 1 ? '' : 's'} at once. Were there dead spots or jumpy touches?`) + foot('touch', '', 'Dead spots found', 'Touch works'));
+    resultDetail.touch = ok => ok ? `${pct}% covered, ${maxF}-finger touch` : `Problems (${pct}% covered)`;
+  };
+  el.addEventListener('pointerdown', e => { if (e.target.id === 'tdone') return; e.preventDefault(); active.add(e.pointerId); maxF = Math.max(maxF, active.size); $('#tmulti').textContent = `${maxF} finger${maxF === 1 ? '' : 's'}`; mark(e.clientX, e.clientY); });
+  el.addEventListener('pointermove', e => { if (active.has(e.pointerId)) for (const ev of (e.getCoalescedEvents ? e.getCoalescedEvents() : [e])) mark(ev.clientX, ev.clientY); });
+  const up = e => active.delete(e.pointerId);
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  $('#tdone').onclick = end;
+  if (el.requestFullscreen) el.requestFullscreen({navigationUI: 'hide'}).catch(() => {});
+}
+
+const RUN = {keyboard: keyboardTest, screen: screenTest, touch: touchTest, speakers: speakerTest, webcam: webcamTest, mic: micTest};
 
 /* ---------- wiring ---------- */
 $('#startBtn').addEventListener('click', startScan);
@@ -668,7 +717,8 @@ $('#bRescan').innerHTML = ico('refresh') + 'Rescan';
 $('#bPdf').innerHTML = ico('pdf') + 'Export PDF';
 $('#bSave').innerHTML = ico('save') + 'Save Report';
 $('#bRescan').onclick = rescan;
-$('#bPdf').onclick = () => window.print();
+$('#bPdf').onclick = () => (window.CoreKitNative && CoreKitNative.print) ? CoreKitNative.print('CoreKit Health Report') : window.print();
+if (ANDROID) $('.brand').insertAdjacentHTML('afterbegin', `<button class="back" onclick="CoreKitNative.go('home')" aria-label="Back">${ico('back')}</button>`);
 $('#bSave').onclick = saveReport;
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-run],[data-test]');
