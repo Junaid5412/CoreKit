@@ -74,12 +74,12 @@ if bt:
     c.send("setsid sh -c 'stty -F /dev/ttyS1 raw -echo; exec sh </dev/ttyS1 >/dev/ttyS1 2>&1' &")
     time.sleep(2); a = Ser(5601, f"{OUT}/serial1-first.log"); R("id; echo auto-ok", 10, a)
     # file transfer host -> guest with toybox nc
-    data = open(apk, "rb").read()
+    blob = open(apk, "rb").read()
     srv = socket.socket(); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); srv.bind(("127.0.0.1", 0)); srv.listen(1); port = srv.getsockname()[1]
     def serve():
-        k, _ = srv.accept(); k.sendall(data); k.shutdown(socket.SHUT_WR); k.close()
+        k, _ = srv.accept(); k.sendall(blob); k.shutdown(socket.SHUT_WR); k.close()
     threading.Thread(target=serve, daemon=True).start()
-    R(f"toybox nc 10.0.2.2 {port} </dev/null > /data/local/tmp/t.apk; ls -l /data/local/tmp/t.apk; echo want {len(data)}", 60, a)
+    R(f"toybox nc 10.0.2.2 {port} </dev/null > /data/local/tmp/t.apk; ls -l /data/local/tmp/t.apk; echo want {len(blob)}", 60, a)
     R("pm install -r /data/local/tmp/t.apk", 120, a)
     R("pm list packages -3", 20, a)
     R("cat /system/bin/enable_nativebridge | grep -iE 'http|houdini' | head -20", 10, a)
