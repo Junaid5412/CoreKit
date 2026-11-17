@@ -69,6 +69,7 @@ class BrowserActivity : Activity() {
 
     private val main = Handler(Looper.getMainLooper())
     private val bg = Executors.newCachedThreadPool()
+    private val io = Executors.newSingleThreadExecutor() // config writes, one at a time and in order
     private val helper by lazy { Helper(this) }
     private val vault by lazy { Vault(this) }
     private val xray by lazy { Xray(this, helper) }
@@ -169,6 +170,7 @@ class BrowserActivity : Activity() {
         chrome.destroy()
         if (LocaleList.getDefault() != sysLocales) { LocaleList.setDefault(sysLocales); java.util.Locale.setDefault(sysLocales[0]) }
         bg.shutdownNow()
+        io.shutdown() // pending saves still finish
         super.onDestroy()
     }
 
@@ -188,7 +190,9 @@ class BrowserActivity : Activity() {
         if (!cfg.has("profiles")) cfg.put("profiles", JSONArray())
         if (!cfg.has("proxies")) cfg.put("proxies", JSONArray())
     }
-    private fun saveConfig() { val s = cfg.toString(); bg.execute { vault.write("config.bin", s) } }
+    private fun saveConfig() { val s = cfg.toString(); io.execute { vault.write("config.bin", s) } }
+    /** Waits until the config is on disk (before another screen reads it). */
+    private fun flushConfig() { val s = cfg.toString(); try { io.submit(Runnable { vault.write("config.bin", s) }).get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Throwable) {} }
     private fun profiles() = cfg.getJSONArray("profiles")
     private fun proxies() = cfg.getJSONArray("proxies")
     private fun list(a: JSONArray) = (0 until a.length()).map { a.getJSONObject(it) }
@@ -329,6 +333,7 @@ class BrowserActivity : Activity() {
     }
 
     private fun openProfile(id: String) {
+        flushConfig() // the new window reads the config at once: a new profile and its proxy must be saved first
         startActivity(Intent(this, BrowserActivity::class.java).putExtra("profile", id).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION))
         finish()
     }
