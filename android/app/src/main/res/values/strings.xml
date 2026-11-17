@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">CoreKit</string>
+    <string name="remote_a11y_desc">Lets a computer or phone that you approve tap, swipe and type on this phone during a CoreKit Remote Access session. It only works while you are sharing your screen in CoreKit, every connection needs your Allow, and Stop ends it at once. It does not read or save anything from your apps.</string>
 </resources>

@@ -5,6 +5,8 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.os.Bundle
 import android.print.PrintAttributes
 import android.print.PrintManager
@@ -35,6 +37,7 @@ class MainActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        current = this
         // Screenshots, screen recording and remote-viewing apps see a black screen.
         if (Prefs(this).captureShield) {
             window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
@@ -113,6 +116,7 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_NOTIF) { askScreenCapture(); return }
         if (requestCode != REQ_MEDIA) return
         val req = pendingPermission ?: return
         pendingPermission = null
@@ -147,8 +151,47 @@ class MainActivity : Activity() {
         startActivityForResult(Intent(this, CameraTestActivity::class.java), REQ_CAMERA_TEST)
     }
 
+    // ---------------------------------------------------------------- Remote Access: share this phone
+
+    /** Start sharing: notification permission (Android 13+) first, then Android's own screen-capture prompt. */
+    fun startRemoteSharing() = runOnUiThread {
+        if (RemoteService.running) { RemoteEngine.cmd(this, org.json.JSONObject().put("t", "host").put("on", true).toString()); return@runOnUiThread }
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF)
+        } else askScreenCapture()
+    }
+
+    private fun askScreenCapture() {
+        val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+        try { startActivityForResult(mpm.createScreenCaptureIntent(), REQ_PROJECTION) } catch (_: Throwable) { jsToast("Screen sharing is not available on this phone.") }
+    }
+
+    fun stopRemoteSharing() = runOnUiThread {
+        if (RemoteService.running) startService(Intent(this, RemoteService::class.java).setAction(RemoteService.ACTION_STOP))
+        RemoteEngine.cmd(this, org.json.JSONObject().put("t", "host").put("on", false).toString())
+    }
+
+    fun requestNotifications() = runOnUiThread {
+        if (Build.VERSION.SDK_INT >= 33) requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQ_NOTIF_ONLY)
+    }
+
+    fun jsToast(msg: String) = runOnUiThread { web.evaluateJavascript("window.__ckToast&&__ckToast(${org.json.JSONObject.quote(msg)},true)", null) }
+
+    override fun onResume() {
+        super.onResume()
+        web.evaluateJavascript("window.__ckStatus&&__ckStatus()", null)
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PROJECTION) {
+            if (resultCode == RESULT_OK && data != null) {
+                val i = Intent(this, RemoteService::class.java).setAction(RemoteService.ACTION_START)
+                    .putExtra(RemoteService.EXTRA_CODE, resultCode).putExtra(RemoteService.EXTRA_DATA, data)
+                if (Build.VERSION.SDK_INT >= 26) startForegroundService(i) else startService(i)
+            } else jsToast("Screen sharing was not allowed, so this phone isn't shared.")
+            return
+        }
         if (requestCode != REQ_CAMERA_TEST) return
         val r = data?.getStringExtra("result")
             ?: org.json.JSONObject().put("lenses", org.json.JSONArray()).put("error", "The camera test was closed.").toString()
@@ -173,6 +216,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (current === this) current = null
         host.shutdown()
         web.destroy()
         super.onDestroy()
@@ -183,5 +227,9 @@ class MainActivity : Activity() {
         private const val REQ_MEDIA = 11
         private const val REQ_LOCATION = 7
         private const val REQ_CAMERA_TEST = 31
+        private const val REQ_PROJECTION = 32
+        private const val REQ_NOTIF = 33
+        private const val REQ_NOTIF_ONLY = 34
+        @Volatile var current: MainActivity? = null
     }
 }
