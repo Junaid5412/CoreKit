@@ -301,7 +301,7 @@ function render() {
   }
   if (H.needsEmulator && !H.fast) nt += `<div class="info" style="margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:220px"><b>Make it up to 10× faster:</b> switch on Windows Hypervisor Platform (one restart).</span><button class="btn sm" data-a="fast">${svg('bolt')}Turn on</button></div>`;
   if (!H.needsEmulator && !H.emulator) nt += `<div class="err" style="margin-bottom:14px">The emulator is missing from this build (${esc(H.emulatorErr || '')}).</div>`;
-  if (ANDROID && !H.fast && S.machines.length) nt += `<div class="note" style="margin-bottom:14px">Phones don't allow hardware virtualization, so virtual devices run in software and feel slow. Use <b>Save and stop</b> so the next start takes seconds; a full start can take about an hour. It keeps running while CoreKit is in the background.</div>`;
+  if (ANDROID && !H.fast && S.machines.length) nt += `<div class="note" style="margin-bottom:14px">Phones don't allow hardware virtualization, so virtual devices run in software and feel slow. Use <b>Save and stop</b> so the next start takes seconds; a full start takes about half an hour. It keeps running while CoreKit is in the background.</div>`;
   $('#notices').innerHTML = nt;
   if (!S.machines.length) {
     $('#list').innerHTML = `<div class="card empty"><div class="big"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M9 7h6M9 11h6M9 15h3"/></svg></div>
@@ -345,7 +345,7 @@ function updRng() {
   if (!q) { $('#cQuick').innerHTML = ''; return; }
   const ok = +$('#cRam').value === q.ram && +$('#cCpu').value === q.cpus;
   $('#cQuick').innerHTML = ok ? `<div class="note">${svg('bolt')} <b>Quick start:</b> this device comes already started, so it is ready in about a minute.</div>`
-    : `<div class="err">Quick start only works with ${q.ram / 1024} GB and ${q.cpus} cores. With other settings the first start is a full start, which takes about an hour on a phone. <a href="#" data-a="quickProfile" style="color:#fff">Use ${q.ram / 1024} GB · ${q.cpus} cores</a></div>`;
+    : `<div class="err">Quick start only works with ${q.ram / 1024} GB and ${q.cpus} cores. With other settings the first start is a full start, which takes about 30 minutes on a phone. <a href="#" data-a="quickProfile" style="color:#fff">Use ${q.ram / 1024} GB · ${q.cpus} cores</a></div>`;
 }
 $('#cRam').oninput = updRng; $('#cCpu').oninput = updRng;
 function renderImgs() {
@@ -403,7 +403,7 @@ function renderDev() {
   pw.disabled = m.state === 'stopping';
   const bb = $('#bootBar');
   bb.classList.toggle('hidden', !(m.state === 'starting' || m.state === 'booting' || m.state === 'stopping'));
-  $('#bootT').textContent = (m.detail || 'Starting') + (m.state === 'booting' && !S.host.fast && !/saved|Loading/i.test(m.detail || '') ? (ANDROID ? ' · a full start takes about an hour on a phone' : ' · a full start can take 20+ minutes without fast mode') : '');
+  $('#bootT').textContent = (m.detail || 'Starting') + (m.state === 'booting' && !S.host.fast && !/saved|Loading/i.test(m.detail || '') ? (ANDROID ? ' · a full start takes about 30 minutes on a phone' : ' · a full start can take 20+ minutes without fast mode') : '');
   if (tab === 'apps' && m.state === 'running' && !appsLoaded) renderApps(true);
   if (tab === 'apps' && m.state !== 'running') renderApps(false);
 }
