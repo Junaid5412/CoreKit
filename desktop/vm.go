@@ -55,7 +55,7 @@ type vmImage struct {
 }
 
 // vmPre is a "pre-started" save made on CoreKit's build server with the exact emulator the
-// Android app ships: phones resume it instead of a full software start (about an hour).
+// Android app ships: phones resume it instead of a full software start (about 30 minutes).
 type vmPre struct {
 	RAM, CPUs          int
 	QemuID             string
