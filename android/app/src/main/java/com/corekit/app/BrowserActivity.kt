@@ -62,6 +62,7 @@ class BrowserActivity : Activity() {
         var url = ""; var title = ""; var pending = ""
         var loading = false; var canBack = false; var canFwd = false; var crashed = false; var gone = false
         var pageLang = ""; var trState = ""; var trMsg = ""; var trSeq = 0
+        var alt = false // "Desktop site"
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -101,6 +102,7 @@ class BrowserActivity : Activity() {
     private var pendingPerm: PermissionRequest? = null
     private var restored = false
     private var saveTask: Runnable? = null
+    private var adHosts = HashSet<String>()
 
     private val density get() = resources.displayMetrics.density
     private val multiProfile by lazy { WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE) }
@@ -260,7 +262,6 @@ class BrowserActivity : Activity() {
         when (m.optString("t")) {
             "ready" -> {
                 ready = true
-                if (profiles().length() == 0) pickProfile("")
                 val ps = JSONArray()
                 for (p in list(profiles())) ps.put(JSONObject().put("id", p.optString("id")).put("name", p.optString("name")).put("color", p.optString("color"))
                     .put("proxy", chosenProxy(p)?.optString("name") ?: "").put("lastUsed", p.optLong("lastUsed")).put("running", false))
@@ -342,6 +343,20 @@ class BrowserActivity : Activity() {
                 saveConfig(); sendState()
             }
             "tr" -> onTranslateOp(m.optString("id"))
+            "adblock", "langMatch" -> {
+                if (m.optString("t") == "adblock") prof().put("noAdblock", !m.optBoolean("on")) else prof().put("noLangMatch", !m.optBoolean("on"))
+                saveConfig(); sendState(); restartTunnel()
+            }
+            "siteMode" -> active?.let { t ->
+                t.alt = m.optBoolean("on")
+                t.view?.let { v ->
+                    v.settings.userAgentString = if (t.alt) desktopUA else null
+                    v.settings.useWideViewPort = true; v.settings.loadWithOverviewMode = true
+                    v.reload()
+                }
+                pushTabs()
+            }
+            "exit" -> finish()
             "history" -> sendHistory(m.optString("name"))
             "histDel" -> { val u = m.optString("url"); val at = m.optLong("to"); history.removeAll { it.optString("u") == u && (at == 0L || it.optLong("at") == at) }; sendHistory(m.optString("name")); scheduleSave() }
             "histClear" -> { history.clear(); vault.delete("p/$profId/history.bin"); sendHistory("") }
@@ -369,7 +384,8 @@ class BrowserActivity : Activity() {
             .put("proxyOn", p.optString("proxy").isNotEmpty()).put("engines", info.optJSONArray("engines") ?: JSONArray()).put("collapsed", true)
             .put("colors", JSONArray(colors())).put("shield", !p.optBoolean("allowCapture")).put("noTrace", !p.optBoolean("keepHistory")).put("tz", geo.optString("tz"))
             .put("lang", lang()).put("langs", info.optJSONArray("langs") ?: JSONArray()).put("transOffer", !p.optBoolean("noTransOffer")).put("transAuto", p.optBoolean("transAuto"))
-            .put("googleFix", !p.optBoolean("noGoogleFix")).put("alwaysLangs", named(p.optJSONArray("alwaysLangs"))).put("neverLangs", named(p.optJSONArray("neverLangs"))))
+            .put("googleFix", !p.optBoolean("noGoogleFix")).put("alwaysLangs", named(p.optJSONArray("alwaysLangs"))).put("neverLangs", named(p.optJSONArray("neverLangs")))
+            .put("platform", "android").put("adblock", !p.optBoolean("noAdblock")).put("langMatch", !p.optBoolean("noLangMatch")))
     }
 
     private fun webViewVersion() = WebViewCompat.getCurrentWebViewPackage(this)?.versionName ?: ""
@@ -399,6 +415,7 @@ class BrowserActivity : Activity() {
             for (t in tabs) arr.put(JSONObject().put("id", t.id).put("title", tabTitle(t)).put("url", display(tabUrl(t))).put("loading", t.loading).put("crashed", t.crashed))
             val m = JSONObject().put("t", "tabs").put("tabs", arr).put("active", active?.id ?: 0).put("closedCount", closed.size)
             active?.let { t ->
+                m.put("alt", t.alt)
                 m.put("canBack", t.canBack).put("canFwd", t.canFwd).put("loading", t.loading).put("url", display(tabUrl(t)))
                 m.put("tr", JSONObject().put("state", t.trState).put("from", t.pageLang).put("fromName", if (t.pageLang.isEmpty()) "" else langName(t.pageLang))
                     .put("to", lang()).put("toName", langName(lang())).put("msg", t.trMsg).put("page", tabUrl(t).startsWith("http") && !isStart(tabUrl(t))))
@@ -432,7 +449,7 @@ class BrowserActivity : Activity() {
             if (WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE)) ProxyController.getInstance().clearProxyOverride({ it.run() }, {})
             bg.execute {
                 val s = helper.call("scripts", JSONObject())
-                main.post { if (seq == checkSeq) { scripts = s; setStatus("ready", ""); restoreTabs() } }
+                main.post { if (seq == checkSeq) { setScripts(s); setStatus("ready", ""); restoreTabs() } }
             }
             return
         }
@@ -464,8 +481,8 @@ class BrowserActivity : Activity() {
             if (!t.optBoolean("ok")) { main.post { if (seq == checkSeq) { setCheck("tunnel", "fail", t.optString("error")); setStatus("error", "No connection through ${px.optString("name")}: ${t.optString("error")}") } }; return@execute }
             main.post { if (seq == checkSeq) { ms = t.optInt("ms"); tunnelIp = t.optString("ip"); setCheck("tunnel", "ok", "${px.optString("kind")} · ${ms} ms"); setCheck("tz", "run", "Looking up the proxy location"); setStatus("connecting", "Matching time zone and location") } }
             val g = helper.call("geo", JSONObject().put("port", port).put("country", t.optString("country")))
-            val s = helper.call("scripts", JSONObject().put("tz", g.optString("tz")))
-            main.post { if (seq == checkSeq) { geo = g; scripts = s; setStatus("connecting", "Running leak tests"); browserCheck(seq) } }
+            val s = helper.call("scripts", JSONObject().put("tz", g.optString("tz")).put("country", g.optString("country").ifEmpty { t.optString("country") }))
+            main.post { if (seq == checkSeq) { geo = g; setScripts(s); setStatus("connecting", "Running leak tests"); browserCheck(seq) } }
             watchTunnel(seq)
         }
     }
@@ -550,11 +567,31 @@ class BrowserActivity : Activity() {
 
     private fun profileName() = "ck-$profId"
 
+    private fun setScripts(s: JSONObject) {
+        scripts = s
+        adHosts = HashSet<String>().also { h -> s.optJSONArray("adHosts")?.let { a -> for (i in 0 until a.length()) h += a.getString(i) } }
+    }
+    private fun adblockOn() = !prof().optBoolean("noAdblock")
+    private fun isAd(host: String?): Boolean {
+        var h = host?.lowercase() ?: return false
+        while (true) {
+            if (h in adHosts) return true
+            val i = h.indexOf('.'); if (i < 0) return false
+            h = h.substring(i + 1)
+        }
+    }
+    private val desktopUA by lazy {
+        android.webkit.WebSettings.getDefaultUserAgent(this).replace(Regex("\\(Linux; Android [^)]*\\)"), "(X11; Linux x86_64)")
+            .replace(" Mobile", "").replace("Version/4.0 ", "")
+    }
+
     /** Privacy scripts every page gets before its own code: DNT, time zone, no WebRTC (proxy). */
     private fun installScripts(v: WebView) {
         if (!docStart) return
         val all = StringBuilder(scripts.optString("privacy"))
+        if (adblockOn()) all.append(scripts.optString("adCss"))
         if (proxyOn) all.append(scripts.optString("noWebrtc")).append(scripts.optString("tz"))
+        if (proxyOn && !prof().optBoolean("noLangMatch")) all.append(scripts.optString("lang"))
         if (all.isNotEmpty()) WebViewCompat.addDocumentStartJavaScript(v, all.toString(), setOf("*"))
     }
 
@@ -627,7 +664,11 @@ class BrowserActivity : Activity() {
     private fun navigate(t: Tab, u: String) { t.pending = u; t.crashed = false; if (t.view == null) ensureView(t) else t.view!!.loadUrl(u) }
 
     private fun tabClient(t: Tab) = object : WebViewClient() {
-        override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest) = serveLocal(req.url, false)
+        override fun shouldInterceptRequest(view: WebView, req: WebResourceRequest): WebResourceResponse? {
+            if (adblockOn() && !req.isForMainFrame && isAd(req.url.host))
+                return WebResourceResponse("text/plain", "utf-8", 204, "No Content", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+            return serveLocal(req.url, false)
+        }
         override fun shouldOverrideUrlLoading(view: WebView, req: WebResourceRequest): Boolean {
             val u = req.url; val s = u.scheme ?: ""
             if (s == "http" || s == "https") {
@@ -647,7 +688,8 @@ class BrowserActivity : Activity() {
         }
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             if (!docStart) { // older WebView: best effort
-                view.evaluateJavascript(scripts.optString("privacy") + if (proxyOn) scripts.optString("noWebrtc") + scripts.optString("tz") else "", null)
+                view.evaluateJavascript(scripts.optString("privacy") + (if (adblockOn()) scripts.optString("adCss") else "") +
+                    (if (proxyOn) scripts.optString("noWebrtc") + scripts.optString("tz") else ""), null)
             }
             t.loading = true; t.url = url; t.trSeq++; t.pageLang = ""; t.trState = ""; t.trMsg = ""
             pushTabs()

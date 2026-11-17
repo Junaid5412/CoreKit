@@ -35,6 +35,7 @@ type sbTab struct {
 	pending  string
 	crashed  bool
 	gone     bool
+	alt      bool // "mobile view" on (desktop) for this tab
 	// translation
 	pageLang string
 	trState  string // "" | offer | working | done | original | error | dismissed
@@ -88,6 +89,8 @@ type sbApp struct {
 	relaunched bool // this process is exiting to restart
 	tr         *translator
 	hist       *historyStore
+	adblock    bool
+	defaultUA  string
 }
 
 type sbCheck struct {
@@ -166,6 +169,8 @@ func runBrowser(id string, waitPID int, reset, keepPw bool) {
 	a.proxy = brLoad().proxyFor(p)
 	brMu.Unlock()
 	a.bypass = p.Bypass
+	a.adblock = !p.NoAdblock
+	xrayBlockAds = a.adblock
 	if a.proxy != nil {
 		a.port = pickPort()
 		if a.port == 0 {
@@ -207,7 +212,7 @@ func waitProfileFree(udf string) {
 }
 
 func (a *sbApp) startEngine(udf string) {
-	args := browserArgs(a.port, a.bypass)
+	args := browserArgs(a.port, a.bypass, a.adblock)
 	ver, err := wvCreateEnvironment(udf, args, func(env comPtr, err error) {
 		if err != nil {
 			sbLog("environment: %v", err)
@@ -691,6 +696,21 @@ func (a *sbApp) onUIMessage(js string) {
 			}
 		})
 		a.sendState()
+	case "adblock", "langMatch":
+		brMutate(func(c *brConfig) {
+			if p := c.profile(a.profID); p != nil {
+				if m.T == "adblock" {
+					p.NoAdblock = !m.On
+				} else {
+					p.NoLangMatch = !m.On
+				}
+			}
+		})
+		a.relaunch() // engine options are fixed per start; tabs are kept
+	case "siteMode":
+		if t := a.active; t != nil && t.view != nil {
+			a.setMobileView(t, m.On)
+		}
 	case "privacy":
 		brMutate(func(c *brConfig) {
 			if p := c.profile(a.profID); p != nil {
@@ -757,7 +777,8 @@ func (a *sbApp) sendState() {
 		"profile":  map[string]any{"id": p.ID, "name": p.Name, "color": p.Color, "search": p.Search, "bypass": p.Bypass},
 		"profiles": profs, "proxies": pxs, "proxyActive": activeProxy, "proxyChosen": chosen, "proxyOn": p.Proxy != "",
 		"engines": engines, "collapsed": a.sess.Collapsed, "colors": profileColors,
-		"shield": a.capture, "noTrace": a.noTrace, "tz": a.geo.TZ,
+		"shield": a.capture, "noTrace": a.noTrace, "tz": a.geo.TZ, "platform": "windows",
+		"adblock": !p.NoAdblock, "langMatch": !p.NoLangMatch,
 		"lang": a.lang(), "langs": uiLanguages, "transOffer": !p.NoTransOffer, "transAuto": p.TransAuto, "googleFix": !p.NoGoogleFix,
 		"alwaysLangs": namedLangs(p.AlwaysLangs), "neverLangs": namedLangs(p.NeverLangs),
 	})
@@ -795,6 +816,7 @@ func (a *sbApp) pushTabs() {
 			msg["active"] = t.id
 			msg["canBack"], msg["canFwd"], msg["loading"] = t.canBack, t.canFwd, t.loading
 			msg["url"] = a.srv.Display(a.tabURL(t))
+			msg["alt"] = t.alt
 			msg["tr"] = map[string]any{"state": t.trState, "from": t.pageLang, "fromName": langName(t.pageLang),
 				"to": a.lang(), "toName": langName(a.lang()), "msg": t.trMsg, "page": strings.HasPrefix(t.url, "http") && !a.srv.IsStart(t.url)}
 		}
@@ -956,8 +978,15 @@ func (a *sbApp) prepareView(v *wvView, then func()) {
 			})
 		})
 	}
+	page := privacyScript
+	if a.adblock {
+		page += adCosmeticScript
+	}
+	if a.proxy != nil && !a.prof().NoLangMatch {
+		page += langMatchScript(a.geo.Country)
+	}
 	steps = append(steps, func(next func()) {
-		v.addInitScript(privacyScript, func(err error) {
+		v.addInitScript(page, func(err error) {
 			if err != nil {
 				sbLog("privacy script: %v", err)
 			}
@@ -2088,4 +2117,44 @@ func (a *sbApp) onTranslateOp(op string) {
 		t.trState = ""
 		t.view.navigate(googleTranslatePage(u, a.lang()))
 	}
+}
+
+// setMobileView shows the active page as a phone would (narrow layout, mobile site).
+func (a *sbApp) setMobileView(t *sbTab, on bool) {
+	v := t.view
+	apply := func() {
+		if on {
+			ua := mobileUA(a.defaultUA)
+			b, _ := json.Marshal(map[string]any{"userAgent": ua, "platform": "Android"})
+			v.cdp("Emulation.setUserAgentOverride", string(b), func(string, error) {})
+			cr := clientRect(a.content)
+			dpr := float64(windowDPI(a.hwnd)) / 96
+			v.cdp("Emulation.setDeviceMetricsOverride", fmt.Sprintf(`{"width":412,"height":%d,"deviceScaleFactor":0,"mobile":true}`, int(float64(cr.B)/dpr)), func(string, error) {})
+			v.cdp("Emulation.setTouchEmulationEnabled", `{"enabled":true,"maxTouchPoints":5}`, func(string, error) {})
+		} else {
+			b, _ := json.Marshal(map[string]any{"userAgent": a.defaultUA})
+			v.cdp("Emulation.setUserAgentOverride", string(b), func(string, error) {})
+			v.cdp("Emulation.clearDeviceMetricsOverride", `{}`, func(string, error) {})
+			v.cdp("Emulation.setTouchEmulationEnabled", `{"enabled":false}`, func(string, error) {})
+		}
+		t.alt = on
+		v.reload()
+		a.pushTabs()
+	}
+	if a.defaultUA == "" {
+		v.execScript("navigator.userAgent", func(js string, err error) {
+			json.Unmarshal([]byte(js), &a.defaultUA)
+			apply()
+		})
+		return
+	}
+	apply()
+}
+
+func mobileUA(desktop string) string {
+	ver := "131.0.0.0"
+	if i := strings.Index(desktop, "Chrome/"); i >= 0 {
+		ver = strings.Fields(desktop[i+7:])[0]
+	}
+	return "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" + ver + " Mobile Safari/537.36"
 }

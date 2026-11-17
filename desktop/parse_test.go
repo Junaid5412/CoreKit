@@ -91,20 +91,20 @@ func TestNormalizeInput(t *testing.T) {
 	if b := bypassArg("bank.com, https://intranet.local/x ; bad$host"); b != "bank.com;*.bank.com;intranet.local;*.intranet.local" {
 		t.Errorf("bypass: %s", b)
 	}
-	if a := browserArgs(30000, "bank.com"); !strings.Contains(a, "socks5://127.0.0.1:30000") || !strings.Contains(a, `--proxy-bypass-list="bank.com;*.bank.com"`) {
+	if a := browserArgs(30000, "bank.com", false); !strings.Contains(a, "socks5://127.0.0.1:30000") || !strings.Contains(a, `--proxy-bypass-list="bank.com;*.bank.com"`) {
 		t.Errorf("args: %s", a)
 	}
 }
 
 func TestHardening(t *testing.T) {
-	a := browserArgs(30000, "bank.com")
+	a := browserArgs(30000, "bank.com", false)
 	for _, want := range []string{"--disable-quic", "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
 		`--host-resolver-rules="MAP * ~NOTFOUND, EXCLUDE localhost, EXCLUDE 127.0.0.1, EXCLUDE bank.com, EXCLUDE *.bank.com"`} {
 		if !strings.Contains(a, want) {
 			t.Errorf("missing %s in %s", want, a)
 		}
 	}
-	if d := browserArgs(0, ""); strings.Contains(d, "proxy") || strings.Contains(d, "resolver") {
+	if d := browserArgs(0, "", false); strings.Contains(d, "proxy") || strings.Contains(d, "resolver") {
 		t.Errorf("direct args: %s", d)
 	}
 	for tz, ok := range map[string]bool{"Europe/Berlin": true, "America/Argentina/Buenos_Aires": true, "UTC": true, `x"};alert(1)`: false, "": false} {

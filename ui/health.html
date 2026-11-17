@@ -102,7 +102,9 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 .g-trk{fill:none;stroke:#161f2a}
 .g-val{fill:none;stroke-linecap:round;animation:gfill 1.4s cubic-bezier(.2,.8,.2,1) both;animation-delay:.15s}
 @keyframes gfill{from{stroke-dashoffset:var(--c)}}
-.g-num{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:center;font-family:var(--fontd);font-weight:600;color:var(--white);font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.g-box{position:relative;max-width:100%;container-type:inline-size}
+.g-box svg{width:100%;height:auto}
+.g-num{position:absolute;inset:0;font-size:var(--fs);display:flex;align-items:center;justify-content:center;font-family:var(--fontd);font-weight:600;color:var(--white);font-variant-numeric:tabular-nums;letter-spacing:-.5px}
 .g-lbl{margin-top:9px;font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;font-weight:700}
 .specs{flex:1;border-left:1px solid var(--line);padding-left:30px;display:grid;grid-template-columns:auto 1fr;gap:9px 22px;font-size:13px;align-content:center}
 .specs dt{color:var(--muted)}.specs dd{margin:0;color:var(--white)}
@@ -163,7 +165,11 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 #testBtns .btn{flex:0 0 auto;height:32px;border-radius:16px;padding:0 12px;font-size:12.5px;background:#121b26}
 .rep{padding:16px 12px 34px}
 .gauges{gap:6px;justify-content:space-around;flex-wrap:wrap;padding:0}
-.gauge svg{max-width:27vw;height:auto}
+.g-box{max-width:27vw}
+.cams{grid-template-columns:1fr 1fr;max-width:100%;gap:8px}.cam-l{flex-direction:column;align-items:flex-start;gap:2px}
+@supports (font-size:1cqw){.g-num{font-size:30cqw}}
+.head{flex-direction:column;align-items:flex-start;gap:12px}
+.ttl{font-size:24px}
 .card{padding:14px!important}
 }
 
@@ -194,6 +200,16 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 .spk div{width:120px;height:120px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:#141c26;border:1px solid var(--line2);color:var(--muted2);font-size:12px;font-weight:600;letter-spacing:1px;transition:all .25s}
 .spk div svg{width:34px;height:34px}
 .spk div.on{background:#123030;border-color:var(--acc);color:var(--acc);box-shadow:0 0 34px rgba(45,212,191,.35);transform:scale(1.06)}
+.cams{margin-top:16px;width:760px;max-width:86vw;max-height:62vh;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.cam-msg{grid-column:1/-1;padding:40px 10px;text-align:center;color:var(--muted)}
+.cam-t{border-radius:12px;background:#0b1016;border:1px solid var(--line);overflow:hidden;animation:pop .25s ease both}
+.cam-t.ok{border-color:#1f5a52}.cam-t.bad{border-color:#5a1f26}
+.cam-v{aspect-ratio:4/3;background:#05080b;display:grid;place-items:center;overflow:hidden}
+.cam-v video,.cam-v img{width:100%;height:100%;object-fit:cover}
+.cam-s{color:var(--muted);font-size:12px}.cam-t.bad .cam-s{color:#fca5a5}
+.cam-l{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;font-size:12px}
+.cam-l b{color:var(--white);font-weight:600}.cam-l small{color:var(--muted);white-space:nowrap}
+@keyframes pop{from{opacity:0;transform:scale(.96)}}
 .cam{margin-top:16px;width:640px;max-width:80vw;aspect-ratio:16/9;border-radius:12px;background:#05080b;overflow:hidden;display:grid;place-items:center;color:var(--muted);border:1px solid var(--line)}
 .cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
 .meter{display:flex;gap:4px;align-items:flex-end;height:90px;margin-top:22px;padding:0 4px}
@@ -310,9 +326,9 @@ const TESTS = [
   ['screen', 'Screen / Dead Pixels', 'screen'],
   ['touch', 'Touch Screen', 'touch'],
   ['speakers', 'Speakers (Left / Right)', 'speaker'],
-  ['webcam', 'Webcam', 'camera'],
+  ['webcam', 'Cameras', 'camera'],
   ['mic', 'Microphone', 'mic'],
-].filter(t => !(ANDROID && t[0] === 'keyboard') && !(t[0] === 'touch' && !ANDROID && !(navigator.maxTouchPoints > 0))).map(t => ANDROID && t[0] === 'webcam' ? ['webcam', 'Camera', 'camera'] : t);
+].filter(t => !(ANDROID && t[0] === 'keyboard') && !(t[0] === 'touch' && !ANDROID && !(navigator.maxTouchPoints > 0)));
 
 function summary() {
   const secs = arr(DATA.sections);
@@ -339,10 +355,10 @@ const pill = (t, c) => `<span class="pill" style="color:${c};border-color:${c}55
 
 function gauge(v, size, sw, label) {
   const r = (size - sw) / 2, c = 2 * Math.PI * r, off = c * (1 - v / 100), col = scol(v);
-  return `<div class="gauge"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+  return `<div class="gauge"><div class="g-box" style="width:${size}px;--fs:${Math.round(size * .3)}px"><svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
     <circle class="g-trk" cx="${size/2}" cy="${size/2}" r="${r}" stroke-width="${sw}"/>
     <circle class="g-val" cx="${size/2}" cy="${size/2}" r="${r}" stroke="${col}" stroke-width="${sw}" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${off.toFixed(2)}" style="--c:${c.toFixed(2)};filter:drop-shadow(0 0 6px ${col}66)"/></svg>
-    <div class="g-num" style="height:${size}px;font-size:${Math.round(size * .3)}px"><span class="cnt" data-v="${v}">${v}</span></div>
+    <div class="g-num"><span class="cnt" data-v="${v}">${v}</span></div></div>
     <div class="g-lbl">${esc(label)}</div></div>`;
 }
 
@@ -360,11 +376,13 @@ function sectionCard(s, d) {
 function reportHTML() {
   const sm = summary(), q = DATA.quick || {}, secs = arr(DATA.sections);
   let h = `<div class="head"><div><div class="eyebrow">CoreKit · Health Report</div><div class="ttl">${esc(q.Model || DATA.host)}</div>
-    <div class="meta"><span><b>Serial</b> ${esc(q.Serial || '-')}</span><span><b>Scanned</b> ${esc(DATA.time)}</span><span><b>Host</b> ${esc(DATA.host)}</span></div></div>
+    <div class="meta">${DATA.platform === 'android'
+      ? `${q.Brand ? `<span><b>Brand</b> ${esc(q.Brand)}</span>` : ''}<span><b>Model</b> ${esc(q.ModelCode || '-')}</span><span><b>Scanned</b> ${esc(DATA.time)}</span>`
+      : `<span><b>Serial</b> ${esc(q.Serial || '-')}</span><span><b>Scanned</b> ${esc(DATA.time)}</span><span><b>Host</b> ${esc(DATA.host)}</span>`}</div></div>
     <div class="verdict" style="color:${sm.vc};border-color:${sm.vc}66;background:${sm.vc}12"><i></i>${sm.v}</div></div>`;
 
   h += `<div class="card" style="--d:.02s"><div class="ov"><div class="gauges">${gauge(sm.o, 150, 12, 'Overall')}${gauge(sm.h, 108, 9, 'Health')}${sm.p != null ? gauge(sm.p, 108, 9, 'Performance') : ''}</div><dl class="specs">`;
-  for (const k of ['Processor', 'Memory', 'Storage', 'Graphics', 'Battery', 'Display', 'Windows', 'Android']) if (q[k]) h += `<dt>${k}</dt><dd>${esc(q[k])}</dd>`;
+  for (const k of ['Processor', 'Memory', 'Virtual RAM', 'Storage', 'Graphics', 'Battery', 'Cameras', 'Display', 'Windows', 'Android']) if (q[k]) h += `<dt>${k}</dt><dd>${esc(q[k])}</dd>`;
   h += `</dl></div></div>`;
 
   // component scores
@@ -638,18 +656,73 @@ function speakerTest() {
 
 /* webcam */
 async function webcamTest() {
-  let stream;
-  openModal(head('Webcam', 'Check that the picture is clear and in focus.') + `<div class="cam" id="cam">Starting camera…</div>` + foot('webcam'),
-    () => { if (stream) stream.getTracks().forEach(t => t.stop()); });
-  resultDetail.webcam = ok => ok ? 'Picture OK' : 'Not working / poor picture';
+  const streams = [];
+  let alive = true;
+  const stopAll = () => { streams.forEach(st => st.getTracks().forEach(t => t.stop())); streams.length = 0; };
+  openModal(head('Cameras', 'Every lens is opened. Check each picture is clear, in focus and free of spots.') + `<div class="cams" id="cams"><div class="cam-msg">Looking for cameras…</div></div>` + foot('webcam', ''),
+    () => { alive = false; stopAll(); });
+  const lensName = (d, i, list) => {
+    const l = (d.label || '').toLowerCase();
+    const facing = /front|user|facetime/.test(l) ? 'Front' : /back|rear|environment/.test(l) ? 'Back' : '';
+    if (!facing) return d.label || `Camera ${i + 1}`;
+    const same = list.filter(x => (/front|user|facetime/.test((x.label || '').toLowerCase()) ? 'Front' : 'Back') === facing);
+    return same.length > 1 ? `${facing} camera ${same.indexOf(d) + 1}` : `${facing} camera`;
+  };
+  const results = {};
+  resultDetail.webcam = ok => { const n = Object.keys(results).length, w = Object.values(results).filter(Boolean).length; return ok ? `${w} of ${n} lens${n === 1 ? '' : 'es'} working` : `Problem (${w} of ${n} lenses working)`; };
   try {
-    stream = await navigator.mediaDevices.getUserMedia({video: {width: 1280, height: 720}});
-    const v = document.createElement('video'); v.autoplay = true; v.muted = true; v.playsInline = true; v.srcObject = stream;
-    const box = $('#cam'); if (!box) { stream.getTracks().forEach(t => t.stop()); return; }
-    box.textContent = ''; box.appendChild(v);
-    const tr = stream.getVideoTracks()[0], st = tr.getSettings();
-    $('#fl').textContent = `${tr.label || 'Camera'}${st.width ? '  ·  ' + st.width + ' x ' + st.height : ''}`;
-  } catch (e) { const box = $('#cam'); if (box) box.textContent = 'No camera found, or access was blocked.'; }
+    const first = await navigator.mediaDevices.getUserMedia({video: true}); // permission + labels
+    first.getTracks().forEach(t => t.stop());
+    const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'videoinput');
+    if (!alive) return;
+    const box = $('#cams');
+    if (!devs.length) { box.innerHTML = '<div class="cam-msg">No camera found.</div>'; return; }
+    box.innerHTML = devs.map((d, i) => `<div class="cam-t" id="ct${i}"><div class="cam-v"><span class="cam-s">Opening…</span></div><div class="cam-l"><b>${esc(lensName(d, i, devs))}</b><small id="cr${i}"></small></div></div>`).join('');
+    $('#fl').textContent = `${devs.length} lens${devs.length === 1 ? '' : 'es'} found`;
+    const show = (i, st, live) => {
+      const tile = $('#ct' + i); if (!tile) return;
+      const v = document.createElement('video'); v.autoplay = true; v.muted = true; v.playsInline = true; v.srcObject = st;
+      if (/front|user|facetime/i.test(devs[i].label || '')) v.style.transform = 'scaleX(-1)';
+      const holder = tile.querySelector('.cam-v'); holder.innerHTML = ''; holder.appendChild(v);
+      const s2 = st.getVideoTracks()[0].getSettings();
+      $('#cr' + i).textContent = (s2.width ? `${s2.width} × ${s2.height}` : '') + (live ? ' · live' : '');
+      tile.classList.add('ok'); results[i] = true;
+      return v;
+    };
+    const snap = (i, v) => new Promise(res => setTimeout(() => {
+      const tile = $('#ct' + i); if (!tile || !v.videoWidth) return res();
+      const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
+      c.getContext('2d').drawImage(v, 0, 0); const img = new Image(); img.src = c.toDataURL('image/jpeg', .8);
+      if (v.style.transform) img.style.transform = v.style.transform;
+      const holder = tile.querySelector('.cam-v'); holder.innerHTML = ''; holder.appendChild(img);
+      $('#cr' + i).textContent = $('#cr' + i).textContent.replace(' · live', '') + ' · checked';
+      res();
+    }, 2200));
+    // 1) try every lens at the same time; 2) lenses the phone won't share are checked one by one
+    const queue = [];
+    for (let i = 0; i < devs.length; i++) {
+      if (!alive) return;
+      try {
+        const st = await navigator.mediaDevices.getUserMedia({video: {deviceId: {exact: devs[i].deviceId}, width: {ideal: 1280}, height: {ideal: 720}}});
+        streams.push(st); show(i, st, true);
+      } catch (e) { queue.push(i); }
+    }
+    if (queue.length) {
+      // this device opens one lens at a time: snapshot the live ones, then go through the rest
+      for (let i = 0; i < devs.length; i++) { const t = $('#ct' + i); const v = t && t.querySelector('video'); if (v) await snap(i, v); }
+      stopAll();
+      for (const i of queue) {
+        if (!alive) return;
+        try {
+          const st = await navigator.mediaDevices.getUserMedia({video: {deviceId: {exact: devs[i].deviceId}}});
+          streams.push(st); const v = show(i, st, true); await snap(i, v); stopAll();
+        } catch (e) {
+          const t = $('#ct' + i); if (t) { t.classList.add('bad'); t.querySelector('.cam-v').innerHTML = '<span class="cam-s">Could not open</span>'; } results[i] = false;
+        }
+      }
+      $('#fl').textContent = `${devs.length} lens${devs.length === 1 ? '' : 'es'} · checked one by one (this device opens one camera at a time)`;
+    } else $('#fl').textContent = `${devs.length} lens${devs.length === 1 ? '' : 'es'} live at the same time`;
+  } catch (e) { const box = $('#cams'); if (box) box.innerHTML = '<div class="cam-msg">No camera found, or access was blocked.</div>'; }
 }
 
 /* microphone */

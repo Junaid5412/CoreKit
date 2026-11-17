@@ -223,8 +223,11 @@ func bypassArg(s string) string {
 // browserArgs builds the engine command line for a profile. With a proxy, everything is
 // forced through the tunnel: hostnames are resolved by the proxy (local DNS is disabled),
 // WebRTC may not send UDP outside the proxy, QUIC and background services are off.
-func browserArgs(port int, bypass string) string {
+func browserArgs(port int, bypass string, adblock bool) string {
 	a := []string{"--no-first-run", "--disable-features=msSmartScreenProtection"}
+	if port == 0 && adblock { // direct connection: the engine refuses to look up ad domains
+		a = append(a, `--host-resolver-rules="`+strings.Join(adResolverRules(), ", ")+`"`)
+	}
 	if port > 0 {
 		a = append(a, fmt.Sprintf("--proxy-server=socks5://127.0.0.1:%d", port),
 			"--force-webrtc-ip-handling-policy=disable_non_proxied_udp",

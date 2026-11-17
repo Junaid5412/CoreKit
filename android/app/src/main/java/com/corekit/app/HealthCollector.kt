@@ -45,7 +45,17 @@ class HealthCollector(private val ctx: Context) {
     }
 
     private val quick = JSONObject()
-    private val model = "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}"
+    private val brand = Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+    /** Marketing name when the phone provides it (e.g. "Galaxy S23 Ultra"), else brand + model code. */
+    private val model: String = run {
+        val dn = try { Settings.Global.getString(ctx.contentResolver, Settings.Global.DEVICE_NAME) } catch (_: Throwable) { null }
+        val name = dn?.trim()?.takeIf { it.isNotEmpty() && it.length <= 40 }
+        when {
+            name == null -> "$brand ${Build.MODEL}"
+            name.startsWith(brand, ignoreCase = true) -> name
+            else -> "$brand $name"
+        }
+    }
 
     fun collect(progress: (Int, String) -> Unit): JSONObject {
         val sections = mutableListOf<Section>()
@@ -88,6 +98,8 @@ class HealthCollector(private val ctx: Context) {
         val up = SystemClock.elapsedRealtime() / 1000
         row("Uptime", "%dd %dh %dm".format(up / 86400, up % 86400 / 3600, up % 3600 / 60))
         quick.put("Model", model)
+        quick.put("Brand", brand)
+        quick.put("ModelCode", Build.MODEL)
         quick.put("Android", "Android ${Build.VERSION.RELEASE}")
     }
 
@@ -123,6 +135,12 @@ class HealthCollector(private val ctx: Context) {
         row("Available now", "%.1f GB (%d%% free)".format(mi.availMem / 1e9, (mi.availMem * 100 / mi.totalMem)),
             if (mi.lowMemory) "warn" else "ok")
         row("Low-memory state", if (mi.lowMemory) "Yes" else "No", if (mi.lowMemory) "warn" else "ok")
+        val swap = meminfo("SwapTotal"); val swapFree = meminfo("SwapFree")
+        if (swap != null && swap > 0) {
+            row("Virtual RAM", "%.1f GB (%.1f GB in use)".format(swap / 1e6, (swap - (swapFree ?: 0)) / 1e6), "ok")
+            quick.put("Virtual RAM", "%.0f GB extra".format(swap / 1e6))
+            note("Virtual RAM uses storage as extra memory (%.1f GB now). Many phones let you change it in Settings, e.g. RAM Plus or Memory extension.".format(swap / 1e6), "info")
+        } else row("Virtual RAM", "Off / not available")
         score = when {
             nominal >= 12 -> 100; nominal >= 8 -> 92; nominal >= 6 -> 80; nominal >= 4 -> 62; nominal >= 3 -> 45; else -> 28
         }
@@ -179,14 +197,28 @@ class HealthCollector(private val ctx: Context) {
         val bm = ctx.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
         val counter = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER) // µAh
         val design = designCapacity()
-        // full capacity now: kernel value if readable, else estimated from the charge counter
-        var full = readLong("/sys/class/power_supply/battery/charge_full")?.let { it / 1000.0 }
-            ?.takeIf { it in 500.0..30000.0 }
-        if (full == null && counter > 0 && level >= 15) full = counter / 1000.0 / (level / 100.0)
-        val healthPct = if (full != null && design != null && design > 500) min(100.0, full / design * 100) else null
-
+        // 1) value the phone itself reports (some phones expose state of health)
+        val reported = try { bm.getIntProperty(10).takeIf { it in 1..100 } } catch (_: Throwable) { null }
+        // 2) kernel full-charge vs design capacity
+        val kFull = readLong("/sys/class/power_supply/battery/charge_full")?.let { it / 1000.0 }?.takeIf { it in 500.0..30000.0 }
+        val kDesign = readLong("/sys/class/power_supply/battery/charge_full_design")?.let { it / 1000.0 }?.takeIf { it in 500.0..30000.0 }
+        // 3) estimate from the charge counter (many phones scale this to the design value)
+        val estFull = if (counter > 0 && level >= 20) counter / 1000.0 / (level / 100.0) else null
+        val estPct = if (estFull != null && design != null) estFull / design * 100 else null
+        val cyclePct = if (cycles > 0) (100 - cycles * 0.025).coerceIn(60.0, 100.0) else null
+        var source: String
+        val healthPct: Double? = when {
+            reported != null -> { source = "Reported by the phone"; reported.toDouble() }
+            kFull != null && (kDesign ?: design) != null -> { source = "Measured (battery chip)"; min(100.0, kFull / (kDesign ?: design!!) * 100) }
+            estPct != null && estPct in 50.0..97.0 -> { source = "Estimated from charge level"; estPct }
+            cyclePct != null -> { source = "Estimated from $cycles charge cycles"; cyclePct }
+            estPct != null && estPct > 97.0 -> { source = "Estimate (phone reports design capacity)"; null }
+            else -> { source = "Not reported by this phone"; null }
+        }
+        val full = kFull ?: estFull
         val hName = mapOf(2 to "Good", 3 to "Overheating", 4 to "Dead", 5 to "Over voltage", 6 to "Failure", 7 to "Cold")[h] ?: "Unknown"
-        head("Battery health", healthPct?.let { "%.0f%%".format(it) } ?: hName)
+        head("Battery health", healthPct?.let { (if (source.startsWith("Estimat")) "≈" else "") + "%.0f%%".format(it) } ?: hName)
+        row("Health source", source, if (healthPct == null) "info" else "ok")
         healthPct?.let { row("Wear level", "%.0f%%".format(100 - it), if (it < 70) "bad" else if (it < 80) "warn" else "ok") }
         design?.let { row("Design capacity", "%.0f mAh".format(it)) }
         full?.let { row("Full charge now", "≈%.0f mAh".format(it)) }
@@ -204,8 +236,8 @@ class HealthCollector(private val ctx: Context) {
             healthPct != null && healthPct < 80 -> note("Battery has noticeable wear (%.0f%% health). Expect shorter battery life; a replacement may be needed.".format(healthPct), "warn")
             h != 2 && h != 0 -> note("Android reports the battery as \"$hName\".", "bad")
         }
-        if (healthPct == null) note("This phone does not report its design capacity, so wear is estimated from Android's battery status.", "info")
-        quick.put("Battery", healthPct?.let { "%.0f%% health".format(it) } ?: hName)
+        if (healthPct == null) note("This phone does not share its real battery wear with apps. Check Settings → Battery → Battery health (or Device care) for the manufacturer's figure.", "info")
+        quick.put("Battery", healthPct?.let { (if (source.startsWith("Estimat")) "≈" else "") + "%.0f%% health".format(it) } ?: "$hName (wear not reported)")
     }
 
     private var displaySummary = "—"
@@ -250,6 +282,7 @@ class HealthCollector(private val ctx: Context) {
         val back = cams.count { cm.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK }
         val front = cams.count { cm.getCameraCharacteristics(it).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT }
         row("Cameras", "$back back · $front front", if (cams.isEmpty()) "warn" else "ok")
+        quick.put("Cameras", "$back back · $front front")
         row("Total sensors", "${sm.getSensorList(Sensor.TYPE_ALL).size}")
         score = clamp(100 - missing * 20)
         if (missing > 0) note("$missing basic sensor(s) not detected. On a used phone this can mean a replaced or faulty part.", "warn")
@@ -280,6 +313,11 @@ class HealthCollector(private val ctx: Context) {
     // ---------------------------------------------------------------- helpers
 
     private fun clamp(v: Int) = v.coerceIn(0, 100)
+
+    /** /proc/meminfo value in kB. */
+    private fun meminfo(key: String): Long? = try {
+        File("/proc/meminfo").readLines().firstOrNull { it.startsWith("$key:") }?.split(Regex("\\s+"))?.getOrNull(1)?.toLong()
+    } catch (_: Throwable) { null }
 
     private fun readLong(path: String): Long? = try { File(path).readText().trim().toLong() } catch (_: Throwable) { null }
 

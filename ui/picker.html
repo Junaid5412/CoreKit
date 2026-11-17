@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>CoreKit Browser</title>
 <meta name="color-scheme" content="dark">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <style>
 :root{--bg:#0a0e13;--acc:#2dd4bf;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;--font:"Segoe UI Variable Text","Segoe UI",system-ui,Arial,sans-serif;--fontd:"Segoe UI Variable Display","Segoe UI",system-ui,Arial,sans-serif}
 *{box-sizing:border-box}
@@ -40,6 +41,13 @@ h1{margin:22px 0 4px;font:600 21px var(--fontd);color:var(--white);animation:in 
 .btn.pri{background:var(--acc);border-color:var(--acc);color:#04201c}
 .foot{margin-top:26px;color:#4b5663;font-size:12px;display:flex;align-items:center;gap:8px;animation:in .45s .1s ease both}
 .foot svg{width:14px;height:14px;stroke:var(--acc);fill:none;stroke-width:2}
+@media (max-width:600px){
+  body{justify-content:flex-start;padding:max(28px,env(safe-area-inset-top)) 16px 24px}
+  .logo b{font-size:21px}h1{font-size:22px;margin-top:26px}.sub{font-size:13.5px;text-align:center}
+  #grid{max-height:none;gap:12px;width:100%}
+  .card{width:calc(50% - 6px);padding:22px 10px 16px}
+  .form{width:100%;padding:18px 14px}.form input{height:44px;font-size:15px}.swc{width:26px;height:26px}.btn{height:42px;font-size:14px}
+}
 .opening{position:fixed;inset:0;display:none;place-items:center;background:rgba(10,14,19,.86);font:600 15px var(--fontd);color:var(--white)}
 .opening.show{display:grid}
 .spin{width:30px;height:30px;border-radius:50%;border:3px solid #22303f;border-top-color:var(--acc);animation:rot .8s linear infinite;margin:0 auto 14px}
@@ -49,7 +57,7 @@ h1{margin:22px 0 4px;font:600 21px var(--fontd);color:var(--white);animation:in 
 <body>
 <div class="logo"><svg viewBox="0 0 48 48"><path d="M24 5 40.5 14.5v19L24 43 7.5 33.5v-19z" fill="none" stroke="#2dd4bf" stroke-width="3.4" stroke-linejoin="round"/><path d="M24 18.5 28.8 21.3v5.4L24 29.5l-4.8-2.8v-5.4z" fill="#2dd4bf"/></svg><b>Core<span>Kit</span> Browser</b></div>
 <h1>Who's browsing?</h1>
-<p class="sub">Choose a profile. Each one has its own logins, proxy and window.</p>
+<p class="sub" id="sub">Choose a profile. Each one has its own logins and proxy, stored only on this device.</p>
 <div id="grid"></div>
 <div class="foot"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Security checks run before any page opens</div>
 <div class="opening" id="op"><div><div class="spin"></div><span id="opT">Opening…</span></div></div>
@@ -64,7 +72,7 @@ function render() {
   if (!color) color = cols[(S.profiles.length + 1) % cols.length];
   const last = S.profiles.reduce((a, p) => (!a || p.lastUsed > a.lastUsed ? p : a), null);
   document.getElementById("grid").innerHTML = S.profiles.map(p => `<div class="card${last && p.id === last.id ? " last" : ""}" tabindex="0" data-id="${esc(p.id)}" style="--pc:${esc(p.color)}">${p.running ? '<span class="run">OPEN</span>' : ""}<span class="av">${esc((p.name || "P")[0].toUpperCase())}</span><span class="nm">${esc(p.name)}</span><span class="px${p.proxy ? " on" : ""}"><i></i>${p.proxy ? esc(p.proxy) : "Direct connection"}</span></div>`).join("")
-    + (adding ? `<div class="form"><input id="nm" maxlength="32" placeholder="Profile name"><div class="sws">${cols.map(c => `<button class="swc${c === color ? " sel" : ""}" data-c="${c}" style="background:${c}"></button>`).join("")}</div><div class="row"><button class="btn" data-a="cancel">Cancel</button><button class="btn pri" data-a="create">Create</button></div></div>`
+    + (adding ? `<div class="form"><input id="nm" maxlength="32" placeholder="Profile name" value="${S.profiles.length ? "" : "Personal"}"><div class="sws">${cols.map(c => `<button class="swc${c === color ? " sel" : ""}" data-c="${c}" style="background:${c}"></button>`).join("")}</div><div class="row">${S.profiles.length ? '<button class="btn" data-a="cancel">Cancel</button>' : ''}<button class="btn pri" data-a="create">Create</button></div></div>`
       : `<div class="card add" tabindex="0" data-a="add"><span class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><span class="nm">Add profile</span><span class="px">&nbsp;</span></div>`);
   if (adding) document.getElementById("nm").focus();
   else { const l = document.querySelector(".card.last") || document.querySelector(".card"); if (l && document.activeElement === document.body) l.focus(); }
@@ -99,7 +107,15 @@ document.addEventListener("keydown", e => {
 });
 function onMsg(m) {
   if (!m) return;
-  if (m.t === "state") { S = m; render(); }
+  if (m.t === "state") {
+    S = m;
+    if (!S.profiles.length) { // first start on this device: nothing is shared between devices
+      adding = true;
+      document.querySelector("h1").textContent = "Create your first profile";
+      document.getElementById("sub").textContent = "Profiles, logins and proxies stay on this device only. Name it, pick a colour, and the security checks start.";
+    }
+    render();
+  }
   if (m.t === "error") { document.getElementById("op").classList.remove("show"); alert(m.msg); }
 }
 if (W) W.addEventListener("message", e => onMsg(e.data));

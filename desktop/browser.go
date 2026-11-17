@@ -41,6 +41,8 @@ type brProfile struct {
 	Search   string `json:"search"`
 	Bypass   string `json:"bypass"`
 	// secure defaults: zero value = protected
+	NoAdblock    bool `json:"noAdblock"`    // ad blocker off
+	NoLangMatch  bool `json:"noLangMatch"`  // don't match page language to the VPN country
 	AllowCapture bool `json:"allowCapture"` // let screenshots / remote viewers see the window
 	KeepHistory  bool `json:"keepHistory"`  // keep history, cache and tabs after closing
 	// languages
@@ -445,9 +447,20 @@ func xrayConfig(out map[string]any, port int) []byte {
 		},
 		"outbounds": []any{o, map[string]any{"tag": "direct", "protocol": "freedom"}},
 	}
+	if xrayBlockAds { // ad blocker with the proxy on: ad domains go nowhere
+		doms := make([]string, len(adDomains))
+		for i, d := range adDomains {
+			doms[i] = "domain:" + d
+		}
+		cfg["outbounds"] = append(cfg["outbounds"].([]any), map[string]any{"tag": "block", "protocol": "blackhole"})
+		cfg["routing"] = map[string]any{"domainStrategy": "AsIs", "rules": []any{map[string]any{"type": "field", "domain": doms, "outboundTag": "block"}}}
+	}
 	b, _ := json.MarshalIndent(cfg, "", "  ")
 	return b
 }
+
+// xrayBlockAds is set by the browser window when its profile has the ad blocker on.
+var xrayBlockAds bool
 
 // ---------------------------------------------------------------- engine (Xray) manager
 

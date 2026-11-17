@@ -22,12 +22,6 @@ func runPicker() {
 		focusExisting("CoreKitPicker")
 		return
 	}
-	brMu.Lock()
-	n := len(brLoad().Profiles)
-	brMu.Unlock()
-	if n == 0 { // first run: create "Personal" and still show the picker
-		pickProfile("")
-	}
 	procCoInitializeEx.Call(0, 0x2)
 	setDPIAwareness()
 	srv, err := startSBServer(func() string { return "google" })

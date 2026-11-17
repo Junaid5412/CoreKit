@@ -115,3 +115,18 @@ func TestHistoryStore(t *testing.T) {
 		t.Fatal(r)
 	}
 }
+
+func TestAdblockAndLanguage(t *testing.T) {
+	for h, want := range map[string]bool{"doubleclick.net": true, "ad.doubleclick.net": true, "x.y.googlesyndication.com": true,
+		"google.com": false, "mydoubleclick.net": false, "www.taboola.com": true, "example.org": false} {
+		if isAdHost(h) != want {
+			t.Errorf("isAdHost(%s) != %v", h, want)
+		}
+	}
+	if s := langMatchScript("DE"); !strings.Contains(s, `["de-DE","de","en-US","en"]`) {
+		t.Error(s)
+	}
+	if langMatchScript("XX") != "" {
+		t.Error("unknown country should give no script")
+	}
+}

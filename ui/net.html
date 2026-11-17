@@ -102,7 +102,9 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 .g-trk{fill:none;stroke:#161f2a}
 .g-val{fill:none;stroke-linecap:round;animation:gfill 1.4s cubic-bezier(.2,.8,.2,1) both;animation-delay:.15s}
 @keyframes gfill{from{stroke-dashoffset:var(--c)}}
-.g-num{position:absolute;left:0;right:0;top:0;display:flex;align-items:center;justify-content:center;font-family:var(--fontd);font-weight:600;color:var(--white);font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+.g-box{position:relative;max-width:100%;container-type:inline-size}
+.g-box svg{width:100%;height:auto}
+.g-num{position:absolute;inset:0;font-size:var(--fs);display:flex;align-items:center;justify-content:center;font-family:var(--fontd);font-weight:600;color:var(--white);font-variant-numeric:tabular-nums;letter-spacing:-.5px}
 .g-lbl{margin-top:9px;font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;font-weight:700}
 .specs{flex:1;border-left:1px solid var(--line);padding-left:30px;display:grid;grid-template-columns:auto 1fr;gap:9px 22px;font-size:13px;align-content:center}
 .specs dt{color:var(--muted)}.specs dd{margin:0;color:var(--white)}
@@ -163,7 +165,11 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 #testBtns .btn{flex:0 0 auto;height:32px;border-radius:16px;padding:0 12px;font-size:12.5px;background:#121b26}
 .rep{padding:16px 12px 34px}
 .gauges{gap:6px;justify-content:space-around;flex-wrap:wrap;padding:0}
-.gauge svg{max-width:27vw;height:auto}
+.g-box{max-width:27vw}
+.cams{grid-template-columns:1fr 1fr;max-width:100%;gap:8px}.cam-l{flex-direction:column;align-items:flex-start;gap:2px}
+@supports (font-size:1cqw){.g-num{font-size:30cqw}}
+.head{flex-direction:column;align-items:flex-start;gap:12px}
+.ttl{font-size:24px}
 .card{padding:14px!important}
 }
 
@@ -194,6 +200,16 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 .spk div{width:120px;height:120px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:#141c26;border:1px solid var(--line2);color:var(--muted2);font-size:12px;font-weight:600;letter-spacing:1px;transition:all .25s}
 .spk div svg{width:34px;height:34px}
 .spk div.on{background:#123030;border-color:var(--acc);color:var(--acc);box-shadow:0 0 34px rgba(45,212,191,.35);transform:scale(1.06)}
+.cams{margin-top:16px;width:760px;max-width:86vw;max-height:62vh;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.cam-msg{grid-column:1/-1;padding:40px 10px;text-align:center;color:var(--muted)}
+.cam-t{border-radius:12px;background:#0b1016;border:1px solid var(--line);overflow:hidden;animation:pop .25s ease both}
+.cam-t.ok{border-color:#1f5a52}.cam-t.bad{border-color:#5a1f26}
+.cam-v{aspect-ratio:4/3;background:#05080b;display:grid;place-items:center;overflow:hidden}
+.cam-v video,.cam-v img{width:100%;height:100%;object-fit:cover}
+.cam-s{color:var(--muted);font-size:12px}.cam-t.bad .cam-s{color:#fca5a5}
+.cam-l{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;font-size:12px}
+.cam-l b{color:var(--white);font-weight:600}.cam-l small{color:var(--muted);white-space:nowrap}
+@keyframes pop{from{opacity:0;transform:scale(.96)}}
 .cam{margin-top:16px;width:640px;max-width:80vw;aspect-ratio:16/9;border-radius:12px;background:#05080b;overflow:hidden;display:grid;place-items:center;color:var(--muted);border:1px solid var(--line)}
 .cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
 .meter{display:flex;gap:4px;align-items:flex-end;height:90px;margin-top:22px;padding:0 4px}
