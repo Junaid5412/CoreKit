@@ -140,8 +140,34 @@ func runPicker() {
 					if !colorRe.MatchString(color) {
 						color = profileColors[1]
 					}
-					np := &brProfile{ID: newID(), Name: name, Color: color, Search: "google", Created: time.Now().Unix()}
-					brMutate(func(c *brConfig) { c.Profiles = append(c.Profiles, np) })
+					// asked when the profile is made: proxy (none, a saved one or a new link) and ad blocker
+					np := &brProfile{ID: newID(), Name: name, Color: color, Search: "google", Created: time.Now().Unix(), NoAdblock: !m.On}
+					var px *brProxy
+					switch m.ID {
+					case "":
+					case "new":
+						var err error
+						if px, err = newProxy("", m.Link); err != nil {
+							post(map[string]any{"t": "error", "msg": err.Error(), "field": "link"})
+							return
+						}
+						np.Proxy = px.ID
+					default:
+						brMu.Lock()
+						if brLoad().proxy(m.ID) != nil {
+							np.Proxy = m.ID
+						}
+						brMu.Unlock()
+					}
+					brMutate(func(c *brConfig) {
+						if px != nil {
+							c.Proxies = append(c.Proxies, px)
+							if c.Default == "" {
+								c.Default = px.ID
+							}
+						}
+						c.Profiles = append(c.Profiles, np)
+					})
 					openProfile(np.ID)
 				}
 			})

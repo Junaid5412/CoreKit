@@ -11,7 +11,7 @@
 html,body{margin:0;height:100%;overflow:hidden;color:#c9d1d9;font:13.5px/1.45 var(--font);-webkit-font-smoothing:antialiased;user-select:none;cursor:default}
 body{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;
   background:radial-gradient(800px 520px at 50% 30%,rgba(45,212,191,.08),transparent 65%),var(--bg)}
-button,input{font:inherit;color:inherit}
+button,input,select,textarea{font:inherit;color:inherit}
 .logo{display:flex;align-items:center;gap:12px;animation:in .45s ease both}
 .logo svg{width:36px;height:36px}
 .logo b{font:600 24px var(--fontd);color:var(--white)}.logo b span{color:var(--acc)}
@@ -32,7 +32,17 @@ h1{margin:22px 0 4px;font:600 21px var(--fontd);color:var(--white);animation:in 
 .add .nm{color:var(--muted2)}
 .form{width:168px;padding:16px 12px;border-radius:16px;background:#10161e;border:1px solid #1f5a52;display:flex;flex-direction:column;gap:10px}
 .form input{height:34px;border-radius:9px;border:1px solid #223042;background:#0c1219;padding:0 10px;outline:none;color:var(--white)}
-.form input:focus{border-color:var(--acc)}
+.form input:focus,.form select:focus,.form textarea:focus{border-color:var(--acc)}
+.form.wide{width:300px;text-align:left}
+.form .fl{font-size:11px;font-weight:700;letter-spacing:.8px;color:var(--muted);margin:4px 0 -4px}
+.form select{height:34px;border-radius:9px;border:1px solid #223042;background:#0c1219;padding:0 8px;outline:none;color:var(--white)}
+.form textarea{min-height:64px;resize:vertical;border-radius:9px;border:1px solid #223042;background:#0c1219;padding:8px 10px;outline:none;color:var(--white);font-size:12px;user-select:text;word-break:break-all}
+.form .err{display:none;color:#fca5a5;font-size:12px}
+.tg{display:flex;align-items:center;gap:10px;cursor:pointer;color:var(--white);font-size:13px}
+.tg input{display:none}.tg .sw{width:34px;height:20px;border-radius:10px;background:#223042;position:relative;flex:none;transition:background .15s}
+.tg .sw::after{content:"";position:absolute;left:3px;top:3px;width:14px;height:14px;border-radius:50%;background:#8b98a5;transition:transform .15s,background .15s}
+.tg input:checked+.sw{background:#14524a}.tg input:checked+.sw::after{transform:translateX(14px);background:var(--acc)}
+.tg small{display:block;color:var(--muted);font-size:11.5px}
 .sws{display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
 .swc{width:18px;height:18px;border-radius:50%;border:0;box-shadow:0 0 0 2px #0f151d;cursor:pointer}
 .swc.sel{box-shadow:0 0 0 2px #0f151d,0 0 0 4px #f0f6fc}
@@ -46,7 +56,8 @@ h1{margin:22px 0 4px;font:600 21px var(--fontd);color:var(--white);animation:in 
   .logo b{font-size:21px}h1{font-size:22px;margin-top:26px}.sub{font-size:13.5px;text-align:center}
   #grid{max-height:none;gap:12px;width:100%}
   .card{width:calc(50% - 6px);padding:22px 10px 16px}
-  .form{width:100%;padding:18px 14px}.form input{height:44px;font-size:15px}.swc{width:26px;height:26px}.btn{height:42px;font-size:14px}
+  html,body{overflow:auto}
+  .form,.form.wide{width:100%;padding:18px 14px}.form input,.form select{height:44px;font-size:15px}.form textarea{font-size:13px}.swc{width:26px;height:26px}.btn{height:42px;font-size:14px}
 }
 .opening{position:fixed;inset:0;display:none;place-items:center;background:rgba(10,14,19,.86);font:600 15px var(--fontd);color:var(--white)}
 .opening.show{display:grid}
@@ -72,11 +83,35 @@ function render() {
   if (!color) color = cols[(S.profiles.length + 1) % cols.length];
   const last = S.profiles.reduce((a, p) => (!a || p.lastUsed > a.lastUsed ? p : a), null);
   document.getElementById("grid").innerHTML = S.profiles.map(p => `<div class="card${last && p.id === last.id ? " last" : ""}" tabindex="0" data-id="${esc(p.id)}" style="--pc:${esc(p.color)}">${p.running ? '<span class="run">OPEN</span>' : ""}<span class="av">${esc((p.name || "P")[0].toUpperCase())}</span><span class="nm">${esc(p.name)}</span><span class="px${p.proxy ? " on" : ""}"><i></i>${p.proxy ? esc(p.proxy) : "Direct connection"}</span></div>`).join("")
-    + (adding ? `<div class="form"><input id="nm" maxlength="32" placeholder="Profile name" value="${S.profiles.length ? "" : "Personal"}"><div class="sws">${cols.map(c => `<button class="swc${c === color ? " sel" : ""}" data-c="${c}" style="background:${c}"></button>`).join("")}</div><div class="row">${S.profiles.length ? '<button class="btn" data-a="cancel">Cancel</button>' : ''}<button class="btn pri" data-a="create">Create</button></div></div>`
+    + (adding ? `<div class="form wide"><input id="nm" maxlength="32" placeholder="Profile name" value="${S.profiles.length ? "" : "Personal"}"><div class="sws">${cols.map(c => `<button class="swc${c === color ? " sel" : ""}" data-c="${c}" style="background:${c}"></button>`).join("")}</div>
+        <div class="fl">CONNECTION</div>
+        <select id="px"><option value="">No proxy (direct)</option>${(S.proxies || []).map(x => `<option value="${esc(x.id)}"${x.id === S.default ? " selected" : ""}>${esc(x.name)}</option>`).join("")}<option value="new">Add a proxy / VPN link…</option></select>
+        <textarea id="lk" spellcheck="false" placeholder="Paste a vless://, vmess://, trojan://, ss:// or socks:// link" style="display:none"></textarea>
+        <div class="err" id="err"></div>
+        <label class="tg"><input type="checkbox" id="ab" checked><span class="sw"></span><span>Ad blocker<small>Blocks ads and trackers</small></span></label>
+        <div class="row">${S.profiles.length ? '<button class="btn" data-a="cancel">Cancel</button>' : ''}<button class="btn pri" data-a="create">Create &amp; check</button></div></div>`
       : `<div class="card add" tabindex="0" data-a="add"><span class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><span class="nm">Add profile</span><span class="px">&nbsp;</span></div>`);
   if (adding) document.getElementById("nm").focus();
   else { const l = document.querySelector(".card.last") || document.querySelector(".card"); if (l && document.activeElement === document.body) l.focus(); }
 }
+function fieldErr(msg, el) {
+  const er = document.getElementById("err"); if (!er) return false;
+  er.textContent = msg; er.style.display = msg ? "block" : "none";
+  if (el) document.getElementById(el)?.focus();
+  return true;
+}
+function create() {
+  const n = document.getElementById("nm").value.trim(); if (!n) { document.getElementById("nm").focus(); return; }
+  const px = document.getElementById("px").value, link = document.getElementById("lk").value.trim();
+  if (px === "new" && !link) { fieldErr("Paste the proxy link first.", "lk"); return; }
+  fieldErr("");
+  document.getElementById("opT").textContent = "Creating " + n + "…"; document.getElementById("op").classList.add("show");
+  send({t:"new", name:n, color, id:px, link:px === "new" ? link : "", on:document.getElementById("ab").checked});
+}
+document.getElementById("grid").addEventListener("input", e => { if (e.target.id === "lk") fieldErr(""); });
+document.getElementById("grid").addEventListener("change", e => {
+  if (e.target.id === "px") { const nw = e.target.value === "new"; document.getElementById("lk").style.display = nw ? "block" : "none"; fieldErr(""); if (nw) document.getElementById("lk").focus(); }
+});
 function open(id) {
   const p = S.profiles.find(x => x.id === id);
   document.getElementById("opT").textContent = "Opening " + (p ? p.name : "profile") + "…";
@@ -84,19 +119,20 @@ function open(id) {
   send({t:"open", id});
 }
 document.getElementById("grid").addEventListener("click", e => {
-  const c = e.target.closest("[data-c]"); if (c) { color = c.dataset.c; const v = document.getElementById("nm").value; render(); document.getElementById("nm").value = v; return; }
+  const c = e.target.closest("[data-c]"); if (c) { color = c.dataset.c; document.querySelectorAll(".swc").forEach(b => b.classList.toggle("sel", b === c)); return; }
   const a = e.target.closest("[data-a]");
   if (a) {
     if (a.dataset.a === "add") { adding = true; render(); }
     else if (a.dataset.a === "cancel") { adding = false; render(); }
-    else if (a.dataset.a === "create") { const n = document.getElementById("nm").value.trim(); if (!n) { document.getElementById("nm").focus(); return; } document.getElementById("opT").textContent = "Creating " + n + "…"; document.getElementById("op").classList.add("show"); send({t:"new", name:n, color}); }
+    else if (a.dataset.a === "create") create();
     return;
   }
   const card = e.target.closest(".card[data-id]"); if (card) open(card.dataset.id);
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Enter") {
-    if (e.target.id === "nm") { document.querySelector('[data-a="create"]').click(); return; }
+    if (e.target.id === "nm") { create(); return; }
+    if (e.target.tagName === "TEXTAREA") return;
     const c = document.activeElement && document.activeElement.closest(".card");
     if (c) { c.click(); e.preventDefault(); }
   } else if (e.key === "Escape" && adding) { adding = false; render(); }
@@ -112,11 +148,11 @@ function onMsg(m) {
     if (!S.profiles.length) { // first start on this device: nothing is shared between devices
       adding = true;
       document.querySelector("h1").textContent = "Create your first profile";
-      document.getElementById("sub").textContent = "Profiles, logins and proxies stay on this device only. Name it, pick a colour, and the security checks start.";
+      document.getElementById("sub").textContent = "Profiles, logins and proxies stay on this device only. Name it, choose a proxy and the ad blocker. The security checks run before anything opens.";
     }
     render();
   }
-  if (m.t === "error") { document.getElementById("op").classList.remove("show"); alert(m.msg); }
+  if (m.t === "error") { document.getElementById("op").classList.remove("show"); if (!fieldErr(m.field === "link" ? "That link could not be read: " + m.msg : m.msg, m.field === "link" ? "lk" : "nm")) alert(m.msg); }
 }
 if (W) W.addEventListener("message", e => onMsg(e.data));
 window.__corekit = onMsg;
