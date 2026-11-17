@@ -20,6 +20,14 @@ var netHTML = ui.Net
 //go:embed scripts/net.ps1
 var netPS []byte
 
+var logsHTML = ui.Logs
+
+//go:embed scripts/activity.ps1
+var activityPS []byte
+
+//go:embed scripts/activity_restore.ps1
+var activityRestorePS []byte
+
 // appVersion is set at build time from the VERSION file (-ldflags "-X main.appVersion=...").
 var appVersion = "dev"
 
@@ -68,6 +76,12 @@ func main() {
 			markUsed("Internet Troubleshooter")
 			boot("internet-troubleshooter")
 			runInspector("net")
+			fmt.Printf("\n    %s[*]%s Module closed.\n", cDGreen, cReset)
+			time.Sleep(600 * time.Millisecond)
+		case '4':
+			markUsed("Activity Log")
+			boot("activity-log")
+			runInspector("logs")
 			fmt.Printf("\n    %s[*]%s Module closed.\n", cDGreen, cReset)
 			time.Sleep(600 * time.Millisecond)
 		case '3':

@@ -15,4 +15,6 @@ var (
 	Start []byte
 	//go:embed picker.html
 	Picker []byte
+	//go:embed logs.html
+	Logs []byte
 )
