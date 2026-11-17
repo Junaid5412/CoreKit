@@ -62,10 +62,12 @@ class Vault(ctx: Context) {
     fun file(name: String) = File(dir, name)
 
     fun write(name: String, text: String) {
-        val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
-        val enc = c.iv + c.doFinal(text.toByteArray())
-        val f = file(name); f.parentFile?.mkdirs()
-        val tmp = File(f.path + ".tmp"); tmp.writeBytes(enc); tmp.renameTo(f)
+        synchronized(LOCK) {
+            val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
+            val enc = c.iv + c.doFinal(text.toByteArray())
+            val f = file(name); f.parentFile?.mkdirs()
+            val tmp = File(f.path + ".tmp"); tmp.writeBytes(enc); tmp.renameTo(f)
+        }
     }
 
     fun read(name: String): String? = try {
@@ -76,7 +78,7 @@ class Vault(ctx: Context) {
 
     fun delete(name: String) { file(name).deleteRecursively() }
 
-    companion object { private const val ALIAS = "corekit-vault" }
+    companion object { private const val ALIAS = "corekit-vault"; private val LOCK = Any() }
 }
 
 /** The bundled Xray engine (official build, libxray.so): SOCKS on port, HTTP on port+1. */
