@@ -242,6 +242,11 @@ class Host(private val act: MainActivity, private val web: WebView) {
             if (page in PAGES) act.runOnUiThread { web.loadUrl(BASE + page) }
         }
 
+        /** Opens CoreKit Browser (profile picker first). */
+        @JavascriptInterface fun browser() {
+            act.runOnUiThread { act.startActivity(Intent(act, BrowserActivity::class.java)) }
+        }
+
         @JavascriptInterface fun exit() { act.runOnUiThread { act.finishAndRemoveTask() } }
     }
 

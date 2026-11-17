@@ -1125,9 +1125,6 @@ func (a *sbApp) browserCheck(seq int) {
 	})
 }
 
-// webrtcProbe starts ICE gathering (with a public STUN server) and records every candidate.
-const webrtcProbe = `(()=>{window.__ck={c:[]};try{const pc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun.cloudflare.com:3478'}]});pc.createDataChannel('x');pc.onicecandidate=e=>{if(e.candidate&&e.candidate.candidate)window.__ck.c.push(e.candidate.candidate)};pc.createOffer().then(o=>pc.setLocalDescription(o)).catch(e=>{window.__ck.err=String(e)});setTimeout(()=>{try{pc.close()}catch(e){}},3000)}catch(e){window.__ck.err=String(e)}return ''})()`
-
 func countryName(code string) string {
 	if code == "" {
 		return ""

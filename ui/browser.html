@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>CoreKit Browser</title>
 <meta name="color-scheme" content="dark">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <style>
 :root{--bg:#0a0e13;--side:#0c1117;--panel:#10161e;--line:#18212c;--line2:#223042;--row:#141c26;--hov:#131b25;--act:#17222e;
   --text:#c9d1d9;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;--acc:#2dd4bf;--red:#f87171;--amber:#fbbf24;--sw:248px;--th:48px;
@@ -223,6 +224,30 @@ select.in option{background:#10161e}
 .np .sws{margin:10px 0;gap:8px}.np .swc{width:20px;height:20px}
 #veil{position:fixed;inset:0;z-index:2;display:none}#veil.show{display:block}
 
+/* ---------- phones: slim left tab rail that opens as a drawer ---------- */
+@media (max-width:600px){
+  :root{--th:52px}
+  #app{grid-template-columns:56px 1fr}
+  #side{width:56px}
+  #side.open{position:absolute;left:0;top:0;bottom:0;width:min(290px,84vw);z-index:12;box-shadow:24px 0 60px rgba(0,0,0,.6)}
+  #tb{padding:0 6px;gap:2px}
+  #bFwd,#newtab .k{display:none}
+  #addr{margin:0 4px;padding:0 4px 0 10px;height:38px;border-radius:19px}
+  #url{font-size:14px}
+  #shield{padding:0 9px;height:34px}#shield span{display:none}
+  #trbar{height:auto;min-height:42px;flex-wrap:wrap;padding:6px 8px 6px 12px;gap:6px}
+  #trbar .tx{flex-basis:calc(100% - 40px);white-space:normal}
+  #trbar [data-tr=never]{display:none}
+  #settings,#hist{padding:16px 12px 40px}
+  .card{padding:16px 14px}
+  .px{flex-wrap:wrap}
+  .kv{grid-template-columns:120px 1fr}
+  .keys{grid-template-columns:1fr}
+  .sh h1{font-size:18px}
+  .cks{width:100%}
+  .sbox{max-width:100%}
+  #pmenu{position:fixed;left:8px;top:calc(var(--th) + env(safe-area-inset-top))}
+}
 #toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#16212d;border:1px solid #243446;color:var(--white);padding:9px 16px;border-radius:10px;font-size:12.5px;transition:all .25s;z-index:30;box-shadow:0 10px 30px rgba(0,0,0,.4)}
 #toast.show{opacity:1;transform:translate(-50%,0)}#toast.bad{border-color:#5a2a31;color:#fecaca}
 </style>
@@ -296,7 +321,16 @@ function layout() {
   const sw = $("#side").getBoundingClientRect().width, th = $("#top").getBoundingClientRect().height;
   send({t:"layout", sw, th});
 }
+const PHONE = matchMedia("(max-width:600px)").matches;
 function setCollapsed(v, tell) {
+  if (PHONE) { // the rail stays 56px; expanding opens a drawer over the page
+    collapsed = v;
+    $("#app").classList.toggle("col", v);
+    $("#side").classList.toggle("open", !v);
+    $("#colarr").setAttribute("d", v ? "m13 10 2 2-2 2" : "m15 10-2 2 2 2");
+    layout(); cover();
+    return;
+  }
   collapsed = v;
   document.documentElement.style.setProperty("--sw", v ? "60px" : "248px");
   $("#app").classList.toggle("col", v);
@@ -306,7 +340,7 @@ function setCollapsed(v, tell) {
   if (tell) send({t:"collapsed", on:v});
 }
 const ro = new ResizeObserver(layout); ro.observe(document.body); ro.observe(document.getElementById("top"));
-function cover() { send({t:"cover", on: settingsOpen || histOpen || (menuOpen && collapsed)}); }
+function cover() { send({t:"cover", on: settingsOpen || histOpen || (menuOpen && collapsed) || (PHONE && !collapsed)}); }
 
 /* ---------- tabs ---------- */
 function hostOf(u) { try { const x = new URL(u); return /^https?:$/.test(x.protocol) ? x.host : ""; } catch (e) { return ""; } }
@@ -676,7 +710,7 @@ function applyState(m) {
   $("#pname").textContent = p.name;
   const e = (S.engines.find(x => x.id === p.search) || {name:"Google"}).name;
   url.placeholder = `Search with ${e} or enter address`;
-  if (m.collapsed !== undefined && m.collapsed !== collapsed) setCollapsed(m.collapsed, false);
+  if (!PHONE && m.collapsed !== undefined && m.collapsed !== collapsed) setCollapsed(m.collapsed, false);
   if (menuOpen) renderMenu();
   if (settingsOpen) { const keep = D; D = keep || draftFromState(); renderSettings(); }
 }
@@ -710,7 +744,11 @@ function onMsg(m) {
 }
 if (W) W.addEventListener("message", e => onMsg(e.data));
 window.__corekit = onMsg; // test hook
-setCollapsed(false, false);
+setCollapsed(PHONE, false);
+if (PHONE) { // tapping a tab or "New tab" in the open drawer closes it
+  $("#tabs").addEventListener("click", e => { if (!collapsed && e.target.closest(".tab") && !e.target.closest("[data-x]")) setCollapsed(true, false); });
+  $("#newtab").addEventListener("click", () => { if (!collapsed) setCollapsed(true, false); });
+}
 renderBar(); renderStatus();
 send({t:"ready"});
 </script>

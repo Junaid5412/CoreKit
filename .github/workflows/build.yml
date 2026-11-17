@@ -76,6 +76,23 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: "17" }
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24", cache: false }
+      - name: Shared Go code + Xray engine for Android (arm64)
+        run: |
+          set -e
+          J=android/app/src/main/jniLibs/arm64-v8a
+          mkdir -p "$J"
+          V=$(cat VERSION)
+          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.appVersion=$V" -o "$J/libcorekit.so" ./desktop
+          base=https://github.com/XTLS/Xray-core/releases/latest/download/Xray-android-arm64-v8a.zip
+          curl -fsSL -o /tmp/xray.zip "$base"
+          want=$(curl -fsSL "$base.dgst" | sed -n 's/^SHA2-256= *//p' | tr -d '\r ')
+          got=$(sha256sum /tmp/xray.zip | cut -d' ' -f1)
+          [ "$want" = "$got" ] || { echo "::error::Xray checksum mismatch"; exit 1; }
+          unzip -o -j /tmp/xray.zip xray -d /tmp/xr
+          cp /tmp/xr/xray "$J/libxray.so"
+          ls -la "$J"
       - uses: gradle/actions/setup-gradle@v4
       - name: Build APK
         working-directory: android

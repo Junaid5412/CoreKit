@@ -75,7 +75,7 @@ document.getElementById("dev").innerHTML = `<span>Device</span><span>${info.mode
 const sw = document.getElementById("shield");
 sw.classList.toggle("on", !!info.shield);
 sw.onclick = () => { const on = !sw.classList.contains("on"); sw.classList.toggle("on", on); if (N) N.setShield(on); };
-if (!N || !N.browser) { const b = document.getElementById("br"); b.classList.add("soon"); b.removeAttribute("href"); b.querySelector(".n").outerHTML = '<span class="tag">NEXT UPDATE</span>'; }
+document.getElementById("br").onclick = e => { e.preventDefault(); if (N && N.browser) N.browser(); };
 
 // 3-second goodbye, like the terminal version
 document.getElementById("exit").onclick = () => {

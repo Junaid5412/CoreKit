@@ -31,7 +31,11 @@ func main() {
 	keepPw := flag.Bool("keep-pw", false, "keep saved passwords when resetting")
 	noElevate := flag.Bool("no-elevate", false, "do not ask for administrator rights")
 	pick := flag.Bool("pick", false, "open CoreKit Browser's profile picker")
+	helper := flag.String("helper", "", "run one shared-code command for the Android app (JSON on stdin/stdout)")
 	flag.Parse()
+	if *helper != "" {
+		os.Exit(runHelper(*helper))
+	}
 	if *pick {
 		runPicker()
 		return

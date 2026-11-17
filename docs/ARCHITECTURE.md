@@ -15,6 +15,14 @@ screens' requests with data collected the platform's own way.
 | Proxy engine | Xray (downloaded, checksum-verified) | Xray (bundled) | Xray |
 | Screen-capture shield | SetWindowDisplayAffinity | FLAG_SECURE | — |
 
+### Shared Go code on Android
+
+Android runs the same Go code as Windows for proxy links, Xray configuration, the tunnel
+check, proxy-location lookup, translation and Google-in-your-language: `desktop/` is also
+built for `android/arm64` and shipped as `libcorekit.so`; the app calls
+`libcorekit.so --helper <command>` with JSON on stdin (see `desktop/helper.go`). The official
+Xray Android build is shipped as `libxray.so` (checksum-verified in the pipeline).
+
 ### The contract between UI and host
 
 The UIs never know which platform they run on. They talk to the host through:

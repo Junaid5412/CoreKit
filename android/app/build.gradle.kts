@@ -25,6 +25,8 @@ android {
         targetSdk = 35
         versionName = ckVersion
         versionCode = ckParts[0] * 10000 + ckParts[1] * 100 + ckParts[2]
+        // libcorekit.so (shared Go code) and libxray.so (proxy engine) are 64-bit ARM builds
+        ndk { abiFilters += "arm64-v8a" }
     }
 
     signingConfigs {
@@ -53,7 +55,11 @@ android {
     kotlinOptions { jvmTarget = "17" }
 
     sourceSets["main"].assets.srcDir(uiAssets)
-    packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+    packaging {
+        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // the bundled programs must be extracted to run
+        jniLibs.useLegacyPackaging = true
+    }
 }
 
 tasks.named("preBuild") { dependsOn(copyUi) }
