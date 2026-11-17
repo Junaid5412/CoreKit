@@ -59,6 +59,8 @@ android {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
         // the bundled programs must be extracted to run
         jniLibs.useLegacyPackaging = true
+        // ship the programs byte-for-byte (the emulator's saved states are tied to its exact build)
+        jniLibs.keepDebugSymbols += "**/*.so"
     }
 }
 

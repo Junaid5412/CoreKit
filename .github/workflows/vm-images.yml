@@ -35,6 +35,41 @@ jobs:
         run: python3 -u tools/vm/probe2.py $PWD/out/android9-lite.iso "" kvm 10 $PWD/test.apk
       - uses: actions/upload-artifact@v4
         with: { name: android9, path: out/ }
+  qemu-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq patchelf binutils
+      - name: QEMU for Android (arm64, from Termux packages), pinned as a release file
+        run: |
+          python3 tools/vm/termux_qemu.py /tmp/qa/lib /tmp/qa/share
+          mkdir -p out && tar -C /tmp/qa -czf out/qemu-android-arm64.tar.gz lib share
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with: { name: qemuandroid, path: out/ }
+  prestart:
+    needs: [android9, qemu-android]
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libarchive-tools e2fsprogs
+      - uses: actions/download-artifact@v4
+        with: { name: qemuandroid, path: /tmp/qa }
+      - uses: actions/download-artifact@v4
+        with: { name: android9, path: /tmp/img }
+      - name: Start once in the phone emulator and save it
+        timeout-minutes: 340
+        run: |
+          mkdir -p /tmp/q /tmp/vmps && tar -C /tmp/q -xzf /tmp/qa/qemu-android-arm64.tar.gz
+          docker run -d --name tx --network host -v /tmp/q:/q -v /tmp/vmps:/tmp/vmps -v /tmp/img:/tmp/img termux/termux-docker:aarch64 sleep infinity
+          sleep 5
+          QHOST=/tmp/q VMW=/tmp/vmps python3 -u tools/vm/prestart.py /tmp/img/android9-lite.iso "docker exec tx env LD_LIBRARY_PATH=/q/lib TMPDIR=/tmp/vmps /q/lib/libqemu.so -L /q/share" out 320
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with: { name: prestart, path: out/ }
+      - if: always()
+        run: tail -c 3000 prestart-serial0.log || true
   qemu-win:
     runs-on: ubuntu-latest
     steps:
@@ -72,7 +107,7 @@ jobs:
           ./qx/qemu-system-x86_64.exe -version
           ./qx/qemu-system-x86_64.exe -accel help
   publish:
-    needs: [android9, qemu-win-test]
+    needs: [android9, qemu-android, qemu-win-test, prestart]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
