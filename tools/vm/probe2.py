@@ -80,10 +80,12 @@ if bt:
     time.sleep(2); a = Ser(5601, f"{OUT}/serial1-first.log", echo=True); R("id; echo auto-ok UPPER", 10, a)
 
     R("settings put global device_provisioned 1; settings put secure user_setup_complete 1", 30, a)
-    if os.environ.get("NETMODE") == "wifi":
-        xml = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "wificonfig.xml")).read().replace("'", "'\\''")
-        R("svc wifi disable; sleep 2; mkdir -p /data/misc/wifi; printf '%s' '" + xml + "' > /data/misc/wifi/WifiConfigStore.xml; chown system:system /data/misc/wifi/WifiConfigStore.xml; chmod 600 /data/misc/wifi/WifiConfigStore.xml; svc wifi enable", 40, a)
-    for i in range(20):
+    R("ls /system/bin/wpa_cli /vendor/bin/wpa_cli /system/bin/dhcptool 2>&1", 10, a)
+    NET = ("ip addr add 10.0.2.15/24 dev wifi_eth; ndc network create 100; ndc network interface add 100 wifi_eth; "
+           "ndc network route add 100 wifi_eth 10.0.2.0/24; ndc network route add 100 wifi_eth 0.0.0.0/0 10.0.2.2; "
+           "ndc resolver setnetdns 100 '' 10.0.2.3; ndc network default set 100; setprop net.dns1 10.0.2.3")
+    R(NET, 30, a)
+    for i in range(2):
         o, _ = R("ip -4 -o addr show | grep -v ' lo '", 10, a)
         if "inet" in o: break
         time.sleep(3)
