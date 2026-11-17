@@ -1,0 +1,42 @@
+name: VM probe (experiment)
+on:
+  push:
+    branches: [vm-exp*]
+jobs:
+  qemu-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq patchelf binutils
+      - run: python3 tools/vm/termux_qemu.py /tmp/q/out /tmp/q/share
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download images and hash
+        run: |
+          set -x
+          for p in "Release%209.0/android-x86_64-9.0-r2.iso" "Release%208.1/android-x86_64-8.1-r6.iso" "Release%207.1/android-x86_64-7.1-r5.iso"; do
+            u="https://sourceforge.net/projects/android-x86/files/$p/download"
+            curl -fsSIL -A "corekit" "$u" | grep -iE "^(HTTP|location|content-length)" | tail -6 || true
+          done
+  boot:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        accel: [kvm, tcg]
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 libarchive-tools
+          if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi; ls -la /dev/kvm || true
+      - name: Get Android 9
+        run: |
+          curl -fL -A corekit -o /tmp/a9.iso "https://sourceforge.net/projects/android-x86/files/Release%209.0/android-x86_64-9.0-r2.iso/download"
+          ls -la /tmp/a9.iso; sha256sum /tmp/a9.iso
+      - name: Boot
+        run: python3 -u tools/vm/boot_probe.py /tmp/a9.iso ${{ matrix.accel }} ${{ matrix.accel == 'kvm' && 12 || 40 }}
+        timeout-minutes: 45
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: serial-${{ matrix.accel }}, path: serial-*.log }
