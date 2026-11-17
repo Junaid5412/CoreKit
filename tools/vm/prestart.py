@@ -117,7 +117,9 @@ while True:
     time.sleep(2)
 if st.get("status") != "completed": sys.exit("save failed: " + str(st))
 print(f"saved in {time.time()-ts:.0f}s, {os.path.getsize(snap)/1e6:.0f} MB", flush=True)
-qmp([{"execute": "quit"}]); time.sleep(3); q.kill()
+try: qmp([{"execute": "quit"}])
+except Exception: pass  # QEMU closes the connection as it quits
+time.sleep(3); q.kill(); q.wait()
 
 # outputs: compressed state + data disk as a template (non-zero 64K blocks, like mktemplate.py)
 def sha(p):
@@ -155,3 +157,22 @@ meta = {"image": name, "ram": RAM, "cpus": CPUS, "qemuId": qid, "bootMinutes": r
         "disk": {"file": os.path.basename(ck), "sha256": sha(ck), "size": os.path.getsize(ck)}}
 json.dump(meta, open(os.path.join(out, "prestart.json"), "w"), indent=1)
 print(json.dumps(meta, indent=1), flush=True)
+
+# check: resume a copy (the published files stay untouched) and run a root command
+subprocess.run(["cp", "--sparse=always", disk, disk + ".test"], check=True)
+targs = [x.replace(f"file={disk},", f"file={disk}.test,") for x in args] + ["-incoming", "file:" + snap]
+tr = time.time()
+q = subprocess.Popen(targs, stdout=open(f"{log}/prestart-resume.log", "ab"), stderr=subprocess.STDOUT)
+ok = False
+for _ in range(900):
+    try:
+        if qmp([{"execute": "query-status"}])[-1].get("return", {}).get("status") == "running": ok = True; break
+    except Exception: pass
+    time.sleep(1)
+print(f"RESUME: running={ok} after {time.time()-tr:.0f}s", flush=True)
+if not ok: q.kill(); sys.exit("resume failed")
+a = Ser(P1, f"{log}/prestart-resume1.log")
+for c in ["id", "getprop sys.boot_completed; uptime", "pm list packages | wc -l", "ip -4 -o addr show | grep -v ' lo '"]:
+    t = time.time(); o, rc = a.run(c, 600); print(f"$ {c} -> {rc} in {time.time()-t:.1f}s: {o.strip()[-300:]}", flush=True)
+q.kill()
+print(f"resume test total {time.time()-tr:.0f}s", flush=True)
