@@ -15,6 +15,8 @@ echo "== size before"; sudo du -sh "$M"
 sudo du -sh "$S"/* 2>/dev/null | sort -h | tail -15
 echo "== apps"; sudo du -s "$S"/app/* "$S"/priv-app/* 2>/dev/null | sort -n | tail -70
 echo "== lib dirs"; sudo du -sh "$S"/lib/* "$S"/lib64/* 2>/dev/null | sort -h | tail -20
+echo "== vendor"; sudo du -sh "$S"/vendor/* "$S"/vendor/lib/* "$S"/vendor/lib64/* 2>/dev/null | sort -h | tail -25
+echo "== framework"; sudo du -sh "$S"/framework/* 2>/dev/null | sort -h | tail -8
 echo "== fonts"; sudo du -sh "$S"/fonts; echo "== media"; sudo du -sh "$S"/media/* 2>/dev/null
 if [ -n "${TEST_APK:-}" ]; then f=$(sudo find "$S/app" -iname '*calculator*.apk' | head -1); [ -n "$f" ] && sudo cp "$f" "$TEST_APK" && sudo chmod 644 "$TEST_APK"; fi
 # ---- remove what a headless virtual phone never uses

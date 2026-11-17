@@ -18,6 +18,7 @@ def launch(port0, port1, ql):
         "-drive", f"file={iso},media=cdrom,readonly=on", "-drive", f"file={data},format=raw,if=virtio",
         "-display", "none", "-vga", "std", "-netdev", "user,id=n0", "-device", "virtio-net-pci,netdev=n0",
         "-serial", f"tcp:127.0.0.1:{port0},server=on,wait=off", "-serial", f"tcp:127.0.0.1:{port1},server=on,wait=off",
+        "-device", "virtio-serial-pci", "-chardev", "socket,id=ck,host=127.0.0.1,port=5602,server=on,wait=off", "-device", "virtserialport,chardev=ck,name=corekit",
         "-monitor", "none", "-no-reboot"]
     print(" ".join(q), flush=True)
     p = subprocess.Popen(q, stdout=open(ql, "ab"), stderr=subprocess.STDOUT); return p
@@ -75,14 +76,18 @@ if bt:
     R("ip addr show eth0; ip route; getprop net.dns1")
     R("ping -c1 -W2 10.0.2.2; ping -c1 -W3 8.8.8.8", 15)
     # automation shell on ttyS1
-    c.send("setsid sh -c 'stty -F /dev/ttyS1 -echo; cat /dev/ttyS1 | sh >/dev/ttyS1 2>&1' & clear")
-    time.sleep(2); a = Ser(5601, f"{OUT}/serial1-first.log", echo=False); R("id; echo auto-ok UPPER", 10, a)
-    R("settings put global device_provisioned 1; settings put secure user_setup_complete 1", 20, a)
+    R("ls -la /dev/vport* /dev/hvc* /dev/virtio-ports 2>&1; stty -F /dev/ttyS1 -a 2>&1 | head -5")
+    c.send("setsid sh -c 'cat /dev/vport0p1 | sh >/dev/vport0p1 2>&1' &")
+    time.sleep(2); v = Ser(5602, f"{OUT}/vport-first.log", echo=False); R("id; echo vport-ok UPPER", 10, v)
+    c.send("setsid sh -c 'cat /dev/ttyS1 | sh >/dev/ttyS1 2>&1' & clear")
+    time.sleep(2); a = Ser(5601, f"{OUT}/serial1-first.log", echo=True); R("id; echo auto-ok UPPER", 10, a)
+    if "vport-ok UPPER" in open(f"{OUT}/vport-first.log", errors="replace").read(): a = v; print("USING VPORT", flush=True)
+    R("settings put global device_provisioned 1; settings put secure user_setup_complete 1; svc wifi enable", 30, a)
     for i in range(20):
         o, _ = R("ip -4 -o addr show | grep -v ' lo '", 10, a)
         if "inet" in o: break
         time.sleep(3)
-    R("ip link; ip rule; ip route show table all | grep default; getprop net.dns1; getprop | grep -iE 'dhcp|wlan|eth0' | head -20", 15, a)
+    R("ip link; ip -4 addr; ip route show table all | grep default; getprop net.dns1; dumpsys wifi | grep -iE 'ssid|mWifiState|curState|VirtWifi' | head -15; dumpsys connectivity | grep -iE 'NetworkAgentInfo|VALIDATED' | head -5", 20, a)
     # file transfer host -> guest with toybox nc
     blob = open(apk, "rb").read()
     srv = socket.socket(); srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); srv.bind(("127.0.0.1", 0)); srv.listen(1); port = srv.getsockname()[1]
@@ -92,7 +97,7 @@ if bt:
     R(f"toybox nc 10.0.2.2 {port} </dev/null > /data/local/tmp/t.apk; ls -l /data/local/tmp/t.apk; echo want {len(blob)}", 60, a)
     R("pm install -r /data/local/tmp/t.apk", 120, a)
     R("pm list packages -3", 20, a)
-    R("enable_nativebridge 2>&1 | tail -20; ls -la /system/lib/arm | head; getprop ro.dalvik.vm.native.bridge", 400, a)
+    R("timeout 240 enable_nativebridge 2>&1 | tail -20; ls -la /system/lib/arm | head; ls -la /data/media/0/arm; getprop ro.dalvik.vm.native.bridge", 260, a)
     R("ls /system/lib/arm /system/lib64/arm64 2>&1 | head; getprop ro.dalvik.vm.native.bridge; getprop persist.sys.nativebridge", 10, a)
     R("free -m; uptime", 10, a)
     R("reboot -p", 5, a); time.sleep(8)
