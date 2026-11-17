@@ -22,6 +22,8 @@ var netPS []byte
 
 var logsHTML = ui.Logs
 
+var remoteHTML = ui.Remote
+
 //go:embed scripts/activity.ps1
 var activityPS []byte
 
@@ -40,9 +42,13 @@ func main() {
 	noElevate := flag.Bool("no-elevate", false, "do not ask for administrator rights")
 	pick := flag.Bool("pick", false, "open CoreKit Browser's profile picker")
 	helper := flag.String("helper", "", "run one shared-code command for the Android app (JSON on stdin/stdout)")
+	remoteEngine := flag.Bool("remote", false, "run the Remote Access engine for the Android app")
 	flag.Parse()
 	if *helper != "" {
 		os.Exit(runHelper(*helper))
+	}
+	if *remoteEngine {
+		os.Exit(runRemoteEngine())
 	}
 	if *pick {
 		runPicker()
@@ -83,6 +89,13 @@ func main() {
 			boot("activity-log")
 			runInspector("logs")
 			fmt.Printf("\n    %s[*]%s Module closed.\n", cDGreen, cReset)
+			time.Sleep(600 * time.Millisecond)
+		case '5':
+			markUsed("Remote Access")
+			boot("remote-access")
+			runInspector("remote")
+			rEng.shutdown()
+			fmt.Printf("\n    %s[*]%s Module closed. Sharing stopped.\n", cDGreen, cReset)
 			time.Sleep(600 * time.Millisecond)
 		case '3':
 			markUsed("Safe Browser")

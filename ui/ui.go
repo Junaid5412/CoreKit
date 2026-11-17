@@ -17,4 +17,6 @@ var (
 	Picker []byte
 	//go:embed logs.html
 	Logs []byte
+	//go:embed remote.html
+	Remote []byte
 )

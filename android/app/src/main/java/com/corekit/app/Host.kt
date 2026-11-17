@@ -44,7 +44,7 @@ class Host(private val act: MainActivity, private val web: WebView) {
     companion object {
         const val ORIGIN = "https://appassets.androidplatform.net"
         const val BASE = "$ORIGIN/ck/"
-        private val PAGES = mapOf("home" to "mobile/home.html", "health" to "health.html", "net" to "net.html", "logs" to "logs.html")
+        private val PAGES = mapOf("home" to "mobile/home.html", "health" to "health.html", "net" to "net.html", "logs" to "logs.html", "remote" to "remote.html")
     }
 
     val client = object : WebViewClient() {
@@ -104,6 +104,9 @@ class Host(private val act: MainActivity, private val web: WebView) {
         "net/fix" -> startFix(u.getQueryParameter("actions") ?: "")
         "net/fixstatus" -> fixStatus(u.getQueryParameter("id") ?: "", u.getQueryParameter("since")?.toIntOrNull() ?: 0)
         "open" -> { openSettings(u.getQueryParameter("what") ?: ""); text("", 204) }
+        "remote/events" -> RemoteEngine.events(act, false)?.let {
+            WebResourceResponse("text/event-stream", "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"), it)
+        } ?: text("The Remote Access engine could not start.", 503)
         else -> notFound()
     }
 
@@ -255,6 +258,32 @@ class Host(private val act: MainActivity, private val web: WebView) {
             act.runOnUiThread {
                 try { act.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 catch (_: Throwable) { try { act.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Throwable) {} }
+            }
+        }
+
+        /** Remote Access: commands to the engine. "Start sharing" first asks Android for screen capture. */
+        @JavascriptInterface fun remote(json: String) {
+            val m = try { JSONObject(json) } catch (_: Throwable) { return }
+            if (m.optString("t") == "host") { if (m.optBoolean("on")) act.startRemoteSharing() else act.stopRemoteSharing(); return }
+            RemoteEngine.cmd(act, json)
+        }
+
+        @JavascriptInterface fun remoteStatus(): String = JSONObject()
+            .put("a11y", RemoteControlService.isOn(act))
+            .put("notifNeeded", Build.VERSION.SDK_INT >= 33)
+            .put("notif", Build.VERSION.SDK_INT < 33 || act.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) == android.content.pm.PackageManager.PERMISSION_GRANTED)
+            .put("restricted", Build.VERSION.SDK_INT >= 33)
+            .put("sharing", RemoteService.running).toString()
+
+        @JavascriptInterface fun remoteOpen(what: String) {
+            act.runOnUiThread {
+                try {
+                    when (what) {
+                        "a11y" -> act.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        "appinfo" -> act.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + act.packageName)))
+                        "notif" -> act.requestNotifications()
+                    }
+                } catch (_: Throwable) { try { act.startActivity(Intent(Settings.ACTION_SETTINGS)) } catch (_: Throwable) {} }
             }
         }
 
