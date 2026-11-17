@@ -562,9 +562,11 @@ func (a *sbApp) onUIMessage(js string) {
 		}
 	case "move":
 		a.moveTab(m.Tab, m.To)
-	case "back", "fwd", "reload", "stop":
+	case "back", "fwd", "reload", "stop", "home":
 		if t := a.active; t != nil && t.view != nil {
 			switch m.T {
+			case "home":
+				t.view.navigate(a.srv.StartURL())
 			case "back":
 				t.view.back()
 			case "fwd":

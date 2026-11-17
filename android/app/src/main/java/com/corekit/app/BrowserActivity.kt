@@ -413,6 +413,8 @@ class BrowserActivity : Activity() {
                 pushTabs()
             }
             "exit" -> finish()
+            "home" -> active?.let { navigate(it, "${BASE}start") }
+            "mainMenu" -> finish() // the CoreKit main menu is the screen under the browser
             "history" -> sendHistory(m.optString("name"))
             "histDel" -> { val u = m.optString("url"); val at = m.optLong("to"); history.removeAll { it.optString("u") == u && (at == 0L || it.optLong("at") == at) }; sendHistory(m.optString("name")); scheduleSave() }
             "histClear" -> { history.clear(); vault.delete("p/$profId/history.bin"); sendHistory("") }
