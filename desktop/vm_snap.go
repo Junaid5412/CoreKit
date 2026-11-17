@@ -147,7 +147,9 @@ func (e *vmEngine) doSuspend(r *vmRun) error {
 	}
 	defer q.close()
 	if r.auto != nil {
-		r.auto.run("sync", 20*time.Second)
+		// drop caches and fill free memory with zeros: the save gets much smaller and faster
+		r.set("stopping", "Preparing to save")
+		r.auto.run("sync; echo 3 > /proc/sys/vm/drop_caches; "+vmZeroFree, 3*time.Minute)
 	}
 	if _, err := q.do("stop", nil); err != nil {
 		return err
@@ -272,3 +274,5 @@ func vmQemuID() string {
 	})
 	return vmQemuIDVal
 }
+
+const vmZeroFree = "F=$(grep MemFree /proc/meminfo | tr -s ' ' | cut -d' ' -f2); N=$(( F/1024 - 300 )); [ $N -gt 0 ] && dd if=/dev/zero of=/dev/ck_zero bs=1048576 count=$N 2>/dev/null; rm -f /dev/ck_zero"

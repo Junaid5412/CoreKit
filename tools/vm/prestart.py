@@ -107,7 +107,8 @@ for c in ["settings put global device_provisioned 1; settings put secure user_se
           "ip link set wifi_eth up; ip addr add 10.0.2.15/24 dev wifi_eth; ndc network create 100; ndc network interface add 100 wifi_eth; "
           "ndc network route add 100 wifi_eth 10.0.2.0/24; ndc network route add 100 wifi_eth 0.0.0.0/0 10.0.2.2; "
           "ndc resolver setnetdns 100 '' 10.0.2.3; ndc network default set 100; setprop net.dns1 10.0.2.3",
-          "sleep 120; sync; echo 3 > /proc/sys/vm/drop_caches; free -m"]:  # let start-up jobs settle; smaller save
+          "sleep 120; sync; echo 3 > /proc/sys/vm/drop_caches; free -m",  # let start-up jobs settle
+          "F=$(grep MemFree /proc/meminfo | tr -s ' ' | cut -d' ' -f2); N=$(( F/1024 - 300 )); [ $N -gt 0 ] && dd if=/dev/zero of=/dev/ck_zero bs=1048576 count=$N 2>/dev/null; rm -f /dev/ck_zero; free -m"]:  # free memory full of zeros: a much smaller save
     o, rc = a.run(c, 900); print(f"$ {c[:80]} -> {rc}\n{o.strip()[-600:]}", flush=True)
 ts = time.time()
 print(qmp([{"execute": "stop"}, {"execute": "migrate", "arguments": {"uri": "file:" + snap}}]), flush=True)
