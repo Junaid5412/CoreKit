@@ -251,6 +251,7 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke
 
 <main id="home">
   <section id="pChoose"><div class="wrap narrow">
+    <div class="err hidden" id="engErr" style="margin-top:18px"><b>Remote Access couldn't start on this device.</b><div id="engErrT" style="margin-top:4px"></div><div style="margin-top:10px"><button class="btn sm" onclick="location.reload()">Try again</button></div></div>
     <div class="intro"><span class="bigic"><svg class="i" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="m10 9 2 2 3-3"/></svg></span><h1>Remote Access</h1><p>What would you like to do?</p></div>
     <div class="tiles">
       <button class="tile sh" data-go="share"><span class="ti"><svg class="i" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M12 7v6M9 10l3-3 3 3"/></svg></span><span><b id="shareT">Share this device</b><small>Get a code and IP address so a device you trust can see and control this one.</small></span><span class="steps"><span>Get a code</span><span>Allow</span><span>Done</span></span><span class="go"><svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></span></button>
@@ -362,6 +363,7 @@ const IC = {
 };
 const svg = k => `<svg class="i" viewBox="0 0 24 24">${IC[k] || IC.windows}</svg>`;
 const devWord = p => p === 'android' ? 'phone' : 'PC';
+const myPlat = () => (S.me && S.me.plat) || (ANDROID ? 'android' : 'windows');
 
 /* ---------- engine link ---------- */
 let S = {me:{}, hosting:false};
@@ -378,9 +380,10 @@ function connectEvents() {
 window.__ckToast = (m, bad) => toast(m, bad);
 window.__ckStatus = () => refreshAndroid();
 
+let gotState = false;
 function onEvent(m) {
   switch (m.t) {
-    case 'state': S = m; render(); break;
+    case 'state': S = m; gotState = true; $('#engErr').classList.add('hidden'); render(); break;
     case 'request': showAsk(m); break;
     case 'connfail': connErr = m.msg; connBusy = false; renderConn(); break;
     case 'waiting': waitPeer = m.peer; renderConn(); break;
@@ -395,7 +398,7 @@ function onEvent(m) {
 let connErr = '', connBusy = false, waitPeer = null, connMode = 'code', ipVal = '', a11yInfo = null, pane = 'choose';
 function render() {
   const me = S.me || {};
-  $('#sub').textContent = `${me.name || 'This device'}${me.ip ? ' · ' + me.ip : ''} · end-to-end encrypted`;
+  $('#sub').textContent = `${me.name || localName || 'This device'}${me.ip ? ' · ' + me.ip : ''} · end-to-end encrypted`;
   const chip = $('#netchip'); chip.className = 'chip' + (S.session ? ' live' : S.hosting ? ' on' : '');
   $('#netT').textContent = S.session ? (S.session.role === 'shared' ? 'Being controlled' : 'In session') : S.hosting ? 'Sharing' : (me.ip ? 'On Wi-Fi' : 'No network');
   const s0 = S.session;
@@ -404,7 +407,7 @@ function render() {
   $('#pChoose').classList.toggle('hidden', pane !== 'choose');
   $('#pShare').classList.toggle('hidden', pane !== 'share');
   $('#pConn').classList.toggle('hidden', pane !== 'connect');
-  $('#shareT').textContent = 'Share this ' + devWord(me.plat);
+  $('#shareT').textContent = 'Share this ' + devWord(myPlat());
   renderShare(); renderConn();
   if (S.pending) showAsk({id:S.pending.id, peer:S.pending.peer}); else hideAsk();
   const s = S.session;
@@ -414,7 +417,7 @@ function render() {
 }
 
 function renderShare() {
-  const c = $('#shareCard'), word = devWord(S.me && S.me.plat);
+  const c = $('#shareCard'), word = devWord(myPlat());
   const s = S.session;
   if (s && s.role === 'shared') {
     c.className = 'card live';
@@ -520,10 +523,10 @@ let askId = '', askTimer = 0;
 function showAsk(m) {
   if (askId === m.id) return;
   askId = m.id;
-  const p = m.peer || {}, word = devWord(S.me && S.me.plat);
+  const p = m.peer || {}, word = devWord(myPlat());
   $('#askIc').innerHTML = svg(p.plat);
   $('#askT').textContent = `${p.name || 'A device'} wants to connect`;
-  $('#askP').textContent = `It will see your screen${(S.me.plat !== 'android' || (a11yInfo && a11yInfo.a11y)) ? ' and be able to control this ' + word : ''}.`;
+  $('#askP').textContent = `It will see your screen${(myPlat() !== 'android' || (a11yInfo && a11yInfo.a11y)) ? ' and be able to control this ' + word : ''}.`;
   $('#askS').textContent = `${p.plat === 'android' ? 'Android phone' : p.plat === 'windows' ? 'Windows PC' : 'Computer'} · ${p.ip || ''} · only allow devices you trust`;
   $('#ask').classList.add('show');
   const ring = $('#askRing'), t0 = Date.now();
@@ -873,11 +876,19 @@ document.addEventListener('click', e => {
 $('#back').addEventListener('click', () => { if (pane !== 'choose' && !S.session) go('choose'); else if (N && N.go) N.go('home'); });
 document.addEventListener('input', e => { if (e.target.id === 'ip') { ipVal = e.target.value; if (connErr) { connErr = ''; const er = $('#connBody .err'); if (er) er.remove(); } } });
 
-function refreshAndroid() { if (!ANDROID) return; try { a11yInfo = JSON.parse(N.remoteStatus() || '{}'); } catch (e) {} if (!S.session || S.session.role === 'shared') renderShare(); }
+let localName = '';
+function refreshAndroid() { if (!ANDROID) return; try { a11yInfo = JSON.parse(N.remoteStatus() || '{}'); localName = a11yInfo.name || localName; } catch (e) {} if (!S.session || S.session.role === 'shared') renderShare(); }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshAndroid(); });
 refreshAndroid();
 render();
 connectEvents();
+setTimeout(() => {
+  if (gotState) return;
+  let why = '';
+  if (ANDROID) { try { why = (JSON.parse(N.remoteStatus() || '{}').engineError || ''); } catch (e) {} }
+  $('#engErrT').textContent = why ? 'Reason: ' + why : 'Close and open Remote Access again. If it keeps happening, restart CoreKit.';
+  $('#engErr').classList.remove('hidden');
+}, 7000);
 </script>
 </body>
 </html>
