@@ -121,6 +121,7 @@ print(f"saved in {time.time()-ts:.0f}s, {os.path.getsize(snap)/1e6:.0f} MB", flu
 try: qmp([{"execute": "quit"}])
 except Exception: pass  # QEMU closes the connection as it quits
 time.sleep(3); q.kill(); q.wait()
+subprocess.run(["sudo", "chmod", "-R", "a+rwX", W])  # the emulator ran in a container as another user
 
 # outputs: compressed state + data disk as a template (non-zero 64K blocks, like mktemplate.py)
 def sha(p):
