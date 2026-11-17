@@ -39,4 +39,6 @@ jobs:
         timeout-minutes: 45
       - uses: actions/upload-artifact@v4
         if: always()
-        with: { name: serial-${{ matrix.accel }}, path: serial-*.log }
+        with:
+          name: serial-${{ matrix.accel }}
+          path: serial-*.log
