@@ -162,6 +162,7 @@ print(json.dumps(meta, indent=1), flush=True)
 
 # check: resume a copy (the published files stay untouched) and run a root command
 subprocess.run(["cp", "--sparse=always", disk, disk + ".test"], check=True)
+os.chmod(disk + ".test", 0o666)
 targs = [x.replace(f"file={disk},", f"file={disk}.test,") for x in args] + ["-incoming", "file:" + snap]
 tr = time.time()
 q = subprocess.Popen(targs, stdout=open(f"{log}/prestart-resume.log", "ab"), stderr=subprocess.STDOUT)
