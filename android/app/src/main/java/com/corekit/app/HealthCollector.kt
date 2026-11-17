@@ -26,6 +26,7 @@ import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -202,6 +203,8 @@ class HealthCollector(private val ctx: Context) {
         // 2) kernel full-charge vs design capacity
         val kFull = readLong("/sys/class/power_supply/battery/charge_full")?.let { it / 1000.0 }?.takeIf { it in 500.0..30000.0 }
         val kDesign = readLong("/sys/class/power_supply/battery/charge_full_design")?.let { it / 1000.0 }?.takeIf { it in 500.0..30000.0 }
+        // a chip that reports exactly the design value as "full" is not measuring wear (that gave a false 100%)
+        val kMeasured = kFull != null && (kDesign ?: design) != null && abs(kFull - (kDesign ?: design!!)) >= 1.0
         // 3) estimate from the charge counter (many phones scale this to the design value)
         val estFull = if (counter > 0 && level >= 20) counter / 1000.0 / (level / 100.0) else null
         val estPct = if (estFull != null && design != null) estFull / design * 100 else null
@@ -209,15 +212,18 @@ class HealthCollector(private val ctx: Context) {
         var source: String
         val healthPct: Double? = when {
             reported != null -> { source = "Reported by the phone"; reported.toDouble() }
-            kFull != null && (kDesign ?: design) != null -> { source = "Measured (battery chip)"; min(100.0, kFull / (kDesign ?: design!!) * 100) }
+            kMeasured -> { source = "Measured (battery chip)"; min(100.0, kFull / (kDesign ?: design!!) * 100) }
             estPct != null && estPct in 50.0..97.0 -> { source = "Estimated from charge level"; estPct }
             cyclePct != null -> { source = "Estimated from $cycles charge cycles"; cyclePct }
             estPct != null && estPct > 97.0 -> { source = "Estimate (phone reports design capacity)"; null }
             else -> { source = "Not reported by this phone"; null }
         }
-        val full = kFull ?: estFull
+        val full = (if (kMeasured) kFull else null) ?: estFull
         val hName = mapOf(2 to "Good", 3 to "Overheating", 4 to "Dead", 5 to "Over voltage", 6 to "Failure", 7 to "Cold")[h] ?: "Unknown"
         head("Battery health", healthPct?.let { (if (source.startsWith("Estimat")) "≈" else "") + "%.0f%%".format(it) } ?: hName)
+        val real = healthPct != null && !source.startsWith("Estimat")
+        row("Reading", when { real -> "Real - from the phone's battery chip"; healthPct != null -> "Estimate, not exact"; else -> "Not available on this phone" },
+            if (real) "ok" else "info")
         row("Health source", source, if (healthPct == null) "info" else "ok")
         healthPct?.let { row("Wear level", "%.0f%%".format(100 - it), if (it < 70) "bad" else if (it < 80) "warn" else "ok") }
         design?.let { row("Design capacity", "%.0f mAh".format(it)) }

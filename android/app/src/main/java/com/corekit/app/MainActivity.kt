@@ -3,6 +3,7 @@ package com.corekit.app
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.print.PrintAttributes
@@ -142,6 +143,18 @@ class MainActivity : Activity() {
         pm.print(title, web.createPrintDocumentAdapter(title), PrintAttributes.Builder().setMediaSize(PrintAttributes.MediaSize.ISO_A4).build())
     }
 
+    fun startCameraTest() = runOnUiThread {
+        startActivityForResult(Intent(this, CameraTestActivity::class.java), REQ_CAMERA_TEST)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_CAMERA_TEST) return
+        val r = data?.getStringExtra("result")
+            ?: org.json.JSONObject().put("lenses", org.json.JSONArray()).put("error", "The camera test was closed.").toString()
+        web.evaluateJavascript("window.__camResult&&__camResult(JSON.parse(${org.json.JSONObject.quote(r)}))", null)
+    }
+
     /** Wi-Fi name and band need location permission on Android 8+. */
     fun ensureLocationPermission() = runOnUiThread {
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -169,5 +182,6 @@ class MainActivity : Activity() {
         const val BG = 0xFF0A0E13.toInt()
         private const val REQ_MEDIA = 11
         private const val REQ_LOCATION = 7
+        private const val REQ_CAMERA_TEST = 31
     }
 }

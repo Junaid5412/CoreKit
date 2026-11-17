@@ -126,6 +126,12 @@ func TestAdblockAndLanguage(t *testing.T) {
 	if s := langMatchScript("DE"); !strings.Contains(s, `["de-DE","de","en-US","en"]`) {
 		t.Error(s)
 	}
+	if l := langMatchList("ae"); strings.Join(l, ",") != "ar-AE,ar,en-US,en" {
+		t.Error(l)
+	}
+	if l := langMatchList("GB"); len(l) != 2 || l[0] != "en-GB" {
+		t.Error(l)
+	}
 	if langMatchScript("XX") != "" {
 		t.Error("unknown country should give no script")
 	}

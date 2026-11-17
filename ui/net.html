@@ -166,7 +166,7 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 .rep{padding:16px 12px 34px}
 .gauges{gap:6px;justify-content:space-around;flex-wrap:wrap;padding:0}
 .g-box{max-width:27vw}
-.cams{grid-template-columns:1fr 1fr;max-width:100%;gap:8px}.cam-l{flex-direction:column;align-items:flex-start;gap:2px}
+#sheet .cams{grid-template-columns:1fr 1fr;width:auto;max-width:100%;gap:8px;max-height:64vh}#sheet .cam-l{flex-direction:column;align-items:flex-start;gap:2px;text-align:left}#sheet .cam-m{padding:0 8px 8px;gap:4px}#sheet .cam-m button{font-size:11.5px}
 @supports (font-size:1cqw){.g-num{font-size:30cqw}}
 .head{flex-direction:column;align-items:flex-start;gap:12px}
 .ttl{font-size:24px}
@@ -209,6 +209,13 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 .cam-s{color:var(--muted);font-size:12px}.cam-t.bad .cam-s{color:#fca5a5}
 .cam-l{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;font-size:12px}
 .cam-l b{color:var(--white);font-weight:600}.cam-l small{color:var(--muted);white-space:nowrap}
+.cam-t{cursor:pointer;position:relative}.cam-t.sel{box-shadow:0 0 0 2px var(--acc)}
+.cam-v{position:relative}.cam-live{position:absolute;top:8px;left:8px;padding:2px 7px;border-radius:9px;background:rgba(220,38,38,.9);color:#fff;font:700 10px var(--font);letter-spacing:.6px}
+.cam-l small.st-bad{color:#fca5a5}.cam-l small.st-off{color:var(--muted)}
+.cam-m{display:flex;gap:6px;padding:0 10px 10px}
+.cam-m button{flex:1;height:30px;border-radius:8px;border:1px solid var(--line2);background:#0f151c;color:var(--muted2);font:600 12px var(--font);cursor:pointer}
+.cam-m button.on.g{background:#0f2e2a;border-color:#1f5a52;color:var(--acc)}.cam-m button.on.b{background:#2e0f14;border-color:#5a1f26;color:#fca5a5}
+.cam-mk{padding:0 10px 10px;font:600 12px var(--font)}.cam-mk.g{color:var(--acc)}.cam-mk.b{color:#fca5a5}.cam-mk.n{color:var(--muted)}
 @keyframes pop{from{opacity:0;transform:scale(.96)}}
 .cam{margin-top:16px;width:640px;max-width:80vw;aspect-ratio:16/9;border-radius:12px;background:#05080b;overflow:hidden;display:grid;place-items:center;color:var(--muted);border:1px solid var(--line)}
 .cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
