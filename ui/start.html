@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#0a0e13">
+<head>
+<meta charset="utf-8">
+<title>New tab</title>
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:,">
+<style>
+:root{--bg:#0a0e13;--acc:#2dd4bf;--white:#f0f6fc;--muted:#6b7785;--font:"Segoe UI Variable Text","Segoe UI",system-ui,Arial,sans-serif;--fontd:"Segoe UI Variable Display","Segoe UI",system-ui,Arial,sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--bg);color:#c9d1d9;font:14px/1.45 var(--font);-webkit-font-smoothing:antialiased}
+body{display:flex;flex-direction:column;align-items:center;padding:13vh 24px 40px;
+  background:radial-gradient(900px 520px at 50% 18%,rgba(45,212,191,.07),transparent 65%),var(--bg);min-height:100vh}
+.logo{display:flex;align-items:center;gap:14px;margin-bottom:30px;animation:in .5s ease both}
+.logo svg{width:44px;height:44px}
+.logo b{font:600 30px var(--fontd);color:var(--white);letter-spacing:.3px}
+.logo b span{color:var(--acc)}
+@keyframes in{from{opacity:0;transform:translateY(6px)}}
+form{width:min(640px,100%);animation:in .5s .05s ease both}
+.sb{display:flex;align-items:center;gap:12px;height:52px;padding:0 8px 0 20px;border-radius:26px;background:#111821;border:1px solid #1c2733;box-shadow:0 10px 40px rgba(0,0,0,.35);transition:border-color .2s,box-shadow .2s}
+.sb:focus-within{border-color:var(--acc);box-shadow:0 0 0 4px rgba(45,212,191,.12),0 10px 40px rgba(0,0,0,.35)}
+.sb svg{width:18px;height:18px;flex:none;color:var(--muted);fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.sb input{flex:1;min-width:0;height:100%;border:0;outline:0;background:transparent;color:var(--white);font:15px var(--font)}
+.sb input::placeholder{color:#55606d}
+.sb button{height:38px;padding:0 18px;border-radius:19px;border:0;background:var(--acc);color:#04201c;font:600 13px var(--font);cursor:pointer}
+.tiles{display:grid;grid-template-columns:repeat(5,104px);gap:14px;margin-top:44px;animation:in .5s .1s ease both}
+@media (max-width:640px){.tiles{grid-template-columns:repeat(3,104px)}}
+.tile{display:flex;flex-direction:column;align-items:center;gap:10px;padding:16px 6px 12px;border-radius:14px;text-decoration:none;color:#aab4bf;font-size:12.5px;transition:background .15s,transform .15s}
+.tile:hover{background:#111821;color:var(--white);transform:translateY(-2px)}
+.ico{width:46px;height:46px;border-radius:13px;background:#141c26;border:1px solid #1c2733;display:grid;place-items:center;position:relative;overflow:hidden}
+.ico img{width:24px;height:24px;position:absolute}
+.ico i{font:700 17px var(--fontd);font-style:normal;color:#0a0e13;width:100%;height:100%;display:grid;place-items:center}
+.ft{margin-top:auto;padding-top:40px;font-size:12px;color:#4b5663}
+</style>
+</head>
+<body>
+<div class="logo">
+  <svg viewBox="0 0 48 48"><path d="M24 5 40.5 14.5v19L24 43 7.5 33.5v-19z" fill="none" stroke="#2dd4bf" stroke-width="3.4" stroke-linejoin="round"/><path d="M24 18.5 28.8 21.3v5.4L24 29.5l-4.8-2.8v-5.4z" fill="#2dd4bf"/></svg>
+  <b>Core<span>Kit</span></b>
+</div>
+<form action="{{ENGINE_URL}}" method="get" autocomplete="off">
+  <div class="sb"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>{{HLINPUT}}<input name="q" placeholder="Search with {{ENGINE_NAME}}" spellcheck="false"><button type="submit">Search</button></div>
+</form>
+<div class="tiles" id="tiles"></div>
+<div class="ft">CoreKit Browser</div>
+<script>
+const sites = [
+  ["Google", "https://www.google.com", "#4285f4"], ["YouTube", "https://www.youtube.com", "#ff3d3d"],
+  ["Gmail", "https://mail.google.com", "#ea4335"], ["WhatsApp", "https://web.whatsapp.com", "#25d366"],
+  ["ChatGPT", "https://chatgpt.com", "#10a37f"], ["Claude", "https://claude.ai", "#d97757"],
+  ["Facebook", "https://www.facebook.com", "#1877f2"], ["Instagram", "https://www.instagram.com", "#e1306c"],
+  ["LinkedIn", "https://www.linkedin.com", "#0a66c2"], ["GitHub", "https://github.com", "#8b949e"]
+];
+document.getElementById("tiles").innerHTML = sites.map(([n, u, c]) =>
+  `<a class="tile" href="${u}"><span class="ico"><i style="background:${c}">${n[0]}</i><img src="${u}/favicon.ico" alt="" onerror="this.remove()" onload="if(this.naturalWidth>=8)this.previousElementSibling.style.visibility='hidden';else this.remove()"></span>${n}</a>`).join("");
+</script>
+</body>
+</html>

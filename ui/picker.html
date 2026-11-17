@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#0a0e13">
+<head>
+<meta charset="utf-8">
+<title>CoreKit Browser</title>
+<meta name="color-scheme" content="dark">
+<style>
+:root{--bg:#0a0e13;--acc:#2dd4bf;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;--font:"Segoe UI Variable Text","Segoe UI",system-ui,Arial,sans-serif;--fontd:"Segoe UI Variable Display","Segoe UI",system-ui,Arial,sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;color:#c9d1d9;font:13.5px/1.45 var(--font);-webkit-font-smoothing:antialiased;user-select:none;cursor:default}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px;
+  background:radial-gradient(800px 520px at 50% 30%,rgba(45,212,191,.08),transparent 65%),var(--bg)}
+button,input{font:inherit;color:inherit}
+.logo{display:flex;align-items:center;gap:12px;animation:in .45s ease both}
+.logo svg{width:36px;height:36px}
+.logo b{font:600 24px var(--fontd);color:var(--white)}.logo b span{color:var(--acc)}
+h1{margin:22px 0 4px;font:600 21px var(--fontd);color:var(--white);animation:in .45s .04s ease both}
+.sub{color:var(--muted);margin:0 0 26px;animation:in .45s .06s ease both}
+@keyframes in{from{opacity:0;transform:translateY(6px)}}
+#grid{display:flex;flex-wrap:wrap;justify-content:center;gap:14px;max-width:820px;max-height:58vh;overflow:auto;padding:6px;animation:in .45s .08s ease both}
+.card{width:168px;padding:20px 12px 16px;border-radius:16px;background:#10161e;border:1px solid #1a2431;display:flex;flex-direction:column;align-items:center;gap:10px;cursor:pointer;position:relative;transition:transform .15s,border-color .15s,background .15s;outline:none}
+.card:hover,.card:focus-visible{transform:translateY(-3px);border-color:#2a3c50;background:#121a24}
+.card.last{border-color:#1f5a52}
+.av{width:62px;height:62px;border-radius:50%;display:grid;place-items:center;font:700 25px var(--fontd);color:#0a0e13;background:var(--pc);box-shadow:0 0 0 3px #0e141c,0 0 0 5px var(--pc)}
+.nm{font:600 14.5px var(--fontd);color:var(--white);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.px{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.px i{width:7px;height:7px;border-radius:50%;background:#46515e;flex:none}.px.on{color:#5eead4}.px.on i{background:var(--acc);box-shadow:0 0 7px var(--acc)}
+.run{position:absolute;top:10px;right:10px;font-size:10px;font-weight:700;letter-spacing:.6px;color:#22c55e}
+.add .av{background:#18222e;box-shadow:0 0 0 3px #0e141c,0 0 0 5px #223042;color:var(--muted2)}
+.add .av svg{width:26px;height:26px}
+.add .nm{color:var(--muted2)}
+.form{width:168px;padding:16px 12px;border-radius:16px;background:#10161e;border:1px solid #1f5a52;display:flex;flex-direction:column;gap:10px}
+.form input{height:34px;border-radius:9px;border:1px solid #223042;background:#0c1219;padding:0 10px;outline:none;color:var(--white)}
+.form input:focus{border-color:var(--acc)}
+.sws{display:flex;flex-wrap:wrap;gap:7px;justify-content:center}
+.swc{width:18px;height:18px;border-radius:50%;border:0;box-shadow:0 0 0 2px #0f151d;cursor:pointer}
+.swc.sel{box-shadow:0 0 0 2px #0f151d,0 0 0 4px #f0f6fc}
+.row{display:flex;gap:6px}
+.btn{flex:1;height:32px;border-radius:8px;border:1px solid #223042;background:#151e29;cursor:pointer;font-weight:600;font-size:12.5px}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#04201c}
+.foot{margin-top:26px;color:#4b5663;font-size:12px;display:flex;align-items:center;gap:8px;animation:in .45s .1s ease both}
+.foot svg{width:14px;height:14px;stroke:var(--acc);fill:none;stroke-width:2}
+.opening{position:fixed;inset:0;display:none;place-items:center;background:rgba(10,14,19,.86);font:600 15px var(--fontd);color:var(--white)}
+.opening.show{display:grid}
+.spin{width:30px;height:30px;border-radius:50%;border:3px solid #22303f;border-top-color:var(--acc);animation:rot .8s linear infinite;margin:0 auto 14px}
+@keyframes rot{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="logo"><svg viewBox="0 0 48 48"><path d="M24 5 40.5 14.5v19L24 43 7.5 33.5v-19z" fill="none" stroke="#2dd4bf" stroke-width="3.4" stroke-linejoin="round"/><path d="M24 18.5 28.8 21.3v5.4L24 29.5l-4.8-2.8v-5.4z" fill="#2dd4bf"/></svg><b>Core<span>Kit</span> Browser</b></div>
+<h1>Who's browsing?</h1>
+<p class="sub">Choose a profile. Each one has its own logins, proxy and window.</p>
+<div id="grid"></div>
+<div class="foot"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>Security checks run before any page opens</div>
+<div class="opening" id="op"><div><div class="spin"></div><span id="opT">Opening…</span></div></div>
+<script>
+"use strict";
+const W = window.chrome && window.chrome.webview;
+const send = o => { try { W && W.postMessage(o); } catch (e) {} };
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let S = {profiles:[], colors:[]}, adding = false, color = "";
+function render() {
+  const cols = S.colors.length ? S.colors : ["#2dd4bf"];
+  if (!color) color = cols[(S.profiles.length + 1) % cols.length];
+  const last = S.profiles.reduce((a, p) => (!a || p.lastUsed > a.lastUsed ? p : a), null);
+  document.getElementById("grid").innerHTML = S.profiles.map(p => `<div class="card${last && p.id === last.id ? " last" : ""}" tabindex="0" data-id="${esc(p.id)}" style="--pc:${esc(p.color)}">${p.running ? '<span class="run">OPEN</span>' : ""}<span class="av">${esc((p.name || "P")[0].toUpperCase())}</span><span class="nm">${esc(p.name)}</span><span class="px${p.proxy ? " on" : ""}"><i></i>${p.proxy ? esc(p.proxy) : "Direct connection"}</span></div>`).join("")
+    + (adding ? `<div class="form"><input id="nm" maxlength="32" placeholder="Profile name"><div class="sws">${cols.map(c => `<button class="swc${c === color ? " sel" : ""}" data-c="${c}" style="background:${c}"></button>`).join("")}</div><div class="row"><button class="btn" data-a="cancel">Cancel</button><button class="btn pri" data-a="create">Create</button></div></div>`
+      : `<div class="card add" tabindex="0" data-a="add"><span class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><span class="nm">Add profile</span><span class="px">&nbsp;</span></div>`);
+  if (adding) document.getElementById("nm").focus();
+  else { const l = document.querySelector(".card.last") || document.querySelector(".card"); if (l && document.activeElement === document.body) l.focus(); }
+}
+function open(id) {
+  const p = S.profiles.find(x => x.id === id);
+  document.getElementById("opT").textContent = "Opening " + (p ? p.name : "profile") + "…";
+  document.getElementById("op").classList.add("show");
+  send({t:"open", id});
+}
+document.getElementById("grid").addEventListener("click", e => {
+  const c = e.target.closest("[data-c]"); if (c) { color = c.dataset.c; const v = document.getElementById("nm").value; render(); document.getElementById("nm").value = v; return; }
+  const a = e.target.closest("[data-a]");
+  if (a) {
+    if (a.dataset.a === "add") { adding = true; render(); }
+    else if (a.dataset.a === "cancel") { adding = false; render(); }
+    else if (a.dataset.a === "create") { const n = document.getElementById("nm").value.trim(); if (!n) { document.getElementById("nm").focus(); return; } document.getElementById("opT").textContent = "Creating " + n + "…"; document.getElementById("op").classList.add("show"); send({t:"new", name:n, color}); }
+    return;
+  }
+  const card = e.target.closest(".card[data-id]"); if (card) open(card.dataset.id);
+});
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    if (e.target.id === "nm") { document.querySelector('[data-a="create"]').click(); return; }
+    const c = document.activeElement && document.activeElement.closest(".card");
+    if (c) { c.click(); e.preventDefault(); }
+  } else if (e.key === "Escape" && adding) { adding = false; render(); }
+  else if (/^Arrow(Left|Right)$/.test(e.key)) {
+    const cards = [...document.querySelectorAll(".card")], i = cards.indexOf(document.activeElement);
+    const n = cards[(i + (e.key === "ArrowRight" ? 1 : -1) + cards.length) % cards.length]; if (n) n.focus();
+  }
+});
+function onMsg(m) {
+  if (!m) return;
+  if (m.t === "state") { S = m; render(); }
+  if (m.t === "error") { document.getElementById("op").classList.remove("show"); alert(m.msg); }
+}
+if (W) W.addEventListener("message", e => onMsg(e.data));
+window.__corekit = onMsg;
+send({t:"ready"});
+</script>
+</body>
+</html>

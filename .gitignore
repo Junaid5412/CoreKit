@@ -1,0 +1,21 @@
+# build output
+/dist/
+*.exe
+*.apk
+*.aab
+corekit-linux-*
+# Android / Gradle
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/assets/ui/
+android/app/src/main/jniLibs/
+*.keystore
+*.jks
+# editors / OS
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db

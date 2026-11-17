@@ -1,0 +1,109 @@
+# One pipeline for every platform: each push to main builds Windows, Linux and Android
+# from the same commit and publishes them together as release v<VERSION>.
+name: Build all platforms
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Checks (Go tests, UI scripts)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24", cache: false }
+      - name: Shared UI is up to date
+        run: |
+          python3 ui/src/build_assets.py
+          git diff --exit-code ui/net.html || (echo "::error::run python3 ui/src/build_assets.py and commit ui/net.html" && exit 1)
+      - name: UI JavaScript syntax
+        run: |
+          for f in ui/*.html; do
+            python3 - "$f" > /tmp/ui.js <<'PY'
+          import re, sys
+          h = open(sys.argv[1], encoding="utf-8").read()
+          print("\n;\n".join(m for m in re.findall(r"<script>([\s\S]*?)</script>", h)))
+          PY
+            node --check /tmp/ui.js && echo "ok $f"
+          done
+      - name: Go vet + tests
+        run: |
+          test -z "$(gofmt -l .)" || (gofmt -l . && echo "::error::gofmt needed" && exit 1)
+          go vet ./...
+          go test ./...
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go vet -unsafeptr=false ./...
+
+  windows:
+    name: Windows (CoreKit.exe)
+    needs: checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24", cache: false }
+      - name: Version resources
+        run: |
+          pip install --quiet pillow
+          python3 desktop/build/gen_syso.py
+      - name: Build
+        run: |
+          V=$(cat VERSION)
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.appVersion=$V" -o dist/CoreKit.exe ./desktop
+      - uses: actions/upload-artifact@v4
+        with: { name: windows, path: dist/CoreKit.exe }
+
+  android:
+    name: Android (CoreKit.apk)
+    needs: checks
+    if: hashFiles('android/settings.gradle.kts') != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build APK
+        working-directory: android
+        env:
+          CK_KEYSTORE_B64: ${{ secrets.CK_KEYSTORE_B64 }}
+          CK_KEYSTORE_PASS: ${{ secrets.CK_KEYSTORE_PASS }}
+        run: |
+          if [ -n "$CK_KEYSTORE_B64" ]; then echo "$CK_KEYSTORE_B64" | base64 -d > release.jks; fi
+          gradle --no-daemon assembleRelease
+          mkdir -p ../dist && cp app/build/outputs/apk/release/*.apk ../dist/CoreKit.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: android, path: dist/CoreKit.apk }
+
+  release:
+    name: Publish release v<VERSION>
+    needs: [windows, android]
+    if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.windows.result == 'success' && (needs.android.result == 'success' || needs.android.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - name: Create or update release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(cat VERSION)
+          ls -la dist
+          NOTES="CoreKit v$V — built from ${GITHUB_SHA::7}. Windows: CoreKit.exe · Android: CoreKit.apk"
+          if gh release view "v$V" >/dev/null 2>&1; then
+            gh release upload "v$V" dist/* --clobber
+            gh release edit "v$V" --notes "$NOTES"
+          else
+            gh release create "v$V" dist/* --title "CoreKit v$V" --notes "$NOTES" --target "$GITHUB_SHA"
+          fi
