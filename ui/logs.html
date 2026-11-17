@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#0a0e13">
+<head>
+<meta charset="utf-8">
+<title>CoreKit · Activity Log</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<style>
+:root{--bg:#0a0e13;--panel:#10161e;--line:#1a2431;--line2:#243142;--row:#151e29;--text:#c9d1d9;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;--acc:#2dd4bf;--acc2:#22d3ee;--red:#f87171;--amber:#fbbf24;--green:#34d399;--font:"Segoe UI Variable Text","Segoe UI",system-ui,Roboto,Arial,sans-serif;--fontd:"Segoe UI Variable Display","Segoe UI",system-ui,Roboto,Arial,sans-serif}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.5 var(--font);-webkit-font-smoothing:antialiased}
+body{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+button,input{font:inherit;color:inherit}
+.bar{flex:none;display:flex;align-items:center;gap:10px;height:60px;padding:0 20px;border-bottom:1px solid var(--line);background:rgba(12,17,23,.9)}
+.back{display:none;width:34px;height:34px;border:0;background:#141c26;border-radius:9px;color:var(--white);cursor:pointer;align-items:center;justify-content:center}
+.back svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2}
+.brand{display:flex;flex-direction:column;flex:1;min-width:0}
+.brand b{font:600 16px var(--fontd);color:var(--white)}
+.brand small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ib{width:36px;height:36px;border:1px solid var(--line2);background:#121b26;border-radius:9px;color:var(--muted2);cursor:pointer;display:grid;place-items:center;flex:none}
+.ib:hover{color:var(--white);border-color:#2f4256}
+.ib svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ib.busy svg{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.ctrl{flex:none;padding:12px 20px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:10px;background:#0c1118}
+.srch{display:flex;align-items:center;gap:9px;height:40px;padding:0 12px;border-radius:10px;background:#0e141c;border:1px solid var(--line2)}
+.srch:focus-within{border-color:var(--acc)}
+.srch svg{width:16px;height:16px;fill:none;stroke:var(--muted);stroke-width:2;flex:none}
+.srch input{flex:1;min-width:0;height:100%;border:0;outline:0;background:transparent;color:var(--white);font-size:14px}
+.rowf{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none}.rowf::-webkit-scrollbar{display:none}
+.chip{flex:none;height:32px;padding:0 13px;border-radius:17px;border:1px solid var(--line2);background:#121b26;color:var(--muted2);font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px}
+.chip.on{background:#0e2b28;border-color:#1f5a52;color:var(--acc)}
+.chip .c{background:#1b2735;color:var(--muted2);border-radius:9px;padding:0 6px;font-size:11px}
+.chip.on .c{background:#14524a;color:#aef3e8}
+
+.scroll{flex:1;overflow-y:auto;padding:4px 0 40px}
+.sum{margin:14px 20px 4px;padding:13px 15px;border-radius:12px;border:1px solid var(--line);background:linear-gradient(180deg,#111822,#0e141c);display:flex;gap:16px;flex-wrap:wrap}
+.sum .s{display:flex;flex-direction:column;min-width:60px}
+.sum .s b{font:700 20px var(--fontd);color:var(--white)}
+.sum .s.bad b{color:var(--red)}.sum .s.warn b{color:var(--amber)}
+.sum .s small{color:var(--muted);font-size:11.5px}
+.note{margin:10px 20px 0;padding:10px 13px;border-radius:10px;font-size:12.5px;background:#1a150a;border:1px solid #3a2f12;color:#e3c77a;display:flex;gap:9px}
+.note svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:2;margin-top:1px}
+
+.day{margin:18px 20px 7px;font:700 11px var(--font);letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+.ev{display:flex;gap:12px;align-items:flex-start;margin:0 14px;padding:11px 10px;border-radius:11px}
+.ev:hover{background:#0f151d}
+.ev .ic{width:34px;height:34px;border-radius:10px;flex:none;display:grid;place-items:center;background:#141c26;color:var(--muted2)}
+.ev .ic svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ev.sev-bad .ic{background:#2a1115;color:var(--red)}
+.ev.sev-warn .ic{background:#271f0c;color:var(--amber)}
+.ev.sev-good .ic{background:#0e2b25;color:var(--green)}
+.ev .bd{flex:1;min-width:0}
+.ev .ti{color:var(--white);font-weight:600;font-size:13.5px}
+.ev .dt{color:var(--muted);font-size:12px;word-break:break-word;margin-top:1px}
+.ev .rt{color:var(--muted2);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums;flex:none;padding-top:1px}
+.ev .rs{margin-top:6px}
+.rsb{height:30px;padding:0 12px;border-radius:8px;border:1px solid #2f4256;background:#141c26;color:var(--acc);font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.rsb:disabled{opacity:.5;cursor:default}
+.rsb svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2}
+.rsb.done{color:var(--green);border-color:#1f5a52}
+
+.center{flex:1;display:grid;place-items:center;text-align:center;padding:30px}
+.center .ring{width:54px;height:54px;border-radius:50%;border:3px solid #1c2733;border-top-color:var(--acc);animation:spin 1s linear infinite;margin:0 auto 18px}
+.center h2{margin:0 0 6px;font:600 17px var(--fontd);color:var(--white)}
+.center p{margin:0;color:var(--muted);max-width:360px}
+.pbar{width:240px;max-width:70vw;height:6px;border-radius:3px;background:#17202b;margin:16px auto 0;overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .3s}
+.empty{padding:50px 24px;text-align:center;color:var(--muted)}
+.hidden{display:none!important}
+#toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#16212d;border:1px solid #243446;color:var(--white);padding:9px 16px;border-radius:10px;font-size:12.5px;transition:all .25s;z-index:30;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+#toast.show{opacity:1;transform:translate(-50%,0)}#toast.bad{border-color:#5a2a31;color:#fecaca}
+
+@media (max-width:600px){
+  .bar{height:56px;padding:0 12px}.back{display:flex}
+  .ctrl{padding:10px 12px}
+  .sum{margin:12px 12px 2px;gap:12px}.sum .s{min-width:52px}
+  .day{margin:16px 14px 6px}
+  .ev{margin:0 6px;gap:10px;padding:10px 8px}
+  .ev .rt{font-size:11px}
+  .note,.center p{font-size:12px}
+}
+</style>
+</head>
+<body>
+<header class="bar">
+  <button class="back" id="back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+  <div class="brand"><b>Activity Log</b><small id="sub">Who used this device, and when</small></div>
+  <button class="ib" id="refresh" title="Refresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></svg></button>
+  <button class="ib" id="export" title="Save report"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 21h16"/></svg></button>
+</header>
+
+<div class="ctrl" id="ctrl">
+  <div class="srch"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" placeholder="Search activity…" spellcheck="false"></div>
+  <div class="rowf" id="ranges"></div>
+  <div class="rowf" id="types"></div>
+</div>
+
+<div class="center" id="loading"><div><div class="ring"></div><h2 id="lh">Reading the activity log…</h2><p id="lp">Collecting sign-ins, programs, file changes and more.</p><div class="pbar"><i id="pb"></i></div></div></div>
+<div class="center hidden" id="failbox"><div><h2>Couldn't read the log</h2><p id="fp"></p></div></div>
+<main class="scroll hidden" id="list"></main>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const TOKEN = location.pathname.split('/')[1];
+const API = '/' + TOKEN + '/api/';
+const N = window.CoreKitNative;
+const ANDROID = !!(N && N.activityLog);
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); }
+
+/* ---------- icons ---------- */
+const IC = {
+  signin:'<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="M10 17l5-5-5-5"/><path d="M15 12H3"/>',
+  'signin-fail':'<circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/>',
+  unlock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.9-1"/>',
+  lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  signout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+  boot:'<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
+  shutdown:'<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
+  'shutdown-bad':'<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+  sleep:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  wake:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  program:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>',
+  app:'<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+  'file-new':'<path d="M14 3v5h5"/><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M12 11v6M9 14h6"/>',
+  'file-mod':'<path d="M14 3v5h5"/><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>',
+  'file-del':'<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
+  usb:'<circle cx="12" cy="19" r="2"/><path d="M12 17V5"/><path d="M8 9l4-4 4 4"/><path d="M12 11l3 3 2-1"/>',
+  undo:'<path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/>',
+  warn:'<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>'
+};
+const svg = k => `<svg viewBox="0 0 24 24">${IC[k] || IC.program}</svg>`;
+
+/* type → group + label */
+const GROUP = {
+  signin:'signins','signin-fail':'signins',unlock:'signins',lock:'signins',signout:'signins',
+  boot:'power',shutdown:'power','shutdown-bad':'power',sleep:'power',wake:'power',
+  program:'programs',app:'apps',
+  'file-new':'files','file-mod':'files','file-del':'deleted',usb:'usb'
+};
+const RANGES = ANDROID
+  ? [['1','Today'],['2','2 days'],['7','7 days']]
+  : [['night','Last night'],['1','Today'],['2','2 days'],['7','7 days']];
+let TYPES = [];
+
+let DATA = null, days = 7, range = ANDROID ? '1' : '7', type = 'all', query = '', busy = false;
+
+/* ---------- loading ---------- */
+function load(d) {
+  days = d; busy = true;
+  $('#refresh').classList.add('busy');
+  show('loading');
+  setProg(6, 'Reading the activity log…');
+  if (ANDROID) {
+    window.__activity = res => { busy = false; $('#refresh').classList.remove('busy'); if (res && res.error) return fail(res.error); DATA = res || {events:[]}; buildFilters(); render(); };
+    try { N.activityLog(d); } catch (e) { fail('The activity reader could not start.'); }
+    return;
+  }
+  const es = new EventSource(API + 'logs/scan?days=' + d);
+  let done = false;
+  es.addEventListener('progress', e => { const j = JSON.parse(e.data); setProg(j.pct, j.label); });
+  es.addEventListener('done', e => { done = true; es.close(); busy = false; $('#refresh').classList.remove('busy'); DATA = JSON.parse(e.data); buildFilters(); render(); });
+  es.addEventListener('fail', e => { done = true; es.close(); busy = false; $('#refresh').classList.remove('busy'); fail(JSON.parse(e.data).error); });
+  es.onerror = () => { if (!done) { done = true; es.close(); busy = false; $('#refresh').classList.remove('busy'); fail('The connection to the activity reader was lost.'); } };
+}
+function setProg(p, l) { $('#pb').style.width = Math.min(99, p) + '%'; if (l) $('#lh').textContent = l; }
+function show(w) { for (const id of ['loading','failbox','list']) $('#' + id).classList.toggle('hidden', id !== w); }
+function fail(msg) { $('#fp').textContent = msg || 'Unknown error.'; show('failbox'); }
+
+/* ---------- filters ---------- */
+function buildFilters() {
+  const ev = DATA.events || [];
+  const groups = {};
+  for (const e of ev) { const g = GROUP[e.k] || 'other'; groups[g] = (groups[g] || 0) + 1; }
+  const defs = ANDROID
+    ? [['all','All'],['apps','Apps'],['signins','Unlocks'],['other','Other']]
+    : [['all','All'],['signins','Sign-ins'],['programs','Programs'],['files','Files'],['deleted','Deleted'],['usb','USB'],['power','Power']];
+  TYPES = defs.filter(([k]) => k === 'all' || groups[k]);
+  $('#types').innerHTML = TYPES.map(([k, l]) => `<button class="chip${type === k ? ' on' : ''}" data-type="${k}">${esc(l)}${k !== 'all' && groups[k] ? `<span class="c">${groups[k]}</span>` : ''}</button>`).join('');
+  $('#ranges').innerHTML = RANGES.map(([k, l]) => `<button class="chip${range === k ? ' on' : ''}" data-range="${k}">${esc(l)}</button>`).join('');
+  const who = DATA.pc || DATA.device || '';
+  $('#sub').textContent = (ANDROID ? 'Apps used on this phone' : 'Who used this PC, and when') + (who ? ' · ' + who : '');
+}
+
+/* ---------- render ---------- */
+function startOfToday() { const d = new Date(); d.setHours(0,0,0,0); return d.getTime() / 1000; }
+function rangeFrom() {
+  const now = (DATA.now || Date.now() / 1000);
+  if (range === 'night') { const d = new Date(); d.setHours(0,0,0,0); return { a: d.getTime()/1000 - 10*3600, b: d.getTime()/1000 + 7*3600 }; } // ~9pm last night → 7am
+  if (range === '1') return { a: startOfToday(), b: now + 60 };
+  return { a: now - (+range) * 86400, b: now + 60 };
+}
+function dayLabel(ts) {
+  const d = new Date(ts * 1000), t = new Date(), y = new Date(Date.now() - 86400000);
+  const same = (a, b) => a.toDateString() === b.toDateString();
+  if (same(d, t)) return 'Today';
+  if (same(d, y)) return 'Yesterday';
+  return d.toLocaleDateString(undefined, {weekday:'long', day:'numeric', month:'long'});
+}
+const two = n => (n < 10 ? '0' : '') + n;
+function clockOf(ts) { const d = new Date(ts * 1000); let h = d.getHours(); const m = two(d.getMinutes()); const ap = h < 12 ? 'AM' : 'PM'; h = h % 12 || 12; return h + ':' + m + ' ' + ap; }
+
+function filtered() {
+  const { a, b } = rangeFrom();
+  const q = query.trim().toLowerCase();
+  return (DATA.events || []).filter(e => {
+    if (e.t < a || e.t > b) return false;
+    if (type !== 'all' && (GROUP[e.k] || 'other') !== type) return false;
+    if (q && !((e.ti || '').toLowerCase().includes(q) || (e.d || '').toLowerCase().includes(q))) return false;
+    return true;
+  });
+}
+function render() {
+  show('list');
+  const ev = filtered();
+  const counts = {};
+  for (const e of ev) { const g = GROUP[e.k] || 'other'; counts[g] = (counts[g] || 0) + 1; }
+  let html = summary(ev, counts);
+  if (!DATA.admin && !ANDROID) html += `<div class="note">${svg('warn')}<span>Some records (sign-ins, failed passwords) need administrator rights. Run CoreKit as administrator to see them all.</span></div>`;
+  if (ANDROID && DATA.needGrant) html += `<div class="note">${svg('warn')}<span>Allow <b>Usage access</b> for CoreKit so it can show which apps were opened. <button class="rsb" style="margin-left:4px" onclick="grant()">Open setting</button></span></div>`;
+  if (!ev.length) { $('#list').innerHTML = html + `<div class="empty">No activity in this range.${query ? ' Try clearing the search.' : ''}</div>`; return; }
+  let lastDay = '';
+  for (const e of ev) {
+    const dl = dayLabel(e.t);
+    if (dl !== lastDay) { html += `<div class="day">${esc(dl)}</div>`; lastDay = dl; }
+    html += evHTML(e);
+  }
+  $('#list').innerHTML = html;
+}
+function summary(ev, c) {
+  const cells = ANDROID
+    ? [['apps','Apps opened'],['signins','Unlocks']]
+    : [['signins','Sign-ins'],['programs','Programs'],['files','File changes'],['deleted','Deleted','warn'],['usb','USB','warn']];
+  const fails = ev.filter(e => e.k === 'signin-fail').length;
+  let s = `<div class="sum">`;
+  if (fails) s += `<div class="s bad"><b>${fails}</b><small>Failed sign-ins</small></div>`;
+  for (const [k, l, cl] of cells) if (c[k]) s += `<div class="s ${c[k] && cl ? cl : ''}"><b>${c[k]}</b><small>${esc(l)}</small></div>`;
+  s += `<div class="s"><b>${ev.length}</b><small>Total events</small></div></div>`;
+  return s;
+}
+function evHTML(e) {
+  const sev = e.s && e.s !== 'info' ? ' sev-' + e.s : '';
+  const restore = e.r ? `<div class="rs"><button class="rsb" data-restore="${esc(e.r)}">${svg('undo')}Restore file</button></div>` : '';
+  return `<div class="ev${sev}"><div class="ic">${svg(e.k)}</div><div class="bd"><div class="ti">${esc(e.ti)}</div>${e.d ? `<div class="dt">${esc(e.d)}</div>` : ''}${restore}</div><div class="rt">${clockOf(e.t)}</div></div>`;
+}
+
+/* ---------- restore ---------- */
+async function restore(token, btn) {
+  if (btn.disabled) return;
+  btn.disabled = true; btn.innerHTML = svg('undo') + 'Restoring…';
+  try {
+    let j;
+    if (ANDROID) { j = JSON.parse(N.restoreFile(token) || '{}'); }
+    else { const r = await fetch(API + 'logs/restore', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({token})}); j = await r.json(); }
+    if (j.error) throw new Error(j.error);
+    btn.classList.add('done'); btn.innerHTML = svg('check') + 'Restored';
+    toast('Restored to ' + (j.path || 'its folder'), false);
+  } catch (err) { btn.disabled = false; btn.innerHTML = svg('undo') + 'Restore file'; toast('Could not restore: ' + err.message, true); }
+}
+function grant() { try { N.openUsageAccess(); } catch (e) {} }
+
+/* ---------- export ---------- */
+function exportReport() {
+  const ev = filtered();
+  const lines = ev.map(e => `${new Date(e.t*1000).toLocaleString()}\t${e.ti}\t${(e.d||'').replace(/\t/g,' ')}`);
+  const head = `CoreKit Activity Log\n${DATA.pc || DATA.device || ''} · ${DATA.user || ''}\nExported ${new Date().toLocaleString()}\n\nTime\tEvent\tDetail\n`;
+  const text = head + lines.join('\n');
+  if (ANDROID && N.save) { try { const j = JSON.parse(N.save('CoreKit-Activity', '<pre>' + esc(text) + '</pre>')); if (!j.error) toast('Saved to ' + (j.label || 'Downloads')); } catch (e) {} return; }
+  fetch(API + 'logs/save', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})}).then(r => r.json()).then(j => {
+    if (j.path) toast('Saved report', false, {label:'Show in folder', fn:() => fetch(API + 'reveal', {method:'POST', body: JSON.stringify({path:j.path})})});
+  }).catch(() => toast('Could not save', true));
+}
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg, err, act) {
+  const t = $('#toast'); t.textContent = msg; t.classList.toggle('bad', !!err); t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), act ? 6000 : 3200);
+}
+
+/* ---------- events ---------- */
+$('#q').addEventListener('input', e => { query = e.target.value; if (DATA) render(); });
+$('#refresh').addEventListener('click', () => { if (!busy) load(days); });
+$('#export').addEventListener('click', () => { if (DATA) exportReport(); });
+$('#back').addEventListener('click', () => { if (ANDROID && N.go) N.go('home'); });
+document.addEventListener('click', e => {
+  const r = e.target.closest('[data-range]'); if (r) { range = r.dataset.range; buildFilters(); render(); return; }
+  const t = e.target.closest('[data-type]'); if (t) { type = t.dataset.type; buildFilters(); render(); return; }
+  const rs = e.target.closest('[data-restore]'); if (rs) { restore(rs.dataset.restore, rs); return; }
+});
+if (ANDROID) $('#back').style.display = 'flex';
+load(7);
+</script>
+</body>
+</html>

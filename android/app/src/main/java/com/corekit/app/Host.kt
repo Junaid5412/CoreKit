@@ -44,7 +44,7 @@ class Host(private val act: MainActivity, private val web: WebView) {
     companion object {
         const val ORIGIN = "https://appassets.androidplatform.net"
         const val BASE = "$ORIGIN/ck/"
-        private val PAGES = mapOf("home" to "mobile/home.html", "health" to "health.html", "net" to "net.html")
+        private val PAGES = mapOf("home" to "mobile/home.html", "health" to "health.html", "net" to "net.html", "logs" to "logs.html")
     }
 
     val client = object : WebViewClient() {
@@ -243,6 +243,24 @@ class Host(private val act: MainActivity, private val web: WebView) {
         }
 
         /** Opens CoreKit Browser (profile picker first). */
+        /** Activity Log: which apps were opened and when (Usage Access). */
+        @JavascriptInterface fun activityLog(days: Int) {
+            pool.execute {
+                val res = try { ActivityLog.collect(act, days) } catch (e: Throwable) { JSONObject().put("error", e.message ?: "Could not read usage.").put("events", org.json.JSONArray()) }
+                act.runOnUiThread { web.evaluateJavascript("window.__activity && window.__activity(" + res.toString() + ")", null) }
+            }
+        }
+
+        @JavascriptInterface fun openUsageAccess() {
+            act.runOnUiThread {
+                try { act.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                catch (_: Throwable) { try { act.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Throwable) {} }
+            }
+        }
+
+        /** No Recycle Bin on Android; the usage log never offers restore. */
+        @JavascriptInterface fun restoreFile(token: String): String = JSONObject().put("error", "Not available on Android").toString()
+
         @JavascriptInterface fun browser() {
             act.runOnUiThread { act.startActivity(Intent(act, BrowserActivity::class.java)) }
         }

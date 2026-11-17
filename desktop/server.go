@@ -85,6 +85,9 @@ func runInspector(module string) {
 	mux.HandleFunc(base+"api/net/fix", in.netFix)
 	mux.HandleFunc(base+"api/net/fixstatus", in.netFixStatus)
 	mux.HandleFunc(base+"api/open", in.open)
+	mux.HandleFunc(base+"api/logs/scan", in.logsScan)
+	mux.HandleFunc(base+"api/logs/restore", in.logsRestore)
+	mux.HandleFunc(base+"api/logs/save", in.logsSave)
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
 	url := fmt.Sprintf("http://127.0.0.1:%d%s", ln.Addr().(*net.TCPAddr).Port, base)
@@ -142,6 +145,10 @@ func (in *inspector) index(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if in.module == "net" {
 		w.Write(netHTML)
+		return
+	}
+	if in.module == "logs" {
+		w.Write(logsHTML)
 		return
 	}
 	w.Write(indexHTML)
