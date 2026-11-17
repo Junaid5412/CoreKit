@@ -85,7 +85,8 @@ class RemoteControlService : AccessibilityService() {
                 else -> GLOBAL_ACTION_BACK
             })
             "text" -> typeText(ev.optString("s"))
-            "key" -> when (ev.optString("key")) {
+            // act once per key press (a PC viewer also sends the key release)
+            "key" -> if (ev.optBoolean("down", true)) when (ev.optString("key")) {
                 "Backspace" -> backspace()
                 "Enter" -> enter()
                 "Escape" -> performGlobalAction(GLOBAL_ACTION_BACK)

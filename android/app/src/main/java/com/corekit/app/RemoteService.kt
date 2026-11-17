@@ -23,6 +23,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.util.DisplayMetrics
 import android.view.Display
 import org.json.JSONObject
@@ -41,6 +42,9 @@ class RemoteService : Service() {
     companion object {
         const val ACTION_START = "com.corekit.remote.START"
         const val ACTION_STOP = "com.corekit.remote.STOP"
+        const val ACTION_ANSWER = "com.corekit.remote.ANSWER"
+        const val EXTRA_ID = "id"
+        const val EXTRA_ALLOW = "allow"
         const val EXTRA_CODE = "code"
         const val EXTRA_DATA = "data"
         private const val CH = "remote"
@@ -62,6 +66,8 @@ class RemoteService : Service() {
     private var lastAt = 0L
     private var capW = 0; private var capH = 0; private var landscape = false
     private var mlock: WifiManager.MulticastLock? = null
+    private var wlock: WifiManager.WifiLock? = null
+    private var cpu: PowerManager.WakeLock? = null
     @Volatile private var glueThread: Thread? = null
     @Volatile private var stopping = false
     private var peerName = ""
@@ -71,6 +77,7 @@ class RemoteService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> { stopAll(); return START_NOT_STICKY }
+            ACTION_ANSWER -> { answer(intent.getStringExtra(EXTRA_ID).orEmpty(), intent.getBooleanExtra(EXTRA_ALLOW, false)); return START_NOT_STICKY }
             ACTION_START -> start(intent)
         }
         return START_NOT_STICKY
@@ -95,6 +102,10 @@ class RemoteService : Service() {
         try {
             val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             mlock = wm.createMulticastLock("corekit-remote").apply { setReferenceCounted(false); acquire() }
+            // keep Wi-Fi at full speed while the screen is off or CoreKit is in the background
+            @Suppress("DEPRECATION")
+            wlock = wm.createWifiLock(if (Build.VERSION.SDK_INT >= 29) WifiManager.WIFI_MODE_FULL_LOW_LATENCY else WifiManager.WIFI_MODE_FULL_HIGH_PERF, "corekit-remote")
+                .apply { setReferenceCounted(false); acquire() }
         } catch (_: Throwable) {}
         RemoteEngine.cmd(this, JSONObject().put("t", "host").put("on", true).toString())
         RemoteEngine.cmd(this, JSONObject().put("t", "glue").put("a11y", RemoteControlService.isOn(this)).toString())
@@ -190,12 +201,13 @@ class RemoteService : Service() {
             "in" -> RemoteControlService.instance?.let { svc -> main.post { try { svc.perform(m) } catch (_: Throwable) {} } }
             "request" -> {
                 val who = m.optJSONObject("peer")?.optString("name").orEmpty().ifEmpty { "A device" }
-                askNotice(who)
+                askNotice(who, m.optString("id"))
             }
             "session" -> {
                 val p = m.optJSONObject("peer")
                 peerName = p?.optString("name").orEmpty()
                 (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(NID_ASK)
+                awake(p != null)
                 update(if (p != null) "$peerName is controlling this phone" else "Sharing this phone",
                     if (p != null) "Tap Stop to end the session at once." else "Waiting for a connection. Tap to open CoreKit.")
             }
@@ -211,9 +223,31 @@ class RemoteService : Service() {
         nm.createNotificationChannel(NotificationChannel(CH_ASK, "Connection requests", NotificationManager.IMPORTANCE_HIGH).apply { description = "A device asks to connect" })
     }
 
+    /** Brings CoreKit to the front on the Remote Access screen (from any app, even if CoreKit was closed). */
     private fun openApp(): PendingIntent = PendingIntent.getActivity(this, 1,
-        Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT),
+        Intent(this, MainActivity::class.java).setAction(MainActivity.ACTION_OPEN_REMOTE)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+    private fun answerIntent(id: String, allow: Boolean): PendingIntent = PendingIntent.getService(this, if (allow) 3 else 4,
+        Intent(this, RemoteService::class.java).setAction(ACTION_ANSWER).putExtra(EXTRA_ID, id).putExtra(EXTRA_ALLOW, allow),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+
+    private fun answer(id: String, allow: Boolean) {
+        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(NID_ASK)
+        if (id.isEmpty()) return
+        RemoteEngine.cmd(this, JSONObject().put("t", "answer").put("id", id).put("allow", allow).toString())
+        if (allow) update("Connecting…", "Starting the session.")
+    }
+
+    private fun awake(on: Boolean) {
+        try {
+            if (on) {
+                if (cpu == null) cpu = (getSystemService(POWER_SERVICE) as PowerManager).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "CoreKit:remote").apply { setReferenceCounted(false) }
+                cpu?.acquire(6 * 60 * 60 * 1000L)
+            } else cpu?.takeIf { it.isHeld }?.release()
+        } catch (_: Throwable) {}
+    }
 
     private fun notice(title: String, text: String): Notification {
         val stop = PendingIntent.getService(this, 2, Intent(this, RemoteService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -229,14 +263,23 @@ class RemoteService : Service() {
         try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NID, notice(title, text)) } catch (_: Throwable) {}
     }
 
-    private fun askNotice(who: String) {
+    private fun askNotice(who: String, id: String) {
         val b = if (Build.VERSION.SDK_INT >= 26) Notification.Builder(this, CH_ASK) else @Suppress("DEPRECATION") Notification.Builder(this)
-        val n = b.setSmallIcon(android.R.drawable.ic_dialog_alert)
+        @Suppress("DEPRECATION")
+        b.setSmallIcon(android.R.drawable.ic_dialog_alert)
             .setContentTitle("$who wants to connect")
-            .setContentText("Open CoreKit to allow or deny.")
+            .setContentText("It will see and control this phone. Only allow devices you trust.")
             .setAutoCancel(true).setContentIntent(openApp())
             .setCategory(Notification.CATEGORY_CALL)
-            .build()
+            .setPriority(Notification.PRIORITY_HIGH)
+            .setDefaults(Notification.DEFAULT_ALL)
+            .setTimeoutAfter(60_000)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+        if (id.isNotEmpty()) {
+            b.addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Deny", answerIntent(id, false)).build())
+            b.addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Allow", answerIntent(id, true)).build())
+        }
+        val n = b.build()
         try { (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NID_ASK, n) } catch (_: Throwable) {}
     }
 
@@ -255,6 +298,8 @@ class RemoteService : Service() {
         try { projection?.stop() } catch (_: Throwable) {}
         display = null; reader = null; projection = null
         try { mlock?.release() } catch (_: Throwable) {}
+        try { wlock?.release() } catch (_: Throwable) {}
+        awake(false)
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(NID_ASK)
         if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") stopForeground(true)
         stopSelf()
