@@ -41,3 +41,22 @@ jobs:
             android9-lite.iso
             test.apk
             *.log
+  arm-tcg:
+    needs: slim
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq patchelf binutils libarchive-tools e2fsprogs xz-utils
+      - run: python3 tools/vm/termux_qemu.py /tmp/q/out /tmp/q/share
+      - uses: actions/download-artifact@v4
+        with: { name: slim-gzip-wifi, path: /tmp/img }
+      - name: Termux (bionic) container
+        run: |
+          mkdir -p /tmp/vm2
+          docker run -d --name tx --network host -v /tmp/q:/q -v /tmp/vm2:/tmp/vm2 -v /tmp/img:/tmp/img termux/termux-docker:aarch64 sleep infinity
+          sleep 5; nproc
+          docker exec tx env LD_LIBRARY_PATH=/q/out /q/out/libqemu.so -version
+      - name: Boot, save, resume (no KVM, like a phone)
+        run: VMW=/tmp/vm2 python3 -u tools/vm/probe3.py /tmp/img/android9-lite.iso "docker exec tx env LD_LIBRARY_PATH=/q/out TMPDIR=/tmp/vm2 /q/out/libqemu.so -L /q/share" 240
+        timeout-minutes: 320

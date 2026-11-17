@@ -588,8 +588,9 @@ func (a *vmAuto) run(cmd string, timeout time.Duration) (string, int, error) {
 	a.seq++
 	mark := fmt.Sprintf("__CKA%d_%d_", a.seq, time.Now().UnixNano()%1e9)
 	a.c.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	// the quotes split the marker, so only the shell's output (never an echoed command) matches
-	if _, err := a.c.Write([]byte(cmd + " ; echo \"" + mark + "\"\"END=$?\"\n")); err != nil {
+	// the quotes split the marker, so only the shell's output (never the echoed command) matches
+	full := cmd + " ; echo \"" + mark + "\"\"END=$?\"\n"
+	if _, err := a.c.Write([]byte(full)); err != nil {
 		a.dead = true
 		return "", -1, err
 	}
@@ -601,7 +602,9 @@ func (a *vmAuto) run(cmd string, timeout time.Duration) (string, int, error) {
 		if i := strings.Index(line, mark+"END="); i >= 0 {
 			out.WriteString(line[:i])
 			rc, _ := strconv.Atoi(strings.TrimSpace(line[i+len(mark)+4:]))
-			return strings.TrimRight(strings.ReplaceAll(out.String(), "\r", ""), "\n"), rc, nil
+			o := strings.ReplaceAll(out.String(), "\r", "")
+			o = strings.TrimPrefix(o, full) // the serial line echoes what we typed
+			return strings.TrimRight(o, "\n"), rc, nil
 		}
 		out.WriteString(line)
 		if err != nil {
@@ -891,7 +894,7 @@ wait:
 	r.set("booting", "Starting Android")
 	// hidden root shell for CoreKit on the second serial port
 	// (fed through a pipe, so it is not an interactive shell: no prompts in the output)
-	c.Write([]byte("setsid sh -c 'stty -F /dev/ttyS1 -echo; cat /dev/ttyS1 | sh >/dev/ttyS1 2>&1' & clear\n"))
+	c.Write([]byte("setsid sh -c 'cat /dev/ttyS1 | sh >/dev/ttyS1 2>&1' & clear\n"))
 	ac, err := vmDial(p1, 10*time.Second)
 	if err != nil {
 		r.set("booting", "CoreKit could not attach to the device")
@@ -941,16 +944,20 @@ func vmGuestIP(a *vmAuto) string {
 // vmNetUp waits for Android to bring up its network (QEMU's built-in NAT: guest
 // 10.0.2.15, host 10.0.2.2, DNS 10.0.2.3) and sets it up by hand if it doesn't.
 func vmNetUp(a *vmAuto) string {
-	for i := 0; i < 20; i++ {
-		if ip := vmGuestIP(a); ip != "" {
-			return ip
-		}
-		time.Sleep(3 * time.Second)
+	if ip := vmGuestIP(a); ip != "" {
+		return ip
 	}
-	a.run("ip addr add 10.0.2.15/24 dev eth0 2>/dev/null; ip link set eth0 up; ip route add default via 10.0.2.2 dev eth0 2>/dev/null;"+
-		" ndc network create 100 >/dev/null 2>&1; ndc network interface add 100 eth0 >/dev/null 2>&1;"+
-		" ndc network route add 100 eth0 0.0.0.0/0 10.0.2.2 >/dev/null 2>&1; ndc resolver setnetdns 100 '' 10.0.2.3 >/dev/null 2>&1;"+
-		" ndc network default set 100 >/dev/null 2>&1; setprop net.dns1 10.0.2.3", 15*time.Second)
+	// Android-x86 shows QEMU's network card as "wifi_eth" (under a virtual Wi-Fi that
+	// needs a saved network); give it the NAT address directly and make it the default
+	if_, _, _ := a.run("for i in wifi_eth eth0; do [ -e /sys/class/net/$i ] && echo $i && break; done", 5*time.Second)
+	nic := strings.TrimSpace(if_)
+	if nic == "" {
+		return ""
+	}
+	a.run(strings.ReplaceAll("ip link set NIC up; ip addr add 10.0.2.15/24 dev NIC 2>/dev/null; ndc network create 100 >/dev/null 2>&1;"+
+		" ndc network interface add 100 NIC >/dev/null 2>&1; ndc network route add 100 NIC 10.0.2.0/24 >/dev/null 2>&1;"+
+		" ndc network route add 100 NIC 0.0.0.0/0 10.0.2.2 >/dev/null 2>&1; ndc resolver setnetdns 100 '' 10.0.2.3 >/dev/null 2>&1;"+
+		" ndc network default set 100 >/dev/null 2>&1; setprop net.dns1 10.0.2.3", "NIC", nic), 20*time.Second)
 	return vmGuestIP(a)
 }
 
@@ -1168,6 +1175,50 @@ func (e *vmEngine) apps(id string) ([]map[string]string, error) {
 }
 
 var vmPkgOk = regexp.MustCompile(`^[A-Za-z0-9_.]{2,200}$`)
+
+// ARM translation (Intel Houdini) as Android-x86 itself downloads it; CoreKit fetches it on the
+// host, checks it, and copies it in. Only the 32-bit part (9_y) is available from the mirror.
+const vmHoudiniURL = "http://zebra-mirror.ddscentral.org/dl.android-x86.org/houdini/9_y/houdini.sfs"
+const vmHoudiniSHA = "b73d60265096acbeba374d45732f52ef9601577ae2093c950b5e0a61b575d375"
+
+func (e *vmEngine) enableARM(r *vmRun, j *vmJob) {
+	a := r.auto
+	if out, _, _ := a.run("ls /system/lib/arm 2>/dev/null | head -1", 10*time.Second); strings.TrimSpace(out) != "" {
+		e.jobSet(j, "done", "ARM app support is already on", 100)
+		return
+	}
+	dst := filepath.Join(vmImagesDir(), "houdini9_y.sfs")
+	e.jobSet(j, "running", "Downloading ARM support (43 MB)", 10)
+	if err := vmFetch(context.Background(), vmHoudiniURL, vmHoudiniSHA, dst, func(got, total int64, _ bool, _ int64) {
+		if total > 0 {
+			e.jobSet(j, "running", fmt.Sprintf("Downloading ARM support (%d%%)", got*100/total), int(10+got*50/total))
+		}
+	}); err != nil {
+		e.jobSet(j, "error", "Download failed: "+err.Error(), 0)
+		return
+	}
+	e.jobSet(j, "running", "Copying into the virtual device", 65)
+	port, done, err := vmServeFile(dst)
+	if err != nil {
+		e.jobSet(j, "error", "Could not share the file", 0)
+		return
+	}
+	_, rc, err := a.run(fmt.Sprintf("mkdir -p /data/arm && toybox nc 10.0.2.2 %d </dev/null > /data/arm/houdini9_y.sfs", port), 5*time.Minute)
+	if derr := <-done; err != nil || rc != 0 || derr != nil {
+		e.jobSet(j, "error", "Copying into the virtual device failed. Is its network up?", 0)
+		return
+	}
+	e.jobSet(j, "running", "Turning it on", 85)
+	a.run("setprop persist.sys.nativebridge 1", 10*time.Second)
+	a.run("timeout 90 enable_nativebridge >/dev/null 2>&1", 2*time.Minute)
+	out, _, _ := a.run("ls /system/lib/arm 2>/dev/null | head -3", 10*time.Second)
+	if strings.TrimSpace(out) == "" {
+		e.jobSet(j, "error", "ARM support could not be turned on", 0)
+		return
+	}
+	e.jobSet(j, "done", "ARM apps (32-bit) can now be installed. Restart the device if an app still fails.", 100)
+	logLine("+", "Virtual Environment: ARM app support on in "+r.m.Name)
+}
 
 // ------------------------------------------------------------------ HTTP API
 
@@ -1439,15 +1490,7 @@ func mountVM(mux *http.ServeMux, prefix string, auth func(*http.Request) bool) {
 			}
 			j := vmEng.addJob(id, "ARM app support")
 			res["job"] = j.ID
-			go func() {
-				vmEng.jobSet(j, "running", "Downloading and turning on ARM support", 30)
-				out, rc, _ := run.auto.run("enable_nativebridge 2>&1; setprop persist.sys.nativebridge 1; getprop ro.dalvik.vm.native.bridge", 10*time.Minute)
-				if rc == 0 && !strings.Contains(strings.ToLower(out), "fail") {
-					vmEng.jobSet(j, "done", "ARM apps can now run (restart the device if one still fails)", 100)
-				} else {
-					vmEng.jobSet(j, "error", "Could not turn on ARM support: "+lastLine(out), 0)
-				}
-			}()
+			go vmEng.enableARM(run, j)
 		default:
 			err = errors.New("unknown command")
 		}

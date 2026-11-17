@@ -98,7 +98,17 @@ if bt:
     threading.Thread(target=serve, daemon=True).start()
     R("printf 'GET / HTTP/1.0\\r\\nHost: example.com\\r\\n\\r\\n' | toybox nc -w 8 example.com 80 | head -1; getprop net.dns1", 30, a)
     R("dumpsys connectivity | grep -iE 'Active default network|VALIDATED' | head -4", 20, a)
-    R(f"toybox nc 10.0.2.2 {port} </dev/null > /data/local/tmp/t.apk; ls -l /data/local/tmp/t.apk; echo want {len(blob)}", 60, a)
+    R("toybox nc --help 2>&1 | head -30", 10, a)
+    import hashlib
+    print("want sha", hashlib.sha256(blob).hexdigest(), len(blob), flush=True)
+    variants = ["toybox nc -q 30 10.0.2.2 {p} </dev/null > {f}", "toybox nc -w 30 10.0.2.2 {p} < /dev/zero > {f}", "sleep 40 | toybox nc 10.0.2.2 {p} > {f}", "toybox nc 10.0.2.2 {p} </dev/null > {f}"]
+    for vi, v in enumerate(variants):
+        srv2 = socket.socket(); srv2.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1); srv2.bind(("127.0.0.1", 0)); srv2.listen(1); p2 = srv2.getsockname()[1]
+        def serve2(srv2=srv2):
+            k, _ = srv2.accept(); k.sendall(blob); k.shutdown(socket.SHUT_WR); time.sleep(1); k.close()
+        threading.Thread(target=serve2, daemon=True).start()
+        R(v.format(p=p2, f=f"/data/local/tmp/v{vi}.apk") + f"; ls -l /data/local/tmp/v{vi}.apk; sha256sum /data/local/tmp/v{vi}.apk", 90, a)
+    R("for f in /data/local/tmp/v*.apk; do cmp -s $f /data/local/tmp/v1.apk; done; cp $(ls -S /data/local/tmp/v*.apk | head -1) /data/local/tmp/t.apk", 20, a)
     R("pm install -r /data/local/tmp/t.apk", 120, a)
     R("pm list packages -3", 20, a)
     for v, f in (("9_y", "/tmp/houdini9_y.sfs"), ("9_z", "/tmp/houdini9_z.sfs")):
