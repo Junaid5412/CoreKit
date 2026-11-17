@@ -20,10 +20,14 @@ jobs:
       - run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 libarchive-tools squashfs-tools xorriso e2fsprogs
           sudo chmod 666 /dev/kvm || true
+      - uses: actions/cache@v4
+        id: a9
+        with: { path: /tmp/a9.iso, key: android-x86_64-9.0-r2-f7eb8fc5 }
       - name: Official Android-x86 9.0-r2
-        timeout-minutes: 25
+        if: steps.a9.outputs.cache-hit != 'true'
+        timeout-minutes: 40
         run: |
-          for i in 1 2 3 4 5 6; do
+          for i in 1 2 3 4 5 6 7 8; do
             curl -fL -A corekit -C - --connect-timeout 20 --speed-limit 200000 --speed-time 25 -o /tmp/a9.iso "https://sourceforge.net/projects/android-x86/files/Release%209.0/android-x86_64-9.0-r2.iso/download" && break
             echo "retry $i"; sleep 3
           done
