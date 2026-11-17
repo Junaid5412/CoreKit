@@ -37,7 +37,8 @@ object ActivityLog {
             .put("admin", true)
         if (!hasAccess(ctx)) return out.put("needGrant", true).put("events", JSONArray())
 
-        val events = JSONArray()
+        // events arrive oldest first: read them all, keep the newest (a cap here used to drop today)
+        val events = ArrayList<JSONObject>()
         val pm = ctx.packageManager
         val labels = HashMap<String, String>()
         fun label(pkg: String): String = labels.getOrPut(pkg) {
@@ -50,9 +51,8 @@ object ActivityLog {
         val ev = UsageEvents.Event()
         var lastPkg = ""
         var lastAt = 0L
-        var n = 0
         val self = ctx.packageName
-        while (ue.hasNextEvent() && n < 1200) {
+        while (ue.hasNextEvent()) {
             ue.getNextEvent(ev)
             when (ev.eventType) {
                 UsageEvents.Event.ACTIVITY_RESUMED -> {
@@ -61,23 +61,19 @@ object ActivityLog {
                     // collapse the same app reappearing within 30s (tab switches, dialogs)
                     if (pkg == lastPkg && ev.timeStamp - lastAt < 30_000) { lastAt = ev.timeStamp; continue }
                     lastPkg = pkg; lastAt = ev.timeStamp
-                    events.put(JSONObject().put("k", "app").put("t", ev.timeStamp / 1000)
-                        .put("ti", "Opened " + label(pkg)).put("d", pkg).put("s", "info"))
-                    n++
+                    events.add(JSONObject().put("k", "app").put("t", ev.timeStamp / 1000)
+                        .put("ti", label(pkg)).put("d", pkg).put("s", "info"))
                 }
                 UsageEvents.Event.KEYGUARD_HIDDEN -> {
-                    events.put(JSONObject().put("k", "unlock").put("t", ev.timeStamp / 1000)
+                    events.add(JSONObject().put("k", "unlock").put("t", ev.timeStamp / 1000)
                         .put("ti", "Phone unlocked").put("d", "").put("s", "info"))
-                    n++
                 }
             }
         }
-        // newest first
-        val list = ArrayList<JSONObject>(events.length())
-        for (i in 0 until events.length()) list.add(events.getJSONObject(i))
-        list.sortByDescending { it.optLong("t") }
+        // newest first, at most 4000 (a month of heavy use)
+        events.sortByDescending { it.optLong("t") }
         val sorted = JSONArray()
-        for (o in list) sorted.put(o)
-        return out.put("events", sorted)
+        for (o in events.take(4000)) sorted.put(o)
+        return out.put("events", sorted).put("days", days)
     }
 }

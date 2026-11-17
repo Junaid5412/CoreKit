@@ -83,7 +83,7 @@ func (in *inspector) logsSave(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad", 400)
 		return
 	}
-	path := filepath.Join(reportsDir(), "CoreKit-Activity-"+time.Now().Format("2006-01-02-150405")+".txt")
+	path := filepath.Join(reportsDir(), "CoreKit-Activity-"+time.Now().Format("2006-01-02-150405")+".csv")
 	if err := os.WriteFile(path, []byte(req.Text), 0644); err != nil {
 		http.Error(w, err.Error(), 500)
 		return

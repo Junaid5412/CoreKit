@@ -39,7 +39,7 @@ function Collect-Logons {
     try { $ev = Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = $ids; StartTime = $script:Since } -ErrorAction Stop } catch { Emit-Log '!' 'Security log unavailable (sign-in auditing may be off)'; return }
     $seen = 0
     foreach ($e in $ev) {
-        if ($seen -ge 600) { break }
+        if ($seen -ge 2000) { break }
         $seen++
         $x = [xml]$e.ToXml()
         $d = @{}
@@ -98,7 +98,7 @@ function Collect-Programs {
     Set-Status 'Reading programs that were run' 48
     $base = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist'
     $guids = Get-ChildItem $base
-    $n = 0
+    $found = New-Object System.Collections.ArrayList
     foreach ($g in $guids) {
         $count = Join-Path $g.PSPath 'Count'
         $k = Get-Item $count
@@ -116,11 +116,11 @@ function Collect-Programs {
             } catch { continue }
             if ($when -lt $script:Since) { continue }
             $runs = [BitConverter]::ToInt32($data, 4)
-            $leaf = Split-Path $path -Leaf
-            if ($n -ge 400) { break }
-            $n++
-            Add-Ev 'program' $when $leaf ("$path  -  run $runs time(s)") 'info'
+            [void]$found.Add([pscustomobject]@{ When = $when; Path = $path; Runs = $runs })
         }
+    }
+    foreach ($p in ($found | Sort-Object When -Descending | Select-Object -First 600)) {
+        Add-Ev 'program' $p.When (Split-Path $p.Path -Leaf) ($p.Path + '  -  run ' + $p.Runs + ' time(s) in total') 'info'
     }
 }
 
@@ -130,15 +130,11 @@ function Collect-Recent {
     $recent = [Environment]::GetFolderPath('Recent')
     if (-not (Test-Path $recent)) { return }
     $sh = New-Object -ComObject WScript.Shell
-    $n = 0
-    foreach ($lnk in Get-ChildItem $recent -Filter *.lnk) {
-        if ($lnk.LastWriteTime -lt $script:Since) { continue }
-        if ($n -ge 300) { break }
-        $n++
+    foreach ($lnk in (Get-ChildItem $recent -Filter *.lnk | Where-Object { $_.LastWriteTime -ge $script:Since } | Sort-Object LastWriteTime -Descending | Select-Object -First 500)) {
         $target = ''
         try { $target = $sh.CreateShortcut($lnk.FullName).TargetPath } catch {}
         $name = [IO.Path]::GetFileNameWithoutExtension($lnk.Name)
-        Add-Ev 'file-mod' $lnk.LastWriteTime ('Opened: ' + $name) ($target) 'info'
+        Add-Ev 'file-open' $lnk.LastWriteTime ('Opened: ' + $name) ($target) 'info'
     }
 }
 
@@ -147,30 +143,27 @@ function Collect-Files {
     Set-Status 'Scanning your folders for changes' 74
     $roots = @('Desktop', 'MyDocuments', 'MyPictures') | ForEach-Object { [Environment]::GetFolderPath($_) }
     $roots += (Join-Path $env:USERPROFILE 'Downloads')
-    $n = 0
+    $all = New-Object System.Collections.ArrayList
     foreach ($root in ($roots | Select-Object -Unique)) {
         if (-not $root -or -not (Test-Path $root)) { continue }
-        $files = Get-ChildItem -LiteralPath $root -Recurse -File -Depth 3 -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $script:Since }
-        foreach ($f in $files) {
-            if ($n -ge 500) { break }
-            $n++
-            $new = $f.CreationTime -ge $script:Since
-            Add-Ev ($(if ($new) { 'file-new' } else { 'file-mod' })) $f.LastWriteTime ($(if ($new) { 'Created: ' } else { 'Changed: ' }) + $f.Name) $f.FullName 'info'
-        }
+        foreach ($f in (Get-ChildItem -LiteralPath $root -Recurse -File -Depth 3 -ErrorAction SilentlyContinue | Where-Object { $_.LastWriteTime -ge $script:Since -and $_.Name -notlike '~$*' -and $_.Name -ne 'desktop.ini' })) { [void]$all.Add($f) }
+    }
+    foreach ($f in ($all | Sort-Object LastWriteTime -Descending | Select-Object -First 800)) {
+        $new = $f.CreationTime -ge $script:Since
+        Add-Ev ($(if ($new) { 'file-new' } else { 'file-mod' })) $f.LastWriteTime ($(if ($new) { 'Created: ' } else { 'Changed: ' }) + $f.Name) $f.FullName 'info'
     }
 }
 
 # ---------------------------------------------------------------- deleted files (Recycle Bin) - with restore token
 function Collect-Deleted {
     Set-Status 'Reading the Recycle Bin' 86
-    $n = 0
+    $del = New-Object System.Collections.ArrayList
     foreach ($d in [IO.DriveInfo]::GetDrives()) {
         if (-not $d.IsReady) { continue }
         $rb = Join-Path $d.RootDirectory.FullName '$Recycle.Bin'
         if (-not (Test-Path $rb)) { continue }
         foreach ($sidDir in (Get-ChildItem -LiteralPath $rb -Directory -Force -ErrorAction SilentlyContinue)) {
             foreach ($meta in (Get-ChildItem -LiteralPath $sidDir.FullName -Filter '$I*' -File -Force -ErrorAction SilentlyContinue)) {
-                if ($n -ge 400) { break }
                 try {
                     $bytes = [IO.File]::ReadAllBytes($meta.FullName)
                     if ($bytes.Length -lt 24) { continue }
@@ -185,11 +178,13 @@ function Collect-Deleted {
                         $orig = [Text.Encoding]::Unicode.GetString($bytes, 24, 520).Trim([char]0)
                     }
                     $token = $d.Name.Substring(0, 1) + '|' + $sidDir.Name + '|' + $meta.Name
-                    $n++
-                    Add-Ev 'file-del' $when ('Deleted: ' + (Split-Path $orig -Leaf)) $orig 'warn' '' $token
+                    [void]$del.Add([pscustomobject]@{ When = $when; Orig = $orig; Token = $token })
                 } catch {}
             }
         }
+    }
+    foreach ($x in ($del | Sort-Object When -Descending | Select-Object -First 600)) {
+        Add-Ev 'file-del' $x.When ('Deleted: ' + (Split-Path $x.Orig -Leaf)) $x.Orig 'warn' '' $x.Token
     }
 }
 

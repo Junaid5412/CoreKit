@@ -10,7 +10,8 @@
 <style id="css">
 :root{--bg:#0a0e13;--panel:#10161e;--line:#1a2431;--line2:#243142;--row:#151e29;--text:#c9d1d9;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;--acc:#2dd4bf;--acc2:#22d3ee;
   --font:"Segoe UI Variable Text","Segoe UI",system-ui,-apple-system,Arial,sans-serif;--fontd:"Segoe UI Variable Display","Segoe UI",system-ui,Arial,sans-serif}
-*{box-sizing:border-box}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+button,a,[role=button]{-webkit-tap-highlight-color:transparent;-webkit-touch-callout:none}
 html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:13.5px/1.45 var(--font);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 button{font:inherit;color:inherit}
 ::-webkit-scrollbar{width:11px;height:11px}::-webkit-scrollbar-track{background:transparent}
@@ -41,7 +42,8 @@ body.scanning .spin{opacity:1}
   box-shadow:inset 0 0 0 1.5px rgba(45,212,191,.9),inset 0 0 34px rgba(45,212,191,.13),0 0 0 12px rgba(45,212,191,.035),0 0 64px rgba(45,212,191,.22),0 24px 60px rgba(0,0,0,.5);
   transition:transform .45s cubic-bezier(.2,.8,.2,1),box-shadow .45s,opacity .45s}
 .start:hover{transform:scale(1.04);box-shadow:inset 0 0 0 2px rgba(45,212,191,1),inset 0 0 44px rgba(45,212,191,.2),0 0 0 14px rgba(45,212,191,.05),0 0 96px rgba(45,212,191,.38),0 24px 60px rgba(0,0,0,.5)}
-.start:active{transform:scale(.985)}
+.start:active{transform:scale(.95);box-shadow:inset 0 0 0 2px rgba(45,212,191,1),inset 0 0 60px rgba(45,212,191,.32),0 0 0 10px rgba(45,212,191,.08),0 0 110px rgba(45,212,191,.45),0 20px 50px rgba(0,0,0,.5);transition-duration:.12s}
+.start:focus{outline:none}
 .start:focus-visible{box-shadow:inset 0 0 0 2px #fff,0 0 64px rgba(45,212,191,.3)}
 .start svg{width:58px;height:58px;stroke:var(--acc);stroke-width:2.2;fill:none;stroke-linecap:round;filter:drop-shadow(0 0 10px rgba(45,212,191,.6))}
 .start span{font:600 15px var(--fontd);letter-spacing:5px;margin-right:-5px}
