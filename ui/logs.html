@@ -6,100 +6,205 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <style>
-:root{--bg:#0a0e13;--panel:#10161e;--line:#1a2431;--line2:#243142;--row:#151e29;--text:#c9d1d9;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;--acc:#2dd4bf;--acc2:#22d3ee;--red:#f87171;--amber:#fbbf24;--green:#34d399;--font:"Segoe UI Variable Text","Segoe UI",system-ui,Roboto,Arial,sans-serif;--fontd:"Segoe UI Variable Display","Segoe UI",system-ui,Roboto,Arial,sans-serif}
-*{box-sizing:border-box}
+:root{--bg:#0a0e13;--panel:#0f151d;--panel2:#121a24;--line:#1a2431;--line2:#243142;--text:#c9d1d9;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;--acc:#2dd4bf;--acc2:#22d3ee;--red:#f87171;--amber:#fbbf24;--blue:#60a5fa;--violet:#a78bfa;--green:#34d399;
+  --font:"Segoe UI Variable Text","Segoe UI",system-ui,Roboto,Arial,sans-serif;--fontd:"Segoe UI Variable Display","Segoe UI",system-ui,Roboto,Arial,sans-serif;--tw:76px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.5 var(--font);-webkit-font-smoothing:antialiased}
-body{display:flex;flex-direction:column;height:100vh;overflow:hidden}
-button,input{font:inherit;color:inherit}
-.bar{flex:none;display:flex;align-items:center;gap:10px;height:60px;padding:0 20px;border-bottom:1px solid var(--line);background:rgba(12,17,23,.9)}
-.back{display:none;width:34px;height:34px;border:0;background:#141c26;border-radius:9px;color:var(--white);cursor:pointer;align-items:center;justify-content:center}
-.back svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2}
-.brand{display:flex;flex-direction:column;flex:1;min-width:0}
-.brand b{font:600 16px var(--fontd);color:var(--white)}
-.brand small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ib{width:36px;height:36px;border:1px solid var(--line2);background:#121b26;border-radius:9px;color:var(--muted2);cursor:pointer;display:grid;place-items:center;flex:none}
-.ib:hover{color:var(--white);border-color:#2f4256}
-.ib svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+body{display:flex;flex-direction:column;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* ---------- header ---------- */
+.top{flex:none;display:flex;align-items:center;gap:12px;height:66px;padding:0 22px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0d131a,#0b1016)}
+.back{display:none;width:38px;height:38px;border:0;border-radius:11px;background:#141c26;color:var(--white);place-items:center;cursor:pointer;flex:none}
+.logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#0f3b35,#0e2a3a);color:var(--acc);flex:none;box-shadow:inset 0 0 0 1px #1d4a44}
+.logo svg{width:21px;height:21px}
+.brand{display:flex;flex-direction:column;min-width:0;flex:1}
+.brand b{font:600 17px var(--fontd);color:var(--white);letter-spacing:.2px}
+.brand small{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.srch{display:flex;align-items:center;gap:9px;height:40px;padding:0 13px;border-radius:11px;background:#0e141c;border:1px solid var(--line2);width:340px;transition:border-color .15s}
+.srch:focus-within{border-color:var(--acc);box-shadow:0 0 0 3px rgba(45,212,191,.1)}
+.srch svg{width:16px;height:16px;color:var(--muted)}
+.srch input{flex:1;min-width:0;height:100%;border:0;outline:0;background:transparent;color:var(--white);font-size:13.5px}
+.ib{width:40px;height:40px;border:1px solid var(--line2);background:#121b26;border-radius:11px;color:var(--muted2);cursor:pointer;display:grid;place-items:center;flex:none;transition:all .15s}
+.ib:hover{color:var(--white);border-color:#33475c}
 .ib.busy svg{animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-.ctrl{flex:none;padding:12px 20px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:10px;background:#0c1118}
-.srch{display:flex;align-items:center;gap:9px;height:40px;padding:0 12px;border-radius:10px;background:#0e141c;border:1px solid var(--line2)}
-.srch:focus-within{border-color:var(--acc)}
-.srch svg{width:16px;height:16px;fill:none;stroke:var(--muted);stroke-width:2;flex:none}
-.srch input{flex:1;min-width:0;height:100%;border:0;outline:0;background:transparent;color:var(--white);font-size:14px}
-.rowf{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none}.rowf::-webkit-scrollbar{display:none}
-.chip{flex:none;height:32px;padding:0 13px;border-radius:17px;border:1px solid var(--line2);background:#121b26;color:var(--muted2);font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px}
-.chip.on{background:#0e2b28;border-color:#1f5a52;color:var(--acc)}
-.chip .c{background:#1b2735;color:var(--muted2);border-radius:9px;padding:0 6px;font-size:11px}
-.chip.on .c{background:#14524a;color:#aef3e8}
+/* ---------- layout ---------- */
+.wrap{flex:1;min-height:0;display:grid;grid-template-columns:268px 1fr}
+.side{border-right:1px solid var(--line);overflow-y:auto;padding:18px 14px 30px;background:#0b1016}
+.sh{font:700 10.5px var(--font);letter-spacing:1.3px;color:var(--muted);margin:6px 8px 8px}
+.sh + .opts{margin-bottom:18px}
+.opt{width:100%;display:flex;align-items:center;gap:10px;height:38px;padding:0 10px;border-radius:9px;border:0;background:transparent;color:var(--text);cursor:pointer;font-size:13.5px;text-align:left}
+.opt:hover{background:#121a24}
+.opt.on{background:#0f2523;color:var(--white);box-shadow:inset 3px 0 0 var(--acc)}
+.opt .ic{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:#151e29;color:var(--muted2)}
+.opt.on .ic{background:#123a35;color:var(--acc)}
+.opt .ic svg{width:15px;height:15px}
+.opt .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.opt .ct{font-size:11.5px;color:var(--muted2);background:#151e29;border-radius:10px;padding:1px 8px;font-variant-numeric:tabular-nums}
+.opt.on .ct{background:#14524a;color:#c6fff6}
+.cbox{margin:4px 2px 16px;padding:12px;border-radius:11px;background:#0f151d;border:1px solid var(--line2);display:flex;flex-direction:column;gap:9px}
+.cbox label{font-size:11.5px;color:var(--muted2);font-weight:600;margin-bottom:-4px}
+.cbox .pair{display:grid;grid-template-columns:1.25fr 1fr;gap:6px}
+.cbox input{height:36px;border-radius:8px;border:1px solid var(--line2);background:#0b1016;color:var(--white);padding:0 8px;font-size:13px;outline:none;min-width:0;width:100%;color-scheme:dark}
+.cbox input:focus{border-color:var(--acc)}
+.btn{height:36px;border-radius:9px;border:1px solid var(--line2);background:#151e29;color:var(--white);font-weight:600;font-size:13px;cursor:pointer;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#04201c}
+.cov{margin:8px 8px 0;font-size:11.5px;color:var(--muted);line-height:1.5}
 
-.scroll{flex:1;overflow-y:auto;padding:4px 0 40px}
-.sum{margin:14px 20px 4px;padding:13px 15px;border-radius:12px;border:1px solid var(--line);background:linear-gradient(180deg,#111822,#0e141c);display:flex;gap:16px;flex-wrap:wrap}
-.sum .s{display:flex;flex-direction:column;min-width:60px}
-.sum .s b{font:700 20px var(--fontd);color:var(--white)}
-.sum .s.bad b{color:var(--red)}.sum .s.warn b{color:var(--amber)}
-.sum .s small{color:var(--muted);font-size:11.5px}
-.note{margin:10px 20px 0;padding:10px 13px;border-radius:10px;font-size:12.5px;background:#1a150a;border:1px solid #3a2f12;color:#e3c77a;display:flex;gap:9px}
-.note svg{width:16px;height:16px;flex:none;fill:none;stroke:currentColor;stroke-width:2;margin-top:1px}
+.main{overflow-y:auto;min-width:0;position:relative}
+.inner{max-width:1080px;margin:0 auto;padding:22px 28px 60px}
+.rhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.rhead h1{margin:0;font:600 22px var(--fontd);color:var(--white)}
+.rhead .rs{color:var(--muted);font-size:13px;margin-top:2px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:14px;background:#121a24;border:1px solid var(--line2);font-size:12px;color:var(--muted2);font-variant-numeric:tabular-nums}
+.pill i{width:7px;height:7px;border-radius:50%;background:var(--acc)}
 
-.day{margin:18px 20px 7px;font:700 11px var(--font);letter-spacing:1px;color:var(--muted);text-transform:uppercase}
-.ev{display:flex;gap:12px;align-items:flex-start;margin:0 14px;padding:11px 10px;border-radius:11px}
-.ev:hover{background:#0f151d}
-.ev .ic{width:34px;height:34px;border-radius:10px;flex:none;display:grid;place-items:center;background:#141c26;color:var(--muted2)}
-.ev .ic svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.ev.sev-bad .ic{background:#2a1115;color:var(--red)}
-.ev.sev-warn .ic{background:#271f0c;color:var(--amber)}
-.ev.sev-good .ic{background:#0e2b25;color:var(--green)}
-.ev .bd{flex:1;min-width:0}
-.ev .ti{color:var(--white);font-weight:600;font-size:13.5px}
-.ev .dt{color:var(--muted);font-size:12px;word-break:break-word;margin-top:1px}
-.ev .rt{color:var(--muted2);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums;flex:none;padding-top:1px}
-.ev .rs{margin-top:6px}
-.rsb{height:30px;padding:0 12px;border-radius:8px;border:1px solid #2f4256;background:#141c26;color:var(--acc);font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
-.rsb:disabled{opacity:.5;cursor:default}
-.rsb svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2}
-.rsb.done{color:var(--green);border-color:#1f5a52}
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px;margin-bottom:16px}
+.kpi{padding:14px 15px;border-radius:14px;background:linear-gradient(180deg,#111822,#0e141c);border:1px solid var(--line);display:flex;gap:12px;align-items:center;min-width:0}
+.kpi .ki{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:#151e29;color:var(--muted2);flex:none}
+.kpi .ki svg{width:18px;height:18px}
+.kpi b{display:block;font:700 21px/1.15 var(--fontd);color:var(--white);font-variant-numeric:tabular-nums;white-space:nowrap}
+.kpi b.sm{font-size:15px;line-height:1.3;white-space:normal}
+.kpi small{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi.t-acc .ki{background:#0f2e2a;color:var(--acc)}.kpi.t-blue .ki{background:#0f2238;color:var(--blue)}.kpi.t-violet .ki{background:#1e1838;color:var(--violet)}
+.kpi.t-amber .ki{background:#2b2210;color:var(--amber)}.kpi.t-red .ki{background:#2c1216;color:var(--red)}.kpi.t-red b{color:var(--red)}
+.kpi.t-green .ki{background:#0e2b23;color:var(--green)}
 
-.center{flex:1;display:grid;place-items:center;text-align:center;padding:30px}
-.center .ring{width:54px;height:54px;border-radius:50%;border:3px solid #1c2733;border-top-color:var(--acc);animation:spin 1s linear infinite;margin:0 auto 18px}
-.center h2{margin:0 0 6px;font:600 17px var(--fontd);color:var(--white)}
-.center p{margin:0;color:var(--muted);max-width:360px}
-.pbar{width:240px;max-width:70vw;height:6px;border-radius:3px;background:#17202b;margin:16px auto 0;overflow:hidden}
+.attn{margin-bottom:18px;border-radius:14px;border:1px solid #4a3a14;background:linear-gradient(180deg,#1a160b,#14110a);padding:14px 16px}
+.attn h3{margin:0 0 10px;font:600 14px var(--fontd);color:#fcd987;display:flex;align-items:center;gap:8px}
+.attn .al{display:flex;flex-wrap:wrap;gap:8px}
+.attn .a{display:inline-flex;align-items:center;gap:7px;height:30px;padding:0 12px;border-radius:15px;background:#231c0c;border:1px solid #4a3a14;color:#f3dfa6;font-size:12.5px;cursor:pointer}
+.attn .a.bad{background:#2a1215;border-color:#5a1f26;color:#fecaca}
+.attn .a b{font-variant-numeric:tabular-nums}
+
+.dh{position:sticky;top:0;z-index:3;display:flex;align-items:center;justify-content:space-between;padding:14px 2px 8px;background:var(--bg);font:700 12px var(--font);letter-spacing:.9px;color:var(--muted2);text-transform:uppercase}
+.dh span:last-child{letter-spacing:0;text-transform:none;font-weight:500;color:var(--muted);font-size:12px}
+.grp{position:relative;padding-bottom:6px}
+.grp::before{content:"";position:absolute;left:calc(var(--tw) + 31px);top:6px;bottom:6px;width:2px;background:var(--line);border-radius:1px}
+.row{position:relative;display:grid;grid-template-columns:var(--tw) 40px 1fr auto;column-gap:12px;align-items:start;padding:9px 10px;border-radius:12px}
+.row:hover{background:#0e141b}
+.row .tm{color:var(--muted2);font-size:12.5px;font-variant-numeric:tabular-nums;text-align:right;padding-top:8px;white-space:nowrap}
+.row .dot{display:grid;place-items:center;z-index:1}
+.row .dot span{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;background:#141c26;color:var(--muted2);box-shadow:0 0 0 4px var(--bg)}
+.row:hover .dot span{box-shadow:0 0 0 4px #0e141b}
+.row .dot svg{width:16px;height:16px}
+.row .bd{min-width:0;padding-top:2px}
+.row .ti{color:var(--white);font-weight:600;font-size:13.8px;overflow-wrap:anywhere}
+.row .dt{color:var(--muted);font-size:12.3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.row .tg{padding-top:7px}
+.tag{display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:11px;font-size:11px;font-weight:600;background:#151e29;color:var(--muted2);white-space:nowrap}
+.c-signins .dot span{background:#0f2238;color:var(--blue)}.c-signins .tag{background:#0f2238;color:#9cc7fb}
+.c-programs .dot span,.c-apps .dot span{background:#1e1838;color:var(--violet)}.c-programs .tag,.c-apps .tag{background:#1e1838;color:#cbbcfd}
+.c-files .dot span{background:#0f2e2a;color:var(--acc)}.c-files .tag{background:#0f2e2a;color:#9df1e3}
+.c-deleted .dot span,.c-usb .dot span{background:#2b2210;color:var(--amber)}.c-deleted .tag,.c-usb .tag{background:#2b2210;color:#f6d58a}
+.c-power .dot span{background:#16202b;color:var(--muted2)}
+.row.s-bad .dot span{background:#2c1216;color:var(--red)}.row.s-bad .tag{background:#2c1216;color:#fecaca}.row.s-bad .ti{color:#fecaca}
+.rsb{margin-top:7px;height:30px;padding:0 12px;border-radius:8px;border:1px solid #2f4256;background:#141c26;color:var(--acc);font-size:12.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.rsb:disabled{opacity:.5;cursor:default}.rsb svg{width:14px;height:14px}.rsb.done{color:var(--green);border-color:#1f5a52}
+
+.state{display:grid;place-items:center;text-align:center;min-height:60vh;padding:30px}
+.state .ring{width:56px;height:56px;border-radius:50%;border:3px solid #1c2733;border-top-color:var(--acc);animation:spin 1s linear infinite;margin:0 auto 18px}
+.state h2{margin:0 0 6px;font:600 17px var(--fontd);color:var(--white)}
+.state p{margin:0;color:var(--muted);max-width:380px}
+.pbar{width:260px;max-width:70vw;height:6px;border-radius:3px;background:#17202b;margin:18px auto 0;overflow:hidden}
 .pbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .3s}
-.empty{padding:50px 24px;text-align:center;color:var(--muted)}
-.hidden{display:none!important}
-#toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#16212d;border:1px solid #243446;color:var(--white);padding:9px 16px;border-radius:10px;font-size:12.5px;transition:all .25s;z-index:30;box-shadow:0 10px 30px rgba(0,0,0,.4)}
+.empty{padding:60px 20px;text-align:center;color:var(--muted)}
+.empty .ei{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;margin:0 auto 14px;background:#121a24;color:var(--muted2)}
+.empty .ei svg{width:26px;height:26px}
+.empty b{display:block;color:var(--white);font:600 15px var(--fontd);margin-bottom:4px}
+.note{display:flex;gap:10px;align-items:flex-start;margin-bottom:16px;padding:12px 14px;border-radius:12px;font-size:13px;background:#14130b;border:1px solid #3a3214;color:#e9d89b}
+.note svg{width:17px;height:17px;margin-top:1px}
+.note .btn{margin-top:8px;height:32px}
+.mini{position:sticky;top:0;z-index:5;display:none;align-items:center;gap:10px;justify-content:center;padding:9px;background:#0f2523;color:#bff7ee;font-size:12.5px;border-bottom:1px solid #1d4a44}
+.mini.show{display:flex}
+.mini i{width:14px;height:14px;border-radius:50%;border:2px solid #2a5a53;border-top-color:var(--acc);animation:spin .8s linear infinite}
+
+/* phone-only controls */
+.mtop{display:none}
+.sheet{position:fixed;inset:0;z-index:40;display:none;background:rgba(3,6,9,.6);align-items:flex-end}
+.sheet.show{display:flex}
+.sheet .sb{width:100%;background:#0f151d;border-top:1px solid var(--line2);border-radius:18px 18px 0 0;padding:16px 16px calc(18px + env(safe-area-inset-bottom));animation:up .2s ease both}
+@keyframes up{from{transform:translateY(30px);opacity:.4}}
+.sheet h3{margin:0 0 12px;font:600 16px var(--fontd);color:var(--white)}
+.sheet .cbox{margin:0;background:transparent;border:0;padding:0}
+.sheet .row2{display:flex;gap:8px;margin-top:12px}.sheet .row2 .btn{flex:1;height:44px;font-size:14px}
+#toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#16212d;border:1px solid #243446;color:var(--white);padding:10px 16px;border-radius:11px;font-size:13px;transition:all .25s;z-index:50;box-shadow:0 10px 30px rgba(0,0,0,.45);max-width:90vw}
 #toast.show{opacity:1;transform:translate(-50%,0)}#toast.bad{border-color:#5a2a31;color:#fecaca}
 
-@media (max-width:600px){
-  .bar{height:56px;padding:0 12px}.back{display:flex}
-  .ctrl{padding:10px 12px}
-  .sum{margin:12px 12px 2px;gap:12px}.sum .s{min-width:52px}
-  .day{margin:16px 14px 6px}
-  .ev{margin:0 6px;gap:10px;padding:10px 8px}
-  .ev .rt{font-size:11px}
-  .note,.center p{font-size:12px}
+@media (max-width:760px){
+  :root{--tw:0px}
+  .top{height:58px;padding:0 12px;gap:10px}
+  .back{display:grid}.logo{display:none}
+  .brand b{font-size:16px}.brand small{font-size:12px}
+  .top .srch{display:none}
+  .ib{width:38px;height:38px}
+  .wrap{display:block;overflow-y:auto}
+  .side{display:none}
+  .main{overflow:visible}
+  .mtop{display:block;padding:10px 12px 8px;border-bottom:1px solid var(--line);background:#0b1016}
+  .mtop .srch{width:100%;height:42px}
+  .seg{display:flex;gap:6px;margin-top:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+  .seg::-webkit-scrollbar{display:none}
+  .seg button{flex:0 0 auto;height:34px;padding:0 13px;border-radius:17px;border:1px solid var(--line2);background:#121b26;color:var(--muted2);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .seg button.on{background:#0f2e2a;border-color:#1f5a52;color:var(--acc)}
+  .mrow{display:flex;gap:8px;margin-top:8px;align-items:center}
+  .sel{position:relative;flex:1;min-width:0}
+  .sel select{width:100%;height:38px;border-radius:10px;border:1px solid var(--line2);background:#121b26;color:var(--white);padding:0 34px 0 12px;font-size:13.5px;appearance:none;-webkit-appearance:none;outline:none}
+  .sel svg{position:absolute;right:11px;top:11px;width:16px;height:16px;color:var(--muted2);pointer-events:none}
+  .inner{padding:14px 12px 50px}
+  .rhead{margin-bottom:12px}.rhead h1{font-size:18px}.rhead .pill{display:none}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-bottom:12px}
+  .kpi{padding:11px 12px;gap:10px;border-radius:12px}.kpi .ki{width:32px;height:32px;border-radius:9px}.kpi .ki svg{width:16px;height:16px}
+  .kpi b{font-size:18px}.kpi small{font-size:11.5px}
+  .attn{padding:12px}.attn .a{height:28px;font-size:12px}
+  .grp::before{left:27px}
+  .row{grid-template-columns:36px 1fr auto;column-gap:10px;padding:9px 6px}
+  .row .tm{grid-column:3;grid-row:1;padding-top:3px;font-size:11.5px}
+  .row .dot{grid-column:1;grid-row:1}
+  .row .dot span{width:32px;height:32px;border-radius:10px}
+  .row .bd{grid-column:2;grid-row:1}
+  .row .tg{display:none}
+  .row .dt{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+  .dh{padding:12px 2px 6px;font-size:11.5px}
+  .state{min-height:50vh}
 }
 </style>
 </head>
 <body>
-<header class="bar">
-  <button class="back" id="back" aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+<header class="top">
+  <button class="back" id="back" aria-label="Back"><svg class="i" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+  <span class="logo"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
   <div class="brand"><b>Activity Log</b><small id="sub">Who used this device, and when</small></div>
-  <button class="ib" id="refresh" title="Refresh"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></svg></button>
-  <button class="ib" id="export" title="Save report"><svg viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 21h16"/></svg></button>
+  <label class="srch"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" placeholder="Search events, programs, files…" spellcheck="false"></label>
+  <button class="ib" id="refresh" title="Refresh"><svg class="i" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/></svg></button>
+  <button class="ib" id="export" title="Export report"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 21h16"/></svg></button>
 </header>
 
-<div class="ctrl" id="ctrl">
-  <div class="srch"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" placeholder="Search activity…" spellcheck="false"></div>
-  <div class="rowf" id="ranges"></div>
-  <div class="rowf" id="types"></div>
+<div class="mtop">
+  <label class="srch"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q2" placeholder="Search activity…" spellcheck="false"></label>
+  <div class="seg" id="mRanges"></div>
+  <div class="mrow"><div class="sel"><select id="mType"></select><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></div></div>
 </div>
 
-<div class="center" id="loading"><div><div class="ring"></div><h2 id="lh">Reading the activity log…</h2><p id="lp">Collecting sign-ins, programs, file changes and more.</p><div class="pbar"><i id="pb"></i></div></div></div>
-<div class="center hidden" id="failbox"><div><h2>Couldn't read the log</h2><p id="fp"></p></div></div>
-<main class="scroll hidden" id="list"></main>
+<div class="wrap">
+  <aside class="side">
+    <div class="sh">PERIOD</div>
+    <div class="opts" id="ranges"></div>
+    <div id="customSide"></div>
+    <div class="sh">CATEGORY</div>
+    <div class="opts" id="types"></div>
+    <div class="cov" id="cov"></div>
+  </aside>
+  <main class="main" id="main">
+    <div class="mini" id="mini"><i></i><span id="miniT">Loading older records…</span></div>
+    <div class="inner" id="inner"></div>
+  </main>
+</div>
+
+<div class="sheet" id="sheet"><div class="sb"><h3>Custom date &amp; time</h3><div id="customSheet"></div><div class="row2"><button class="btn" data-a="sheetClose">Cancel</button><button class="btn pri" data-a="apply">Show activity</button></div></div></div>
 <div id="toast"></div>
 
 <script>
@@ -108,9 +213,9 @@ const TOKEN = location.pathname.split('/')[1];
 const API = '/' + TOKEN + '/api/';
 const N = window.CoreKitNative;
 const ANDROID = !!(N && N.activityLog);
+const MAXDAYS = 90;
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
 if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); }
 
 /* ---------- icons ---------- */
@@ -125,155 +230,252 @@ const IC = {
   'shutdown-bad':'<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
   sleep:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
   wake:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
-  program:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/>',
+  program:'<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 6.5h.01M10 6.5h.01"/>',
   app:'<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
   'file-new':'<path d="M14 3v5h5"/><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M12 11v6M9 14h6"/>',
-  'file-mod':'<path d="M14 3v5h5"/><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>',
+  'file-mod':'<path d="M14 3v5h5"/><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M9 15l2 2 4-4"/>',
+  'file-open':'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
   'file-del':'<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
-  usb:'<circle cx="12" cy="19" r="2"/><path d="M12 17V5"/><path d="M8 9l4-4 4 4"/><path d="M12 11l3 3 2-1"/>',
-  undo:'<path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/>',
+  usb:'<rect x="7" y="2" width="10" height="9" rx="1"/><path d="M5 11h14v6a5 5 0 0 1-5 5h-4a5 5 0 0 1-5-5z"/><path d="M10 5h.01M14 5h.01"/>',
+  all:'<path d="M4 6h16M4 12h16M4 18h16"/>',
+  cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  power:'<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
+  files:'<path d="M14 3v5h5"/><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>',
   warn:'<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
-  check:'<path d="M20 6 9 17l-5-5"/>'
+  undo:'<path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  moon:'<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+  remote:'<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'
 };
-const svg = k => `<svg viewBox="0 0 24 24">${IC[k] || IC.program}</svg>`;
+const svg = k => `<svg class="i" viewBox="0 0 24 24">${IC[k] || IC.program}</svg>`;
 
-/* type → group + label */
-const GROUP = {
-  signin:'signins','signin-fail':'signins',unlock:'signins',lock:'signins',signout:'signins',
+/* ---------- categories ---------- */
+const GROUP = {signin:'signins','signin-fail':'signins',unlock:'signins',lock:'signins',signout:'signins',
   boot:'power',shutdown:'power','shutdown-bad':'power',sleep:'power',wake:'power',
-  program:'programs',app:'apps',
-  'file-new':'files','file-mod':'files','file-del':'deleted',usb:'usb'
-};
-const RANGES = ANDROID
-  ? [['1','Today'],['2','2 days'],['7','7 days']]
-  : [['night','Last night'],['1','Today'],['2','2 days'],['7','7 days']];
-let TYPES = [];
+  program:'programs',app:'apps','file-new':'files','file-mod':'files','file-open':'files','file-del':'deleted',usb:'usb'};
+const CATS = ANDROID
+  ? [['all','All activity','all'],['apps','Apps opened','app'],['signins','Unlocks','unlock']]
+  : [['all','All activity','all'],['signins','Sign-ins','signin'],['programs','Programs','program'],['files','Files','files'],['deleted','Deleted files','file-del'],['usb','USB drives','usb'],['power','Power','power']];
+const TAG = {signins: ANDROID ? 'Unlock' : 'Sign-in', programs:'Program', apps:'App', files:'File', deleted:'Deleted', usb:'USB', power:'Power'};
+const KIND_TAG = {'signin-fail':'Failed', lock:'Lock', unlock:'Unlock', signout:'Sign-out', 'file-new':'New file', 'file-mod':'Changed', 'file-open':'Opened'};
+const RANGES = [['today','Today','clock'],['yesterday','Yesterday','cal'],['7','Last 7 days','cal'],['30','Last 30 days','cal'],['custom','Custom range','cal']];
 
-let DATA = null, days = 7, range = ANDROID ? '1' : '7', type = 'all', query = '', busy = false;
+/* ---------- state ---------- */
+let DATA = null, loaded = 0, busy = false, firstLoad = true;
+let range = 'today', type = 'all', query = '';
+let cFrom = 0, cTo = 0;                 // custom range (ms)
+
+/* ---------- time helpers ---------- */
+const DAY = 86400000;
+const sod = (t = Date.now()) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const two = n => (n < 10 ? '0' : '') + n;
+const isoDate = t => { const d = new Date(t); return d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()); };
+const isoTime = t => { const d = new Date(t); return two(d.getHours()) + ':' + two(d.getMinutes()); };
+function clock(t) { const d = new Date(t); let h = d.getHours(); const ap = h < 12 ? 'AM' : 'PM'; h = h % 12 || 12; return h + ':' + two(d.getMinutes()) + ' ' + ap; }
+const fmtDay = (t, o) => new Date(t).toLocaleDateString(undefined, o || {weekday:'short', day:'numeric', month:'short'});
+function bounds() {                   // [from, to) in ms
+  const now = Date.now();
+  switch (range) {
+    case 'today': return [sod(), now + 60000];
+    case 'yesterday': return [sod() - DAY, sod()];
+    case '7': return [sod() - 6 * DAY, now + 60000];
+    case '30': return [sod() - 29 * DAY, now + 60000];
+    case 'custom': return [cFrom, cTo];
+  }
+  return [sod(), now];
+}
+function rangeTitle() {
+  const [a, b] = bounds();
+  switch (range) {
+    case 'today': return ['Today', fmtDay(a, {weekday:'long', day:'numeric', month:'long'})];
+    case 'yesterday': return ['Yesterday', fmtDay(a, {weekday:'long', day:'numeric', month:'long'})];
+    case '7': return ['Last 7 days', fmtDay(a) + ' – ' + fmtDay(b - 60000)];
+    case '30': return ['Last 30 days', fmtDay(a) + ' – ' + fmtDay(b - 60000)];
+    default: return ['Custom range', fmtDay(a) + ', ' + clock(a) + ' – ' + fmtDay(b) + ', ' + clock(b)];
+  }
+}
+function daysNeeded() { const [a] = bounds(); return Math.min(MAXDAYS, Math.max(1, Math.ceil((Date.now() - a) / DAY) + 1)); }
 
 /* ---------- loading ---------- */
-function load(d) {
-  days = d; busy = true;
-  $('#refresh').classList.add('busy');
-  show('loading');
-  setProg(6, 'Reading the activity log…');
+function load(days) {
+  if (busy) return;
+  busy = true; $('#refresh').classList.add('busy');
+  if (firstLoad) stateLoading(); else { $('#miniT').textContent = days > loaded ? `Loading ${days} days of records…` : 'Refreshing…'; $('#mini').classList.add('show'); }
+  const finish = (res, err) => {
+    busy = false; $('#refresh').classList.remove('busy'); $('#mini').classList.remove('show');
+    if (err) { if (firstLoad) stateFail(err); else toast(err, true); return; }
+    DATA = res || {events:[]}; loaded = DATA.days || days; firstLoad = false;
+    render();
+  };
   if (ANDROID) {
-    window.__activity = res => { busy = false; $('#refresh').classList.remove('busy'); if (res && res.error) return fail(res.error); DATA = res || {events:[]}; buildFilters(); render(); };
-    try { N.activityLog(d); } catch (e) { fail('The activity reader could not start.'); }
+    window.__activity = res => finish(res, res && res.error);
+    try { N.activityLog(days); } catch (e) { finish(null, 'The activity reader could not start.'); }
     return;
   }
-  const es = new EventSource(API + 'logs/scan?days=' + d);
+  const es = new EventSource(API + 'logs/scan?days=' + days);
   let done = false;
-  es.addEventListener('progress', e => { const j = JSON.parse(e.data); setProg(j.pct, j.label); });
-  es.addEventListener('done', e => { done = true; es.close(); busy = false; $('#refresh').classList.remove('busy'); DATA = JSON.parse(e.data); buildFilters(); render(); });
-  es.addEventListener('fail', e => { done = true; es.close(); busy = false; $('#refresh').classList.remove('busy'); fail(JSON.parse(e.data).error); });
-  es.onerror = () => { if (!done) { done = true; es.close(); busy = false; $('#refresh').classList.remove('busy'); fail('The connection to the activity reader was lost.'); } };
+  es.addEventListener('progress', e => { const j = JSON.parse(e.data); if (firstLoad) { $('#pb').style.width = Math.min(99, j.pct) + '%'; $('#lh').textContent = j.label; } });
+  es.addEventListener('done', e => { done = true; es.close(); finish(JSON.parse(e.data)); });
+  es.addEventListener('fail', e => { done = true; es.close(); finish(null, JSON.parse(e.data).error); });
+  es.onerror = () => { if (!done) { done = true; es.close(); finish(null, 'The connection to the activity reader was lost.'); } };
 }
-function setProg(p, l) { $('#pb').style.width = Math.min(99, p) + '%'; if (l) $('#lh').textContent = l; }
-function show(w) { for (const id of ['loading','failbox','list']) $('#' + id).classList.toggle('hidden', id !== w); }
-function fail(msg) { $('#fp').textContent = msg || 'Unknown error.'; show('failbox'); }
+function ensureLoaded() { const need = daysNeeded(); if (!DATA || need > loaded) load(Math.max(need, 7)); else render(); }
+function stateLoading() { $('#inner').innerHTML = `<div class="state"><div><div class="ring"></div><h2 id="lh">Reading the activity log…</h2><p>${ANDROID ? 'Collecting app usage and unlocks.' : 'Collecting sign-ins, programs, file changes, deletions and USB devices.'}</p><div class="pbar"><i id="pb"></i></div></div></div>`; }
+function stateFail(msg) { $('#inner').innerHTML = `<div class="state"><div><div class="ring" style="animation:none;border-top-color:var(--red)"></div><h2>Couldn't read the activity log</h2><p>${esc(msg)}</p><div style="margin-top:16px"><button class="btn pri" data-a="retry">Try again</button></div></div></div>`; }
 
-/* ---------- filters ---------- */
-function buildFilters() {
-  const ev = DATA.events || [];
-  const groups = {};
-  for (const e of ev) { const g = GROUP[e.k] || 'other'; groups[g] = (groups[g] || 0) + 1; }
-  const defs = ANDROID
-    ? [['all','All'],['apps','Apps'],['signins','Unlocks'],['other','Other']]
-    : [['all','All'],['signins','Sign-ins'],['programs','Programs'],['files','Files'],['deleted','Deleted'],['usb','USB'],['power','Power']];
-  TYPES = defs.filter(([k]) => k === 'all' || groups[k]);
-  $('#types').innerHTML = TYPES.map(([k, l]) => `<button class="chip${type === k ? ' on' : ''}" data-type="${k}">${esc(l)}${k !== 'all' && groups[k] ? `<span class="c">${groups[k]}</span>` : ''}</button>`).join('');
-  $('#ranges').innerHTML = RANGES.map(([k, l]) => `<button class="chip${range === k ? ' on' : ''}" data-range="${k}">${esc(l)}</button>`).join('');
-  const who = DATA.pc || DATA.device || '';
-  $('#sub').textContent = (ANDROID ? 'Apps used on this phone' : 'Who used this PC, and when') + (who ? ' · ' + who : '');
+/* ---------- filtering ---------- */
+function inRange() { const [a, b] = bounds(), A = a / 1000, B = b / 1000; return (DATA.events || []).filter(e => e.t >= A && e.t < B); }
+function matches(e) {
+  if (type !== 'all' && (GROUP[e.k] || 'other') !== type) return false;
+  const q = query.trim().toLowerCase();
+  return !q || (e.ti || '').toLowerCase().includes(q) || (e.d || '').toLowerCase().includes(q) || (e.u || '').toLowerCase().includes(q);
 }
+const isNight = e => { const h = new Date(e.t * 1000).getHours(); return h < 6; };
 
 /* ---------- render ---------- */
-function startOfToday() { const d = new Date(); d.setHours(0,0,0,0); return d.getTime() / 1000; }
-function rangeFrom() {
-  const now = (DATA.now || Date.now() / 1000);
-  if (range === 'night') { const d = new Date(); d.setHours(0,0,0,0); return { a: d.getTime()/1000 - 10*3600, b: d.getTime()/1000 + 7*3600 }; } // ~9pm last night → 7am
-  if (range === '1') return { a: startOfToday(), b: now + 60 };
-  return { a: now - (+range) * 86400, b: now + 60 };
-}
-function dayLabel(ts) {
-  const d = new Date(ts * 1000), t = new Date(), y = new Date(Date.now() - 86400000);
-  const same = (a, b) => a.toDateString() === b.toDateString();
-  if (same(d, t)) return 'Today';
-  if (same(d, y)) return 'Yesterday';
-  return d.toLocaleDateString(undefined, {weekday:'long', day:'numeric', month:'long'});
-}
-const two = n => (n < 10 ? '0' : '') + n;
-function clockOf(ts) { const d = new Date(ts * 1000); let h = d.getHours(); const m = two(d.getMinutes()); const ap = h < 12 ? 'AM' : 'PM'; h = h % 12 || 12; return h + ':' + m + ' ' + ap; }
-
-function filtered() {
-  const { a, b } = rangeFrom();
-  const q = query.trim().toLowerCase();
-  return (DATA.events || []).filter(e => {
-    if (e.t < a || e.t > b) return false;
-    if (type !== 'all' && (GROUP[e.k] || 'other') !== type) return false;
-    if (q && !((e.ti || '').toLowerCase().includes(q) || (e.d || '').toLowerCase().includes(q))) return false;
-    return true;
-  });
-}
 function render() {
-  show('list');
-  const ev = filtered();
-  const counts = {};
-  for (const e of ev) { const g = GROUP[e.k] || 'other'; counts[g] = (counts[g] || 0) + 1; }
-  let html = summary(ev, counts);
-  if (!DATA.admin && !ANDROID) html += `<div class="note">${svg('warn')}<span>Some records (sign-ins, failed passwords) need administrator rights. Run CoreKit as administrator to see them all.</span></div>`;
-  if (ANDROID && DATA.needGrant) html += `<div class="note">${svg('warn')}<span>Allow <b>Usage access</b> for CoreKit so it can show which apps were opened. <button class="rsb" style="margin-left:4px" onclick="grant()">Open setting</button></span></div>`;
-  if (!ev.length) { $('#list').innerHTML = html + `<div class="empty">No activity in this range.${query ? ' Try clearing the search.' : ''}</div>`; return; }
-  let lastDay = '';
-  for (const e of ev) {
-    const dl = dayLabel(e.t);
-    if (dl !== lastDay) { html += `<div class="day">${esc(dl)}</div>`; lastDay = dl; }
-    html += evHTML(e);
+  if (!DATA) return;
+  const scope = inRange(), list = scope.filter(matches);
+  const cnt = {all: scope.length};
+  for (const e of scope) { const g = GROUP[e.k] || 'other'; cnt[g] = (cnt[g] || 0) + 1; }
+  renderSide(cnt); renderMobile(cnt);
+  const who = DATA.pc || DATA.device || '';
+  $('#sub').textContent = (ANDROID ? 'App usage on this phone' : 'Who used this PC, and when') + (who ? ' · ' + who : '') + (DATA.user ? ' · ' + DATA.user : '');
+  const [t1, t2] = rangeTitle();
+  let h = `<div class="rhead"><div><h1>${esc(t1)}</h1><div class="rs">${esc(t2)}</div></div><span class="pill"><i></i>${list.length} event${list.length === 1 ? '' : 's'}${type !== 'all' || query ? ' shown' : ''}</span></div>`;
+  if (!ANDROID && DATA.admin === false) h += note('Sign-ins and failed passwords need administrator rights. Close this window and open CoreKit again, clicking <b>Yes</b> when Windows asks.');
+  if (ANDROID && DATA.needGrant) h += note('Allow <b>Usage access</b> for CoreKit so it can list the apps that were opened. Nothing leaves your phone.', '<button class="btn pri" data-a="grant">Open setting</button>');
+  h += kpis(scope) + attention(scope);
+  if (!list.length) h += `<div class="empty"><div class="ei">${svg(query ? 'search' : 'clock')}</div><b>${query ? 'No matching activity' : 'No activity in this period'}</b>${query ? 'Try a different search or category.' : 'Pick another period, or a custom date and time.'}</div>`;
+  else h += timeline(list);
+  $('#inner').innerHTML = h;
+}
+function note(html, extra) { return `<div class="note">${svg('warn')}<div>${html}${extra ? `<div>${extra}</div>` : ''}</div></div>`; }
+function kpis(ev) {
+  const c = k => ev.filter(e => e.k === k).length, g = k => ev.filter(e => GROUP[e.k] === k).length;
+  const first = ev.length ? ev[ev.length - 1].t * 1000 : 0, last = ev.length ? ev[0].t * 1000 : 0;
+  const span = ev.length ? (fmtDay(first) === fmtDay(last) ? clock(first) + ' – ' + clock(last) : clock(last)) : '—';
+  let cards;
+  if (ANDROID) {
+    const apps = new Set(ev.filter(e => e.k === 'app').map(e => e.d)).size;
+    cards = [['t-violet','app',g('apps'),'Apps opened'],['t-acc','all',apps,'Different apps'],['t-blue','unlock',c('unlock'),'Unlocks'],['t-green','clock',span, ev.length && fmtDay(first) !== fmtDay(last) ? 'Last activity' : 'Active between']];
+  } else {
+    const fails = c('signin-fail');
+    cards = [['t-blue','signin',c('signin') + c('unlock'),'Sign-ins']];
+    if (fails) cards.push(['t-red','signin-fail',fails,'Failed sign-ins']);
+    cards.push(['t-violet','program',g('programs'),'Programs run'],['t-acc','files',g('files'),'Files used'],['t-amber','file-del',g('deleted'),'Files deleted']);
+    if (g('usb')) cards.push(['t-amber','usb',g('usb'),'USB drives']);
+    cards.push(['t-green','clock',span, ev.length && fmtDay(first) !== fmtDay(last) ? 'Last activity' : 'Active between']);
   }
-  $('#list').innerHTML = html;
+  return `<div class="kpis">${cards.map(([t, ic, v, l]) => `<div class="kpi ${t}"><span class="ki">${svg(ic)}</span><div style="min-width:0"><b${ic === 'clock' ? ' class="sm"' : ''}>${esc(v)}</b><small>${esc(l)}</small></div></div>`).join('')}</div>`;
 }
-function summary(ev, c) {
-  const cells = ANDROID
-    ? [['apps','Apps opened'],['signins','Unlocks']]
-    : [['signins','Sign-ins'],['programs','Programs'],['files','File changes'],['deleted','Deleted','warn'],['usb','USB','warn']];
+function attention(ev) {
+  const items = [];
   const fails = ev.filter(e => e.k === 'signin-fail').length;
-  let s = `<div class="sum">`;
-  if (fails) s += `<div class="s bad"><b>${fails}</b><small>Failed sign-ins</small></div>`;
-  for (const [k, l, cl] of cells) if (c[k]) s += `<div class="s ${c[k] && cl ? cl : ''}"><b>${c[k]}</b><small>${esc(l)}</small></div>`;
-  s += `<div class="s"><b>${ev.length}</b><small>Total events</small></div></div>`;
-  return s;
+  if (fails) items.push(['bad', 'signin-fail', `<b>${fails}</b> failed sign-in${fails > 1 ? 's' : ''}`, 'signins', 'failed']);
+  const night = ev.filter(e => (e.k === 'signin' || e.k === 'unlock' || e.k === 'app') && isNight(e)).length;
+  if (night) items.push(['', 'moon', `<b>${night}</b> ${ANDROID ? (night > 1 ? 'uses' : 'use') : (night > 1 ? 'sign-ins' : 'sign-in')} between midnight and 6 AM`, ANDROID ? 'all' : 'signins', '']);
+  const rdp = ev.filter(e => /remote desktop/i.test(e.ti || '')).length;
+  if (rdp) items.push(['bad', 'remote', `<b>${rdp}</b> Remote Desktop sign-in${rdp > 1 ? 's' : ''}`, 'signins', 'remote']);
+  const usb = ev.filter(e => e.k === 'usb').length;
+  if (usb) items.push(['', 'usb', `<b>${usb}</b> USB drive${usb > 1 ? 's' : ''} connected`, 'usb', '']);
+  const del = ev.filter(e => e.k === 'file-del').length;
+  if (del) items.push(['', 'file-del', `<b>${del}</b> file${del > 1 ? 's' : ''} deleted`, 'deleted', '']);
+  const crash = ev.filter(e => e.k === 'shutdown-bad').length;
+  if (crash) items.push(['', 'shutdown-bad', `<b>${crash}</b> unexpected shutdown${crash > 1 ? 's' : ''}`, 'power', '']);
+  if (!items.length) return '';
+  return `<div class="attn"><h3>${svg('warn')}Worth a look</h3><div class="al">${items.map(([cl, ic, t, cat, q]) => `<button class="a ${cl}" data-jump="${cat}" data-q="${q}">${svg(ic)}<span>${t}</span></button>`).join('')}</div></div>`;
 }
-function evHTML(e) {
-  const sev = e.s && e.s !== 'info' ? ' sev-' + e.s : '';
-  const restore = e.r ? `<div class="rs"><button class="rsb" data-restore="${esc(e.r)}">${svg('undo')}Restore file</button></div>` : '';
-  return `<div class="ev${sev}"><div class="ic">${svg(e.k)}</div><div class="bd"><div class="ti">${esc(e.ti)}</div>${e.d ? `<div class="dt">${esc(e.d)}</div>` : ''}${restore}</div><div class="rt">${clockOf(e.t)}</div></div>`;
+function timeline(list) {
+  let h = '', cur = '', buf = '', n = 0;
+  const flush = () => { if (cur) h += `<div class="dh"><span>${esc(cur)}</span><span>${n} event${n === 1 ? '' : 's'}</span></div><div class="grp">${buf}</div>`; };
+  const today = sod(), yday = today - DAY;
+  for (const e of list) {
+    const ms = e.t * 1000, d0 = sod(ms);
+    const lbl = d0 === today ? 'Today · ' + fmtDay(ms) : d0 === yday ? 'Yesterday · ' + fmtDay(ms) : fmtDay(ms, {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    if (lbl !== cur) { flush(); cur = lbl; buf = ''; n = 0; }
+    buf += rowHTML(e); n++;
+  }
+  flush();
+  return h;
+}
+function rowHTML(e) {
+  const g = GROUP[e.k] || 'other';
+  const tag = KIND_TAG[e.k] || TAG[g] || '';
+  const sev = e.s === 'bad' ? ' s-bad' : '';
+  const restore = e.r ? `<button class="rsb" data-restore="${esc(e.r)}">${svg('undo')}Restore file</button>` : '';
+  const title = e.k === 'app' ? e.ti : e.ti;
+  return `<div class="row c-${g}${sev}"><div class="tm">${clock(e.t * 1000)}</div><div class="dot"><span>${svg(e.k)}</span></div><div class="bd"><div class="ti">${esc(title)}</div>${e.d ? `<div class="dt" title="${esc(e.d)}">${esc(e.d)}</div>` : ''}${restore}</div><div class="tg">${tag ? `<span class="tag">${esc(tag)}</span>` : ''}</div></div>`;
 }
 
-/* ---------- restore ---------- */
+/* ---------- side + mobile controls ---------- */
+function customForm(id) {
+  const a = cFrom || sod(), b = cTo || Date.now();
+  return `<div class="cbox" id="${id}"><label>From</label><div class="pair"><input type="date" data-c="fd" value="${isoDate(a)}" max="${isoDate(Date.now())}"><input type="time" data-c="ft" value="${isoTime(a)}"></div>
+    <label>To</label><div class="pair"><input type="date" data-c="td" value="${isoDate(b)}" max="${isoDate(Date.now())}"><input type="time" data-c="tt" value="${isoTime(b)}"></div>
+    ${id === 'cside' ? '<button class="btn pri" data-a="apply">Show activity</button>' : ''}</div>`;
+}
+function renderSide(cnt) {
+  $('#ranges').innerHTML = RANGES.map(([k, l, ic]) => `<button class="opt${range === k ? ' on' : ''}" data-range="${k}"><span class="ic">${svg(ic)}</span><span class="nm">${l}</span></button>`).join('');
+  $('#customSide').innerHTML = range === 'custom' || sideCustomOpen ? customForm('cside') : '';
+  $('#types').innerHTML = CATS.filter(([k]) => k === 'all' || cnt[k] || type === k).map(([k, l, ic]) => `<button class="opt${type === k ? ' on' : ''}" data-type="${k}"><span class="ic">${svg(ic)}</span><span class="nm">${l}</span><span class="ct">${cnt[k] || 0}</span></button>`).join('');
+  $('#cov').textContent = DATA ? `Records loaded for the last ${loaded} day${loaded === 1 ? '' : 's'}. Older periods load on demand (up to ${MAXDAYS} days).` : '';
+}
+let sideCustomOpen = false;
+function renderMobile(cnt) {
+  $('#mRanges').innerHTML = RANGES.map(([k, l]) => `<button class="${range === k ? 'on' : ''}" data-range="${k}">${k === 'custom' && range === 'custom' ? esc(shortCustom()) : esc(l.replace('Last ', ''))}</button>`).join('');
+  $('#mType').innerHTML = CATS.map(([k, l]) => `<option value="${k}"${type === k ? ' selected' : ''}>${l} (${cnt[k] || 0})</option>`).join('');
+}
+function shortCustom() { return fmtDay(cFrom, {day:'numeric', month:'short'}) + ' – ' + fmtDay(cTo, {day:'numeric', month:'short'}); }
+function readCustom(root) {
+  const v = k => root.querySelector(`[data-c="${k}"]`).value;
+  const from = new Date(v('fd') + 'T' + (v('ft') || '00:00')).getTime();
+  const to = new Date(v('td') + 'T' + (v('tt') || '23:59')).getTime() + 59999;
+  if (!isFinite(from) || !isFinite(to)) { toast('Pick a start and end date', true); return false; }
+  if (to <= from) { toast('The end must be after the start', true); return false; }
+  const oldest = sod() - (MAXDAYS - 1) * DAY;
+  cFrom = Math.max(from, oldest); cTo = Math.min(to, Date.now() + 60000);
+  if (from < oldest) toast(`Only the last ${MAXDAYS} days are available`);
+  return true;
+}
+function setRange(k) {
+  if (k === 'custom') {
+    if (matchMedia('(max-width:760px)').matches) { $('#customSheet').innerHTML = customForm('csheet'); $('#sheet').classList.add('show'); return; }
+    sideCustomOpen = true; if (DATA) renderSide(countsNow()); return;
+  }
+  sideCustomOpen = false; range = k; ensureLoaded();
+}
+function countsNow() { const c = {all: 0}; for (const e of inRange()) { c.all++; const g = GROUP[e.k] || 'other'; c[g] = (c[g] || 0) + 1; } return c; }
+
+/* ---------- restore / export ---------- */
 async function restore(token, btn) {
   if (btn.disabled) return;
   btn.disabled = true; btn.innerHTML = svg('undo') + 'Restoring…';
   try {
     let j;
-    if (ANDROID) { j = JSON.parse(N.restoreFile(token) || '{}'); }
+    if (ANDROID) j = JSON.parse(N.restoreFile(token) || '{}');
     else { const r = await fetch(API + 'logs/restore', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({token})}); j = await r.json(); }
     if (j.error) throw new Error(j.error);
     btn.classList.add('done'); btn.innerHTML = svg('check') + 'Restored';
-    toast('Restored to ' + (j.path || 'its folder'), false);
+    toast('Restored to ' + (j.path || 'its folder'));
   } catch (err) { btn.disabled = false; btn.innerHTML = svg('undo') + 'Restore file'; toast('Could not restore: ' + err.message, true); }
 }
-function grant() { try { N.openUsageAccess(); } catch (e) {} }
-
-/* ---------- export ---------- */
 function exportReport() {
-  const ev = filtered();
-  const lines = ev.map(e => `${new Date(e.t*1000).toLocaleString()}\t${e.ti}\t${(e.d||'').replace(/\t/g,' ')}`);
-  const head = `CoreKit Activity Log\n${DATA.pc || DATA.device || ''} · ${DATA.user || ''}\nExported ${new Date().toLocaleString()}\n\nTime\tEvent\tDetail\n`;
-  const text = head + lines.join('\n');
-  if (ANDROID && N.save) { try { const j = JSON.parse(N.save('CoreKit-Activity', '<pre>' + esc(text) + '</pre>')); if (!j.error) toast('Saved to ' + (j.label || 'Downloads')); } catch (e) {} return; }
-  fetch(API + 'logs/save', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text})}).then(r => r.json()).then(j => {
-    if (j.path) toast('Saved report', false, {label:'Show in folder', fn:() => fetch(API + 'reveal', {method:'POST', body: JSON.stringify({path:j.path})})});
+  if (!DATA) return;
+  const list = inRange().filter(matches), [t1, t2] = rangeTitle();
+  const csvq = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
+  const catOf = e => KIND_TAG[e.k] || TAG[GROUP[e.k]] || '';
+  if (ANDROID) {
+    const rows = list.map(e => `<tr><td>${esc(new Date(e.t * 1000).toLocaleDateString())}</td><td>${esc(clock(e.t * 1000))}</td><td>${esc(catOf(e))}</td><td>${esc(e.ti)}</td><td>${esc(e.d || '')}</td></tr>`).join('');
+    const html = `<!DOCTYPE html><meta charset="utf-8"><title>CoreKit Activity Log</title><style>body{font:13px system-ui;margin:24px;color:#111}h1{margin:0 0 4px}table{border-collapse:collapse;width:100%;margin-top:14px}td,th{border-bottom:1px solid #ddd;padding:6px 8px;text-align:left}th{background:#f3f5f7}</style><h1>Activity Log</h1><div>${esc(DATA.device || '')} · ${esc(t1)} · ${esc(t2)} · ${list.length} events</div><table><tr><th>Date</th><th>Time</th><th>Type</th><th>Event</th><th>Detail</th></tr>${rows}</table>`;
+    try { const j = JSON.parse(N.save('CoreKit-Activity-' + isoDate(Date.now()), html)); toast(j.error ? 'Could not save' : 'Saved to ' + (j.label || 'Downloads'), !!j.error); } catch (e) { toast('Could not save', true); }
+    return;
+  }
+  const csv = ['Date,Time,Type,Event,Detail,User'].concat(list.map(e => [new Date(e.t * 1000).toLocaleDateString(), clock(e.t * 1000), catOf(e), e.ti, e.d || '', e.u || ''].map(csvq).join(','))).join('\r\n');
+  fetch(API + 'logs/save', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({text: '﻿' + csv})}).then(r => r.json()).then(j => {
+    if (j.path) toast('Report saved (opens in Excel)', false, {fn: () => fetch(API + 'reveal', {method:'POST', body: JSON.stringify({path:j.path})})});
   }).catch(() => toast('Could not save', true));
 }
 
@@ -281,20 +483,36 @@ function exportReport() {
 let toastT;
 function toast(msg, err, act) {
   const t = $('#toast'); t.textContent = msg; t.classList.toggle('bad', !!err); t.classList.add('show');
+  t.onclick = act ? act.fn : null; t.style.pointerEvents = act ? 'auto' : 'none'; t.style.cursor = act ? 'pointer' : '';
   clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), act ? 6000 : 3200);
 }
 
 /* ---------- events ---------- */
-$('#q').addEventListener('input', e => { query = e.target.value; if (DATA) render(); });
-$('#refresh').addEventListener('click', () => { if (!busy) load(days); });
-$('#export').addEventListener('click', () => { if (DATA) exportReport(); });
-$('#back').addEventListener('click', () => { if (ANDROID && N.go) N.go('home'); });
+const onQuery = v => { query = v; $('#q').value = v; $('#q2').value = v; render(); };
+$('#q').addEventListener('input', e => onQuery(e.target.value));
+$('#q2').addEventListener('input', e => onQuery(e.target.value));
+$('#mType').addEventListener('change', e => { type = e.target.value; render(); });
+$('#refresh').addEventListener('click', () => load(Math.max(loaded || 7, daysNeeded())));
+$('#export').addEventListener('click', exportReport);
+$('#back').addEventListener('click', () => { if (N && N.go) N.go('home'); else history.back(); });
 document.addEventListener('click', e => {
-  const r = e.target.closest('[data-range]'); if (r) { range = r.dataset.range; buildFilters(); render(); return; }
-  const t = e.target.closest('[data-type]'); if (t) { type = t.dataset.type; buildFilters(); render(); return; }
+  const r = e.target.closest('[data-range]'); if (r) { setRange(r.dataset.range); return; }
+  const t = e.target.closest('[data-type]'); if (t) { type = t.dataset.type; render(); $('#main').scrollTop = 0; return; }
+  const j = e.target.closest('[data-jump]'); if (j) { type = j.dataset.jump; onQuery(j.dataset.q || ''); $('#main').scrollTop = 0; return; }
   const rs = e.target.closest('[data-restore]'); if (rs) { restore(rs.dataset.restore, rs); return; }
+  const a = e.target.closest('[data-a]'); if (!a) return;
+  const k = a.dataset.a;
+  if (k === 'apply') {
+    const root = a.closest('.sheet') ? $('#csheet') : $('#cside');
+    if (!readCustom(root)) return;
+    range = 'custom'; sideCustomOpen = false; $('#sheet').classList.remove('show'); ensureLoaded();
+  } else if (k === 'sheetClose') $('#sheet').classList.remove('show');
+  else if (k === 'grant') { try { N.openUsageAccess(); } catch (err) {} }
+  else if (k === 'retry') { firstLoad = true; load(Math.max(7, daysNeeded())); }
 });
-if (ANDROID) $('#back').style.display = 'flex';
+$('#sheet').addEventListener('click', e => { if (e.target.id === 'sheet') $('#sheet').classList.remove('show'); });
+// coming back from the Usage access screen: read again
+document.addEventListener('visibilitychange', () => { if (!document.hidden && ANDROID && DATA && DATA.needGrant) { firstLoad = true; load(7); } });
 load(7);
 </script>
 </body>
