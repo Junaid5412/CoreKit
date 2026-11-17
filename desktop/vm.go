@@ -51,6 +51,70 @@ type vmImage struct {
 	TplURL  string `json:"-"`
 	TplSHA  string `json:"-"`
 	MinRAM  int    `json:"minRam"`
+	Pre     *vmPre `json:"-"`
+}
+
+// vmPre is a "pre-started" save made on CoreKit's build server with the exact emulator the
+// Android app ships: phones resume it instead of a full software start (about an hour).
+type vmPre struct {
+	RAM, CPUs          int
+	QemuID             string
+	StateURL, StateSHA string
+	StateSize          int64
+	DiskURL, DiskSHA   string
+	DiskSize           int64
+}
+
+func (p *vmPre) usable() bool {
+	return p != nil && p.StateSHA != "" && p.DiskSHA != "" && os.Getenv("CK_QEMU") != "" && vmQemuID() == p.QemuID
+}
+
+func vmPrePaths(img string) (state, disk string) {
+	return filepath.Join(vmImagesDir(), img+".state.gz"), filepath.Join(vmImagesDir(), img+"-started.ckt")
+}
+
+func vmHavePre(img *vmImage) bool {
+	if !img.Pre.usable() {
+		return false
+	}
+	st, dk := vmPrePaths(img.ID)
+	_, e1 := os.Stat(st)
+	_, e2 := os.Stat(dk)
+	return e1 == nil && e2 == nil
+}
+
+// vmUsePre sets up a new machine's storage and saved state from the pre-started download.
+func vmUsePre(m *vmMachine, img *vmImage) error {
+	st, dk := vmPrePaths(img.ID)
+	dir := filepath.Join(vmMachinesDir(), m.ID)
+	if err := vmWriteDisk(dk, filepath.Join(dir, "data.img")); err != nil {
+		return err
+	}
+	in, err := os.Open(st)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	zr, err := gzip.NewReader(in)
+	if err != nil {
+		return err
+	}
+	part := vmSnapPath(m.ID) + ".part"
+	out, err := os.Create(part)
+	if err != nil {
+		return err
+	}
+	n, err := io.Copy(out, zr)
+	out.Close()
+	if err != nil {
+		os.Remove(part)
+		return err
+	}
+	if err := os.Rename(part, vmSnapPath(m.ID)); err != nil {
+		return err
+	}
+	meta, _ := json.Marshal(vmSnapMeta{Image: m.Image, RAM: m.RAM, CPUs: m.CPUs, Version: vmQemuID(), Saved: time.Now().Unix(), Size: n})
+	return os.WriteFile(vmSnapMetaPath(m.ID), meta, 0600)
 }
 
 const vmRelease = "https://github.com/Junaid5412/CoreKit/releases/download/vm-images/"
@@ -60,7 +124,10 @@ const vmRelease = "https://github.com/Junaid5412/CoreKit/releases/download/vm-im
 var vmCatalogue = []vmImage{
 	{ID: "android9-lite", Name: "Android 9 Lite", Android: "9", Note: "64-bit · root · recommended",
 		URL: vmRelease + "android9-lite.iso", SHA256: vmPin["android9-lite.iso"], Size: vmSize["android9-lite.iso"],
-		TplURL: vmRelease + "data8g.ckt", TplSHA: vmPin["data8g.ckt"], MinRAM: 1536},
+		TplURL: vmRelease + "data8g.ckt", TplSHA: vmPin["data8g.ckt"], MinRAM: 1536,
+		Pre: &vmPre{RAM: 2048, CPUs: 4, QemuID: vmPin["prestart.qemu"],
+			StateURL: vmRelease + "android9-lite.state.gz", StateSHA: vmPin["android9-lite.state.gz"], StateSize: vmSize["android9-lite.state.gz"],
+			DiskURL: vmRelease + "android9-lite-started.ckt", DiskSHA: vmPin["android9-lite-started.ckt"], DiskSize: vmSize["android9-lite-started.ckt"]}},
 }
 
 // set from the vm-images release (see tools/vm); empty pins mean "not published yet"
@@ -222,6 +289,9 @@ func vmTplPath(id string) string   { return filepath.Join(vmImagesDir(), id+".ck
 func vmHaveImage(id string) bool {
 	st, err := os.Stat(vmImagePath(id))
 	_, err2 := os.Stat(vmTplPath(id))
+	if img := vmImageByID(id); img != nil && img.Pre.usable() && !vmHavePre(img) {
+		return false // the quick-start files belong to the download on phones
+	}
 	return err == nil && err2 == nil && st.Size() > 0
 }
 
@@ -359,16 +429,34 @@ func (e *vmEngine) download(imgID string) error {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &vmDL{State: "downloading", Total: img.Size, stop: cancel}
+	if img.Pre.usable() {
+		d.Total += img.Pre.StateSize
+	}
 	e.dls[imgID] = d
 	e.mu.Unlock()
 	go func() {
 		err := vmFetch(ctx, img.TplURL, img.TplSHA, vmTplPath(imgID), nil)
+		if err == nil && img.Pre.usable() {
+			st, dk := vmPrePaths(imgID)
+			base := img.Size
+			if err = vmFetch(ctx, img.Pre.DiskURL, img.Pre.DiskSHA, dk, nil); err == nil {
+				err = vmFetch(ctx, img.Pre.StateURL, img.Pre.StateSHA, st, func(got, total int64, verifying bool, speed int64) {
+					e.mu.Lock()
+					d.Got, d.Speed, d.Total = got, speed, base+img.Pre.StateSize
+					e.mu.Unlock()
+				})
+			}
+		}
 		if err == nil {
+			pre := int64(0)
+			if img.Pre.usable() {
+				pre = img.Pre.StateSize
+			}
 			err = vmFetch(ctx, img.URL, img.SHA256, vmImagePath(imgID), func(got, total int64, verifying bool, speed int64) {
 				e.mu.Lock()
-				d.Got, d.Speed = got, speed
+				d.Got, d.Speed = got+pre, speed
 				if total > 0 {
-					d.Total = total
+					d.Total = total + pre
 				}
 				if verifying {
 					d.State = "verifying"
@@ -698,6 +786,16 @@ func (e *vmEngine) start(id string) error {
 		return err
 	}
 	disk := filepath.Join(vmMachinesDir(), id, "data.img")
+	if _, err := os.Stat(disk); err != nil {
+		if img := vmImageByID(m.Image); img != nil && vmHavePre(img) && m.RAM == img.Pre.RAM && m.CPUs == img.Pre.CPUs {
+			if err := vmUsePre(m, img); err == nil {
+				logLine("*", "Virtual Environment: "+m.Name+" starts from the pre-started save")
+			} else {
+				os.Remove(disk)
+				vmDropSnap(id)
+			}
+		}
+	}
 	if _, err := os.Stat(disk); err != nil {
 		if err := vmWriteDisk(vmTplPath(m.Image), disk); err != nil {
 			return fmt.Errorf("could not create the storage: %v", err)
@@ -1263,6 +1361,10 @@ func vmState() map[string]any {
 	for _, im := range vmCatalogue {
 		x := map[string]any{"id": im.ID, "name": im.Name, "android": im.Android, "note": im.Note, "size": im.Size,
 			"have": vmHaveImage(im.ID), "published": im.SHA256 != ""}
+		if im.Pre.usable() {
+			x["size"] = im.Size + im.Pre.StateSize + im.Pre.DiskSize
+			x["quick"] = map[string]int{"ram": im.Pre.RAM, "cpus": im.Pre.CPUs}
+		}
 		vmEng.mu.Lock()
 		if d := vmEng.dls[im.ID]; d != nil {
 			x["dl"] = map[string]any{"state": d.State, "got": d.Got, "total": d.Total, "err": d.Err, "speed": d.Speed}
@@ -1390,6 +1492,9 @@ func mountVM(mux *http.ServeMux, prefix string, auth func(*http.Request) bool) {
 				name = string([]rune(name)[:40])
 			}
 			dr, dc := vmDefaults(img)
+			if img.Pre.usable() {
+				dr, dc = img.Pre.RAM, img.Pre.CPUs
+			}
 			ram, cpus := num(m, "ram"), num(m, "cpus")
 			if ram < 1024 || ram > 16384 {
 				ram = dr
