@@ -138,7 +138,7 @@ func runHelper(cmd string) int {
 	case "scripts":
 		return helperOut(map[string]any{"collect": collectScript, "detect": detectScript, "privacy": privacyScript,
 			"webrtc": webrtcProbe, "tz": tzSpoofScript(r.TZ), "noWebrtc": noWebRTCScript,
-			"adCss": adCosmeticScript, "adHosts": adDomains, "lang": langMatchScript(r.Country)})
+			"adCss": adCosmeticScript, "adHosts": adDomains, "lang": langMatchScript(r.Country), "langList": langMatchList(r.Country)})
 	case "leaky":
 		for _, c := range r.Cands {
 			if leakyCandidate(c, r.IP) {

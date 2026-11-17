@@ -9,7 +9,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.content.res.Configuration
 import android.os.Build
+import android.os.LocaleList
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
@@ -103,6 +105,7 @@ class BrowserActivity : Activity() {
     private var restored = false
     private var saveTask: Runnable? = null
     private var adHosts = HashSet<String>()
+    private val sysLocales: LocaleList = LocaleList.getDefault()
 
     private val density get() = resources.displayMetrics.density
     private val multiProfile by lazy { WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE) }
@@ -167,6 +170,7 @@ class BrowserActivity : Activity() {
             }
         }
         chrome.destroy()
+        if (LocaleList.getDefault() != sysLocales) { LocaleList.setDefault(sysLocales); java.util.Locale.setDefault(sysLocales[0]) }
         bg.shutdownNow()
         super.onDestroy()
     }
@@ -570,6 +574,27 @@ class BrowserActivity : Activity() {
     private fun setScripts(s: JSONObject) {
         scripts = s
         adHosts = HashSet<String>().also { h -> s.optJSONArray("adHosts")?.let { a -> for (i in 0 until a.length()) h += a.getString(i) } }
+        applyLocale()
+    }
+
+    /**
+     * WebView builds the Accept-Language header (what whoer and sites read) from the app's
+     * locale list, picked up when a WebView is created or told the configuration changed.
+     * With the proxy on, it becomes the VPN country's list (de-DE, de, en-US, en); otherwise
+     * the phone's own. Tabs are always created after this runs.
+     */
+    private fun applyLocale() {
+        val l = scripts.optJSONArray("langList")
+        val want = if (proxyOn && !prof().optBoolean("noLangMatch") && l != null && l.length() > 0)
+            LocaleList(*Array(l.length()) { java.util.Locale.forLanguageTag(l.getString(it)) }) else sysLocales
+        if (LocaleList.getDefault() != want) { LocaleList.setDefault(want); java.util.Locale.setDefault(want[0]) }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (picker) return
+        applyLocale() // the system may put its own list back on a configuration change
+        main.post { val c = resources.configuration; for (t in tabs) t.view?.dispatchConfigurationChanged(c) }
     }
     private fun adblockOn() = !prof().optBoolean("noAdblock")
     private fun isAd(host: String?): Boolean {

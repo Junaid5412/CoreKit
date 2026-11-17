@@ -166,7 +166,7 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 .rep{padding:16px 12px 34px}
 .gauges{gap:6px;justify-content:space-around;flex-wrap:wrap;padding:0}
 .g-box{max-width:27vw}
-.cams{grid-template-columns:1fr 1fr;max-width:100%;gap:8px}.cam-l{flex-direction:column;align-items:flex-start;gap:2px}
+#sheet .cams{grid-template-columns:1fr 1fr;width:auto;max-width:100%;gap:8px;max-height:64vh}#sheet .cam-l{flex-direction:column;align-items:flex-start;gap:2px;text-align:left}#sheet .cam-m{padding:0 8px 8px;gap:4px}#sheet .cam-m button{font-size:11.5px}
 @supports (font-size:1cqw){.g-num{font-size:30cqw}}
 .head{flex-direction:column;align-items:flex-start;gap:12px}
 .ttl{font-size:24px}
@@ -209,6 +209,13 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 .cam-s{color:var(--muted);font-size:12px}.cam-t.bad .cam-s{color:#fca5a5}
 .cam-l{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 10px;font-size:12px}
 .cam-l b{color:var(--white);font-weight:600}.cam-l small{color:var(--muted);white-space:nowrap}
+.cam-t{cursor:pointer;position:relative}.cam-t.sel{box-shadow:0 0 0 2px var(--acc)}
+.cam-v{position:relative}.cam-live{position:absolute;top:8px;left:8px;padding:2px 7px;border-radius:9px;background:rgba(220,38,38,.9);color:#fff;font:700 10px var(--font);letter-spacing:.6px}
+.cam-l small.st-bad{color:#fca5a5}.cam-l small.st-off{color:var(--muted)}
+.cam-m{display:flex;gap:6px;padding:0 10px 10px}
+.cam-m button{flex:1;height:30px;border-radius:8px;border:1px solid var(--line2);background:#0f151c;color:var(--muted2);font:600 12px var(--font);cursor:pointer}
+.cam-m button.on.g{background:#0f2e2a;border-color:#1f5a52;color:var(--acc)}.cam-m button.on.b{background:#2e0f14;border-color:#5a1f26;color:#fca5a5}
+.cam-mk{padding:0 10px 10px;font:600 12px var(--font)}.cam-mk.g{color:var(--acc)}.cam-mk.b{color:#fca5a5}.cam-mk.n{color:var(--muted)}
 @keyframes pop{from{opacity:0;transform:scale(.96)}}
 .cam{margin-top:16px;width:640px;max-width:80vw;aspect-ratio:16/9;border-radius:12px;background:#05080b;overflow:hidden;display:grid;place-items:center;color:var(--muted);border:1px solid var(--line)}
 .cam video{width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
@@ -654,12 +661,21 @@ function speakerTest() {
   $('#replay').onclick = play; play();
 }
 
-/* webcam */
+/* cameras: every lens in its own tile, checked automatically, then marked by hand */
+const camState = {ok: 'Working', black: 'Black picture', fail: 'Could not open', off: 'Not available to apps', depth: 'Depth sensor (no picture)', wait: 'Not checked'};
+const camBad = l => l.state === 'fail' || l.mark === -1 || (l.state === 'black' && l.mark !== 1);
+function camSummary(list) { // list: [{state, mark}] -> detail text for the report
+  const use = list.filter(l => l.state !== 'off' && l.state !== 'depth'), n = use.length;
+  const bad = use.filter(camBad).length;
+  return ok => ok ? `${n - bad} of ${n} lens${n === 1 ? '' : 'es'} working` : `Problem: ${bad || 'some'} of ${n} lens${n === 1 ? '' : 'es'}`;
+}
 async function webcamTest() {
-  const streams = [];
-  let alive = true;
-  const stopAll = () => { streams.forEach(st => st.getTracks().forEach(t => t.stop())); streams.length = 0; };
-  openModal(head('Cameras', 'Every lens is opened. Check each picture is clear, in focus and free of spots.') + `<div class="cams" id="cams"><div class="cam-msg">Looking for cameras…</div></div>` + foot('webcam', ''),
+  if (window.CoreKitNative && CoreKitNative.cameraTest) return nativeCameraTest();
+  const streams = {};
+  let alive = true, one = false;
+  const stop = i => { if (streams[i]) { streams[i].getTracks().forEach(t => t.stop()); delete streams[i]; } };
+  const stopAll = () => Object.keys(streams).forEach(stop);
+  openModal(head('Cameras', 'Every lens gets its own tile. Tap a tile to see it live, then mark it Good or Problem.') + `<div class="cams" id="cams"><div class="cam-msg">Looking for cameras…</div></div>` + foot('webcam', ''),
     () => { alive = false; stopAll(); });
   const lensName = (d, i, list) => {
     const l = (d.label || '').toLowerCase();
@@ -668,8 +684,12 @@ async function webcamTest() {
     const same = list.filter(x => (/front|user|facetime/.test((x.label || '').toLowerCase()) ? 'Front' : 'Back') === facing);
     return same.length > 1 ? `${facing} camera ${same.indexOf(d) + 1}` : `${facing} camera`;
   };
-  const results = {};
-  resultDetail.webcam = ok => { const n = Object.keys(results).length, w = Object.values(results).filter(Boolean).length; return ok ? `${w} of ${n} lens${n === 1 ? '' : 'es'} working` : `Problem (${w} of ${n} lenses working)`; };
+  const lens = [];
+  resultDetail.webcam = ok => camSummary(lens)(ok);
+  const foot2 = () => {
+    const done = lens.filter(l => l.mark).length;
+    $('#fl').textContent = `${lens.length} lens${lens.length === 1 ? '' : 'es'} · ${done} marked` + (one ? ' · this device shows one camera at a time' : '');
+  };
   try {
     const first = await navigator.mediaDevices.getUserMedia({video: true}); // permission + labels
     first.getTracks().forEach(t => t.stop());
@@ -677,52 +697,94 @@ async function webcamTest() {
     if (!alive) return;
     const box = $('#cams');
     if (!devs.length) { box.innerHTML = '<div class="cam-msg">No camera found.</div>'; return; }
-    box.innerHTML = devs.map((d, i) => `<div class="cam-t" id="ct${i}"><div class="cam-v"><span class="cam-s">Opening…</span></div><div class="cam-l"><b>${esc(lensName(d, i, devs))}</b><small id="cr${i}"></small></div></div>`).join('');
-    $('#fl').textContent = `${devs.length} lens${devs.length === 1 ? '' : 'es'} found`;
-    const show = (i, st, live) => {
-      const tile = $('#ct' + i); if (!tile) return;
+    devs.forEach(() => lens.push({state: 'wait', mark: 0}));
+    box.innerHTML = devs.map((d, i) => `<div class="cam-t" id="ct${i}" data-live="${i}"><div class="cam-v"><span class="cam-s">Opening…</span></div>` +
+      `<div class="cam-l"><b>${esc(lensName(d, i, devs))}</b><small id="cr${i}"></small></div>` +
+      `<div class="cam-m"><button class="b" data-cm="${i}|-1">✗ Problem</button><button class="g" data-cm="${i}|1">✓ Good</button></div></div>`).join('');
+    foot2();
+    const mirror = i => /front|user|facetime/i.test(devs[i].label || '');
+    const tile = i => $('#ct' + i);
+    const show = (i, st) => {
+      const t = tile(i); if (!t) return null;
       const v = document.createElement('video'); v.autoplay = true; v.muted = true; v.playsInline = true; v.srcObject = st;
-      if (/front|user|facetime/i.test(devs[i].label || '')) v.style.transform = 'scaleX(-1)';
-      const holder = tile.querySelector('.cam-v'); holder.innerHTML = ''; holder.appendChild(v);
+      if (mirror(i)) v.style.transform = 'scaleX(-1)';
+      const h = t.querySelector('.cam-v'); h.innerHTML = '<span class="cam-live">LIVE</span>'; h.prepend(v);
       const s2 = st.getVideoTracks()[0].getSettings();
-      $('#cr' + i).textContent = (s2.width ? `${s2.width} × ${s2.height}` : '') + (live ? ' · live' : '');
-      tile.classList.add('ok'); results[i] = true;
+      $('#cr' + i).textContent = s2.width ? `${s2.width} × ${s2.height}` : 'Working';
+      t.classList.add('ok'); lens[i].state = 'ok';
       return v;
     };
-    const snap = (i, v) => new Promise(res => setTimeout(() => {
-      const tile = $('#ct' + i); if (!tile || !v.videoWidth) return res();
-      const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
-      c.getContext('2d').drawImage(v, 0, 0); const img = new Image(); img.src = c.toDataURL('image/jpeg', .8);
-      if (v.style.transform) img.style.transform = v.style.transform;
-      const holder = tile.querySelector('.cam-v'); holder.innerHTML = ''; holder.appendChild(img);
-      $('#cr' + i).textContent = $('#cr' + i).textContent.replace(' · live', '') + ' · checked';
-      res();
-    }, 2200));
-    // 1) try every lens at the same time; 2) lenses the phone won't share are checked one by one
+    const freeze = i => { // keep the last picture in the tile, then let the lens go
+      const t = tile(i), v = t && t.querySelector('video');
+      if (v && v.videoWidth) {
+        const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight;
+        c.getContext('2d').drawImage(v, 0, 0); const img = new Image(); img.src = c.toDataURL('image/jpeg', .8);
+        if (mirror(i)) img.style.transform = 'scaleX(-1)';
+        t.querySelector('.cam-v').replaceChildren(img);
+      }
+      stop(i);
+    };
+    const failed = i => { const t = tile(i); if (!t) return; t.classList.add('bad'); t.querySelector('.cam-v').innerHTML = '<span class="cam-s">Could not open</span>'; lens[i].state = 'fail'; $('#cr' + i).textContent = ''; };
+    const open = async i => {
+      const st = await navigator.mediaDevices.getUserMedia({video: {deviceId: {exact: devs[i].deviceId}, width: {ideal: 1280}, height: {ideal: 720}}});
+      if (!alive) { st.getTracks().forEach(t => t.stop()); return null; }
+      streams[i] = st; return show(i, st);
+    };
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    // 1) try every lens live at the same time
     const queue = [];
-    for (let i = 0; i < devs.length; i++) {
-      if (!alive) return;
-      try {
-        const st = await navigator.mediaDevices.getUserMedia({video: {deviceId: {exact: devs[i].deviceId}, width: {ideal: 1280}, height: {ideal: 720}}});
-        streams.push(st); show(i, st, true);
-      } catch (e) { queue.push(i); }
-    }
+    for (let i = 0; i < devs.length; i++) { if (!alive) return; try { await open(i); } catch (e) { queue.push(i); } }
+    // 2) a device that shows one camera at a time: picture of each lens, one by one
     if (queue.length) {
-      // this device opens one lens at a time: snapshot the live ones, then go through the rest
-      for (let i = 0; i < devs.length; i++) { const t = $('#ct' + i); const v = t && t.querySelector('video'); if (v) await snap(i, v); }
-      stopAll();
+      one = true; foot2();
+      for (const i of Object.keys(streams)) { await wait(1200); freeze(+i); }
       for (const i of queue) {
         if (!alive) return;
-        try {
-          const st = await navigator.mediaDevices.getUserMedia({video: {deviceId: {exact: devs[i].deviceId}}});
-          streams.push(st); const v = show(i, st, true); await snap(i, v); stopAll();
-        } catch (e) {
-          const t = $('#ct' + i); if (t) { t.classList.add('bad'); t.querySelector('.cam-v').innerHTML = '<span class="cam-s">Could not open</span>'; } results[i] = false;
-        }
+        try { await open(i); await wait(1800); freeze(i); } catch (e) { failed(i); }
       }
-      $('#fl').textContent = `${devs.length} lens${devs.length === 1 ? '' : 'es'} · checked one by one (this device opens one camera at a time)`;
-    } else $('#fl').textContent = `${devs.length} lens${devs.length === 1 ? '' : 'es'} live at the same time`;
+      const firstOk = lens.findIndex(l => l.state === 'ok');
+      if (firstOk >= 0 && alive) { try { await open(firstOk); tile(firstOk).classList.add('sel'); } catch (e) {} }
+    }
+    box.addEventListener('click', async e => {
+      const m = e.target.closest('[data-cm]');
+      if (m) {
+        const [i, v] = m.dataset.cm.split('|').map(Number);
+        lens[i].mark = lens[i].mark === v ? 0 : v;
+        tile(i).querySelectorAll('.cam-m button').forEach(b => b.classList.toggle('on', +b.dataset.cm.split('|')[1] === lens[i].mark));
+        foot2(); return;
+      }
+      const t = e.target.closest('[data-live]'); if (!t || !one) return;
+      const i = +t.dataset.live; if (streams[i]) return;
+      Object.keys(streams).forEach(k => freeze(+k));
+      box.querySelectorAll('.cam-t.sel').forEach(x => x.classList.remove('sel'));
+      t.classList.add('sel');
+      try { await open(i); } catch (err) { failed(i); }
+    });
   } catch (e) { const box = $('#cams'); if (box) box.innerHTML = '<div class="cam-msg">No camera found, or access was blocked.</div>'; }
+}
+
+/* Android: the phone's own camera screen finds every lens (ultra-wide, telephoto, macro…);
+   it reports back here with a picture, specs and your mark for each lens. */
+function nativeCameraTest() {
+  openModal(head('Cameras', 'The camera test is open. Check each lens, mark it, then tap Done.') + `<div class="cams" id="cams"><div class="cam-msg">Waiting for the camera test…</div></div>` + foot('webcam', ''));
+  window.__camResult = r => {
+    if (!$('#cams')) openModal(head('Cameras', '') + `<div class="cams" id="cams"></div>` + foot('webcam', ''));
+    const list = (r && r.lenses) || [];
+    resultDetail.webcam = camSummary(list);
+    $('.sh-s') && ($('.sh-s').textContent = r && r.error ? r.error : 'Result of the camera test. Confirm below.');
+    if (!list.length) { $('#cams').innerHTML = `<div class="cam-msg">${esc((r && r.error) || 'No camera found.')}</div>`; return; }
+    $('#cams').innerHTML = list.map(l => {
+      const bad = camBad(l), off = l.state === 'off' || l.state === 'depth' || l.state === 'wait';
+      const mk = l.mark === 1 ? '<div class="cam-mk g">✓ Marked good</div>' : l.mark === -1 ? '<div class="cam-mk b">✗ Marked problem</div>' : '<div class="cam-mk n">Not marked</div>';
+      return `<div class="cam-t ${bad ? 'bad' : off ? '' : 'ok'}"><div class="cam-v">${l.img ? `<img src="${l.img}">` : `<span class="cam-s">${esc(camState[l.state] || '')}</span>`}</div>` +
+        `<div class="cam-l"><b>${esc(l.name)}</b><small>${esc(l.spec || '')}</small><small class="${bad ? 'st-bad' : off ? 'st-off' : ''}">${esc(camState[l.state] || '')}</small></div>${off ? '' : mk}</div>`;
+    }).join('');
+    const use = list.filter(l => l.state !== 'off' && l.state !== 'depth');
+    const bad = use.filter(camBad).length;
+    $('#fl').textContent = `${list.length} lens${list.length === 1 ? '' : 'es'} found · ${bad ? bad + ' with a problem' : 'no problems marked'}`;
+    $(`[data-r="webcam|${bad ? 0 : 1}"]`)?.focus();
+  };
+  CoreKitNative.cameraTest();
 }
 
 /* microphone */

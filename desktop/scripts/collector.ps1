@@ -417,6 +417,7 @@ function Check-Battery {
         if ($b.Design -gt 0 -and $b.Full -gt 0) {
             $hp = [math]::Round($b.Full / $b.Design * 100, 1)
             Add-Row $s '  Battery Health' "$hp %" $(if ($hp -ge 80) { 'ok' } elseif ($hp -ge 60) { 'warn' } else { 'bad' })
+            Add-Row $s '  Reading' 'Real - measured by the battery chip' 'ok'
             Add-Row $s '  Original (Design) Capacity' ('{0:N0} mWh' -f $b.Design)
             Add-Row $s '  Current Full Charge Capacity' ('{0:N0} mWh' -f $b.Full)
             $scores += [math]::Min(100, $hp)

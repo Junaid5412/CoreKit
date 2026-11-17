@@ -84,16 +84,27 @@ var countryLang = map[string]string{
 	"HK": "zh-HK", "TW": "zh-TW", "ZA": "en-ZA", "NG": "en-NG", "KE": "en-KE",
 }
 
-// langMatchScript makes navigator.language(s) start with the VPN country's language while
-// keeping English, so "language differs from your IP" checks pass and pages stay readable.
-func langMatchScript(country string) string {
+// langMatchList is the language list a local of the VPN country would send, English kept
+// after it so pages stay readable: DE -> de-DE, de, en-US, en. Empty for unknown countries.
+func langMatchList(country string) []string {
 	l := countryLang[strings.ToUpper(country)]
 	if l == "" {
-		return ""
+		return nil
 	}
 	list := []string{l, strings.SplitN(l, "-", 2)[0]}
 	if !strings.HasPrefix(l, "en") {
 		list = append(list, "en-US", "en")
+	}
+	return list
+}
+
+// langMatchScript makes navigator.language(s) start with the VPN country's language. The
+// Accept-Language header is set by the host (CDP on Windows, app locale on Android); this
+// keeps the page-side values identical to it.
+func langMatchScript(country string) string {
+	list := langMatchList(country)
+	if list == nil {
+		return ""
 	}
 	js := `["` + strings.Join(list, `","`) + `"]`
 	return `(()=>{try{const L=Object.freeze(` + js + `);Object.defineProperty(Navigator.prototype,'language',{get:()=>L[0],configurable:true});Object.defineProperty(Navigator.prototype,'languages',{get:()=>L,configurable:true})}catch(e){}})();`

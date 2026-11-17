@@ -978,6 +978,20 @@ func (a *sbApp) prepareView(v *wvView, then func()) {
 			})
 		})
 	}
+	if l := a.langList(); l != nil {
+		// the header (Accept-Language) and Intl locale must match navigator.languages, or
+		// checkers like whoer still see the real language
+		steps = append(steps, func(next func()) {
+			a.uaOverride(v, false, func() {
+				v.cdp("Emulation.setLocaleOverride", `{"locale":"`+l[0]+`"}`, func(_ string, err error) {
+					if err != nil {
+						sbLog("locale override: %v", err)
+					}
+					next()
+				})
+			})
+		})
+	}
 	page := privacyScript
 	if a.adblock {
 		page += adCosmeticScript
@@ -2122,33 +2136,66 @@ func (a *sbApp) onTranslateOp(op string) {
 // setMobileView shows the active page as a phone would (narrow layout, mobile site).
 func (a *sbApp) setMobileView(t *sbTab, on bool) {
 	v := t.view
-	apply := func() {
+	a.uaOverride(v, on, func() {
 		if on {
-			ua := mobileUA(a.defaultUA)
-			b, _ := json.Marshal(map[string]any{"userAgent": ua, "platform": "Android"})
-			v.cdp("Emulation.setUserAgentOverride", string(b), func(string, error) {})
 			cr := clientRect(a.content)
 			dpr := float64(windowDPI(a.hwnd)) / 96
 			v.cdp("Emulation.setDeviceMetricsOverride", fmt.Sprintf(`{"width":412,"height":%d,"deviceScaleFactor":0,"mobile":true}`, int(float64(cr.B)/dpr)), func(string, error) {})
 			v.cdp("Emulation.setTouchEmulationEnabled", `{"enabled":true,"maxTouchPoints":5}`, func(string, error) {})
 		} else {
-			b, _ := json.Marshal(map[string]any{"userAgent": a.defaultUA})
-			v.cdp("Emulation.setUserAgentOverride", string(b), func(string, error) {})
 			v.cdp("Emulation.clearDeviceMetricsOverride", `{}`, func(string, error) {})
 			v.cdp("Emulation.setTouchEmulationEnabled", `{"enabled":false}`, func(string, error) {})
 		}
 		t.alt = on
 		v.reload()
 		a.pushTabs()
+	})
+}
+
+// langList is the language list pages should see: the VPN country's when the proxy is on
+// and "match language" is enabled, otherwise nil (the browser's own setting).
+func (a *sbApp) langList() []string {
+	if a.proxy == nil || a.prof().NoLangMatch {
+		return nil
 	}
-	if a.defaultUA == "" {
-		v.execScript("navigator.userAgent", func(js string, err error) {
-			json.Unmarshal([]byte(js), &a.defaultUA)
-			apply()
+	return langMatchList(a.geo.Country)
+}
+
+// uaOverride sets the user agent (desktop or phone) together with the Accept-Language list.
+func (a *sbApp) uaOverride(v *wvView, mobile bool, done func()) {
+	apply := func() {
+		if a.defaultUA == "" {
+			done()
+			return
+		}
+		params := map[string]any{"userAgent": a.defaultUA}
+		if mobile {
+			params["userAgent"], params["platform"] = mobileUA(a.defaultUA), "Android"
+		}
+		if l := a.langList(); l != nil {
+			params["acceptLanguage"] = strings.Join(l, ",")
+		}
+		b, _ := json.Marshal(params)
+		v.cdp("Emulation.setUserAgentOverride", string(b), func(_ string, err error) {
+			if err != nil {
+				sbLog("ua override: %v", err)
+			}
+			done()
 		})
+	}
+	if a.defaultUA != "" {
+		apply()
 		return
 	}
-	apply()
+	v.cdp("Browser.getVersion", `{}`, func(res string, err error) {
+		var r struct {
+			UserAgent string `json:"userAgent"`
+		}
+		if err == nil && json.Unmarshal([]byte(res), &r) == nil {
+			a.defaultUA = r.UserAgent
+		}
+		apply()
+	})
 }
 
 func mobileUA(desktop string) string {

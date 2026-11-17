@@ -247,6 +247,9 @@ class Host(private val act: MainActivity, private val web: WebView) {
             act.runOnUiThread { act.startActivity(Intent(act, BrowserActivity::class.java)) }
         }
 
+        /** Every-lens camera test (native screen); the result comes back to window.__camResult. */
+        @JavascriptInterface fun cameraTest() = act.startCameraTest()
+
         @JavascriptInterface fun exit() { act.runOnUiThread { act.finishAndRemoveTask() } }
     }
 
