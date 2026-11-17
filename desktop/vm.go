@@ -130,9 +130,6 @@ var vmCatalogue = []vmImage{
 			DiskURL: vmRelease + "android9-lite-started.ckt", DiskSHA: vmPin["android9-lite-started.ckt"], DiskSize: vmSize["android9-lite-started.ckt"]}},
 }
 
-// set from the vm-images release (see tools/vm); empty pins mean "not published yet"
-var vmPin = map[string]string{}
-var vmSize = map[string]int64{}
 
 func vmImageByID(id string) *vmImage {
 	for i := range vmCatalogue {
