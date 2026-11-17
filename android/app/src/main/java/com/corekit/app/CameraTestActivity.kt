@@ -3,6 +3,7 @@ package com.corekit.app
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -24,6 +25,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.provider.MediaStore
 import android.util.Base64
 import android.util.Size
 import android.util.TypedValue
@@ -63,6 +65,7 @@ class CameraTestActivity : Activity() {
     private class Lens(
         val id: String, val parent: String?, val facing: Int, val mp: Double, val focal35: Double,
         val aperture: Float, val depthOnly: Boolean, val listed: Boolean, val orientation: Int, val sig: String,
+        val openId: String = id, val zoom: Float = 1f, val manual: Boolean = false, val kind: String = "",
     ) {
         var name = ""; var spec = ""; var state = "wait"; var note = ""; var mark = 0
         var snap: Bitmap? = null
@@ -82,6 +85,12 @@ class CameraTestActivity : Activity() {
     private lateinit var btnBad: TextView
     private lateinit var btnGood: TextView
     private lateinit var grid: GridLayout
+    private lateinit var still: ImageView
+    private lateinit var panel: LinearLayout
+    private var plusTile: View? = null
+    private var extra = 0
+    private var autoIdx = 0
+    private var resumeAuto = false
 
     private var lenses = listOf<Lens>()
     @Volatile private var device: CameraDevice? = null
@@ -130,6 +139,19 @@ class CameraTestActivity : Activity() {
         val box = FrameLayout(this).apply { background = round(0xFF05080B.toInt(), LINE, 14f); clipToOutline = true }
         viewer = TextureView(this)
         box.addView(viewer, FrameLayout.LayoutParams(-1, -1))
+        still = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(0xFF05080B.toInt()); visibility = View.GONE }
+        box.addView(still, FrameLayout.LayoutParams(-1, -1))
+        panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setBackgroundColor(0xE6080C11.toInt()); setPadding(dpi(12f), dpi(12f), dpi(12f), dpi(12f)); visibility = View.GONE
+            addView(text("Your phone keeps this lens for its own camera app. Tap Take photo, switch to this lens there (for example 0.5x, macro or 2x), take the photo, then mark it below.", 12.5f, WHITE))
+            addView(text("Take photo", 14f, 0xFF04201C.toInt(), true).apply {
+                gravity = Gravity.CENTER; background = round(ACC, ACC, 10f); setOnClickListener { takePhoto() }
+            }, LinearLayout.LayoutParams(-1, dpi(40f)).apply { topMargin = dpi(10f) })
+            addView(text("Open camera app", 13f, WHITE, true).apply {
+                gravity = Gravity.CENTER; background = round(PANEL, LINE2, 10f); setOnClickListener { openCameraApp() }
+            }, LinearLayout.LayoutParams(-1, dpi(38f)).apply { topMargin = dpi(8f) })
+        }
+        box.addView(panel, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
         viewName = text("", 12f, Color.WHITE, true).apply {
             background = round(0xB3000000.toInt(), 0, 10f); setPadding(dpi(9f), dpi(4f), dpi(9f), dpi(4f)); visibility = View.GONE
         }
@@ -191,13 +213,15 @@ class CameraTestActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        resumeAuto = auto
         auto = false; openSeq++
         closeCam {}
     }
 
     override fun onResume() {
         super.onResume()
-        if (started && !finished && surfaceReady) live?.let { showLive(it) }
+        if (!started || finished || !surfaceReady) return
+        if (resumeAuto) { resumeAuto = false; auto = true; autoCheck(autoIdx) } else live?.let { showLive(it) }
     }
 
     override fun onDestroy() {
@@ -239,6 +263,18 @@ class CameraTestActivity : Activity() {
         }
         for (id in listed) add(id, null, true)
         for (n in 0..63) add(n.toString(), null, false) // ids the phone answers for but does not list
+        // Zooming below 1x can only use a separate ultra-wide lens; many phones offer it this way only.
+        if (Build.VERSION.SDK_INT >= 30) {
+            for (l in out.values.toList()) {
+                if (!l.listed || l.depthOnly) continue
+                if (out.values.any { it.facing == l.facing && it !== l && (it.kind == "Ultra-wide" || (it.focal35 > 0 && l.focal35 > 0 && it.focal35 < l.focal35 * 0.8)) }) continue
+                val r = try { cm.getCameraCharacteristics(l.id).get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE) } catch (_: Throwable) { null } ?: continue
+                if (r.lower >= 0.95f) continue
+                val id = "${l.id}~uw"
+                out[id] = Lens(id, null, l.facing, 0.0, if (l.focal35 > 0) l.focal35 * r.lower else 0.0, 0f, false, false, l.orientation, "zoom:$id",
+                    openId = l.id, zoom = r.lower, kind = "Ultra-wide")
+            }
+        }
         return out.values.sortedBy { if (it.facing == CameraCharacteristics.LENS_FACING_FRONT) 1 else if (it.facing == CameraCharacteristics.LENS_FACING_BACK) 0 else 2 }
     }
 
@@ -247,10 +283,11 @@ class CameraTestActivity : Activity() {
             val g = ls.filter { it.facing == face }
             if (g.isEmpty()) continue
             val side = when (face) { CameraCharacteristics.LENS_FACING_FRONT -> "Front"; CameraCharacteristics.LENS_FACING_EXTERNAL -> "External"; else -> "Back" }
-            val primary = g.filter { !it.depthOnly }.maxByOrNull { (if (it.focal35 == 0.0 || it.focal35 in 20.0..35.0) 10000.0 else 0.0) + it.mp }
+            val primary = g.filter { !it.depthOnly && it.zoom == 1f && it.kind.isEmpty() }.maxByOrNull { (if (it.focal35 == 0.0 || it.focal35 in 20.0..35.0) 10000.0 else 0.0) + it.mp }
             val mainF = primary?.focal35 ?: 0.0
             for (l in g) {
                 val kind = when {
+                    l.kind.isNotEmpty() -> l.kind
                     l.depthOnly -> "Depth sensor"
                     l === primary -> if (g.size > 1) "Main" else ""
                     l.focal35 > 0 && l.focal35 < 20 -> "Ultra-wide"
@@ -260,6 +297,7 @@ class CameraTestActivity : Activity() {
                 }
                 l.name = if (kind.isEmpty()) side else "$side · $kind"
                 l.spec = listOfNotNull(
+                    if (l.zoom != 1f) String.format(Locale.US, "%.1fx zoom", l.zoom) else null,
                     if (l.mp > 0) (if (l.mp >= 10) "${l.mp.roundToInt()} MP" else String.format(Locale.US, "%.1f MP", l.mp)) else null,
                     if (l.focal35 > 0) "${l.focal35.roundToInt()} mm" else null,
                     if (l.aperture > 0) String.format(Locale.US, "f/%.1f", l.aperture) else null,
@@ -271,10 +309,17 @@ class CameraTestActivity : Activity() {
 
     private fun zoom(z: Double): String = if (abs(z - z.roundToInt()) < 0.15) "${z.roundToInt()}x" else String.format(Locale.US, "%.1fx", z)
 
+    private val tileW get() = (resources.displayMetrics.widthPixels - dpi(20f) - dpi(12f) * 3) / 3
+
     private fun buildTiles() {
         grid.removeAllViews()
-        val tw = (resources.displayMetrics.widthPixels - dpi(20f) - dpi(12f) * 3) / 3
-        for (l in lenses) {
+        for (l in lenses) addTile(l)
+        addPlusTile()
+    }
+
+    private fun addTile(l: Lens) {
+        val tw = tileW
+        run {
             val t = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(0, 0, 0, dpi(8f)); clipToOutline = true }
             l.img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP; setBackgroundColor(0xFF05080B.toInt()) }
             t.addView(l.img, LinearLayout.LayoutParams(-1, (tw * 4f / 3f).roundToInt()))
@@ -291,6 +336,63 @@ class CameraTestActivity : Activity() {
         }
     }
 
+    /** "+ Add a lens": for lenses the phone hides from apps, checked through its own camera app. */
+    private fun addPlusTile() {
+        val tw = tileW
+        val t = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; background = round(PANEL, LINE2, 12f)
+            setPadding(dpi(6f), dpi(10f), dpi(6f), dpi(10f))
+            addView(text("+", 30f, ACC, true).apply { gravity = Gravity.CENTER })
+            addView(text("Add a lens", 12f, WHITE, true).apply { gravity = Gravity.CENTER })
+            addView(text("Lens missing? Check it in the camera app", 10.5f, MUTED).apply { gravity = Gravity.CENTER })
+            setOnClickListener {
+                AlertDialog.Builder(this@CameraTestActivity, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("Which side is the lens on?")
+                    .setItems(arrayOf("Back", "Front")) { _, w -> addManual(if (w == 1) CameraCharacteristics.LENS_FACING_FRONT else CameraCharacteristics.LENS_FACING_BACK) }
+                    .show()
+            }
+        }
+        plusTile = t
+        grid.addView(t, GridLayout.LayoutParams().apply { width = tw; height = (tw * 4f / 3f).roundToInt() + dpi(50f); setMargins(dpi(6f), dpi(6f), dpi(6f), dpi(6f)) })
+    }
+
+    private fun addManual(facing: Int) {
+        extra++
+        val side = if (facing == CameraCharacteristics.LENS_FACING_FRONT) "Front" else "Back"
+        val l = Lens("manual$extra", null, facing, 0.0, 0.0, 0f, false, false, 90, "manual$extra", manual = true)
+        l.name = "$side · Extra lens ${lenses.count { it.manual && it.facing == facing } + 1}"
+        l.spec = ""; l.state = "manual"
+        lenses = lenses + l
+        plusTile?.let { grid.removeView(it) }
+        addTile(l); addPlusTile()
+        sub.text = "${lenses.size} lenses"
+        auto = false
+        showLive(l)
+    }
+
+    private fun takePhoto() {
+        try { startActivityForResult(Intent(MediaStore.ACTION_IMAGE_CAPTURE), REQ_PHOTO) }
+        catch (_: Throwable) { caption.text = "No camera app was found to take the photo." }
+    }
+
+    private fun openCameraApp() {
+        try { startActivity(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)) }
+        catch (_: Throwable) { caption.text = "No camera app was found." }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQ_PHOTO || resultCode != RESULT_OK) return
+        @Suppress("DEPRECATION")
+        val b = data?.extras?.get("data") as? Bitmap ?: return
+        val l = live ?: return
+        if (!l.manual) return
+        l.snap = b
+        still.setImageBitmap(b)
+        paintTile(l)
+        caption.text = "Photo received. Is it clear, in focus and free of spots? Mark it below."
+    }
+
     private fun paintTile(l: Lens) {
         val sel = l === live
         val bad = l.state == "fail" || l.mark == -1 || (l.state == "black" && l.mark != 1)
@@ -298,7 +400,8 @@ class CameraTestActivity : Activity() {
         l.tile.background = round(0xFF0B1016.toInt(), stroke, 12f, if (sel) 2f else 1f)
         l.status.text = when (l.state) {
             "ok" -> "Working"; "black" -> "Black picture (covered?)"; "fail" -> "Could not open"
-            "off" -> "Not available to apps"; "depth" -> "Depth sensor (no picture)"; "checking" -> "Checking…"; else -> "Waiting"
+            "off" -> "Not available to apps"; "depth" -> "Depth sensor (no picture)"; "checking" -> "Checking…"
+            "manual" -> if (l.snap != null) "Photo from camera app" else "Check in camera app"; else -> "Waiting"
         }
         l.status.setTextColor(when (l.state) { "fail", "black" -> BAD; "ok" -> ACC; else -> MUTED })
         l.markV.visibility = if (l.mark == 0) View.GONE else View.VISIBLE
@@ -307,15 +410,25 @@ class CameraTestActivity : Activity() {
         l.snap?.let { l.img.setImageBitmap(it) }
     }
 
-    private fun setState(l: Lens, st: String, note: String = "") { l.state = st; l.note = note; paintTile(l) }
+    private fun setState(l: Lens, st: String, note: String = "") { l.state = st; l.note = note; paintTile(l); updateSummary() }
+
+    /** Running result under the title: working, problems, still to mark. */
+    private fun updateSummary() {
+        val use = lenses.filter { it.state != "off" && it.state != "depth" && !(it.manual && it.mark == 0) }
+        val bad = use.count { it.state == "fail" || it.mark == -1 || (it.state == "black" && it.mark != 1) }
+        val todo = lenses.count { it.mark == 0 && (it.state == "ok" || it.state == "black" || it.manual) }
+        sub.text = "${lenses.size} lenses · ${use.size - bad} OK · $bad problem${if (bad == 1) "" else "s"}" + if (todo > 0) " · $todo to mark" else ""
+    }
 
     // ---------------------------------------------------------------- checking and live view
 
     /** Goes through every lens once: open it, keep a picture, move on. */
     private fun autoCheck(i: Int) {
         if (!auto || finished) return
+        autoIdx = i
         val l = lenses.getOrNull(i)
         if (l == null) { auto = false; afterAuto(); return }
+        if (l.manual) { autoCheck(i + 1); return }
         if (l.depthOnly) { setState(l, "depth"); autoCheck(i + 1); return }
         select(l)
         setState(l, "checking")
@@ -335,7 +448,9 @@ class CameraTestActivity : Activity() {
     private fun afterAuto() {
         val ok = lenses.count { it.state == "ok" }
         val first = lenses.firstOrNull { it.state == "ok" || it.state == "black" }
-        caption.text = "$ok of ${lenses.count { !it.depthOnly }} lenses gave a picture. Tap any lens to see it live, then mark it."
+        val back = lenses.count { it.facing == CameraCharacteristics.LENS_FACING_BACK && !it.manual }
+        caption.text = "$ok of ${lenses.count { !it.depthOnly && !it.manual }} lenses gave a picture. Tap a lens to see it live and mark it. " +
+            "This phone lets apps use $back back lens${if (back == 1) "" else "es"}; if it has more, tap + Add a lens."
         if (first != null) showLive(first) else { viewName.visibility = View.GONE }
     }
 
@@ -343,6 +458,11 @@ class CameraTestActivity : Activity() {
     private fun showLive(l: Lens) {
         live?.let { if (it !== l && it.state == "ok") snapshot(it) }
         select(l)
+        if (l.manual) {
+            openSeq++; closeCam {}
+            caption.text = if (l.snap == null) "Take a photo with this lens in the camera app, then mark it." else "Is the photo clear, in focus and free of spots? Mark it below."
+            return
+        }
         if (!auto) caption.text = "Opening ${l.name}…"
         openLens(l, onFrame = {
             if (l.state != "black") setState(l, "ok")
@@ -360,6 +480,9 @@ class CameraTestActivity : Activity() {
         paintTile(l)
         viewName.text = l.name
         viewName.visibility = View.VISIBLE
+        panel.visibility = if (l.manual) View.VISIBLE else View.GONE
+        still.visibility = if (l.manual) View.VISIBLE else View.GONE
+        still.setImageBitmap(if (l.manual) l.snap else null)
         paintMarks()
     }
 
@@ -369,11 +492,12 @@ class CameraTestActivity : Activity() {
         l.mark = if (l.mark == v) 0 else v
         if (l.state == "ok") snapshot(l)
         paintTile(l); paintMarks()
+        updateSummary()
         if (l.mark != 0) {
             // go on to the next lens that still needs a mark
-            val next = lenses.firstOrNull { it.mark == 0 && (it.state == "ok" || it.state == "black") }
+            val next = lenses.firstOrNull { it.mark == 0 && (it.state == "ok" || it.state == "black" || it.manual) }
             if (next != null) main.postDelayed({ if (!finished && live === l) showLive(next) }, 350)
-            else caption.text = "All lenses marked. Tap Done."
+            else caption.text = "All lenses marked. Tap Done to see the result."
         }
     }
 
@@ -441,6 +565,7 @@ class CameraTestActivity : Activity() {
                         try {
                             val req = dev.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW).apply {
                                 addTarget(sf); set(CaptureRequest.CONTROL_MODE, CaptureRequest.CONTROL_MODE_AUTO)
+                                if (l.zoom != 1f && Build.VERSION.SDK_INT >= 30) set(CaptureRequest.CONTROL_ZOOM_RATIO, l.zoom)
                             }.build()
                             s.setRepeatingRequest(req, object : CameraCaptureSession.CaptureCallback() {
                                 var n = 0
@@ -462,7 +587,7 @@ class CameraTestActivity : Activity() {
                 } catch (e: Throwable) { fail(e.message ?: "error") }
             }
             try {
-                cm.openCamera(l.parent ?: l.id, object : CameraDevice.StateCallback() {
+                cm.openCamera(l.parent ?: l.openId, object : CameraDevice.StateCallback() {
                     override fun onOpened(d: CameraDevice) {
                         if (seq != openSeq) { d.close(); return }
                         device = d
@@ -480,7 +605,7 @@ class CameraTestActivity : Activity() {
         fun sizes(id: String): Array<Size>? = try {
             cm.getCameraCharacteristics(id).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)?.getOutputSizes(SurfaceTexture::class.java)
         } catch (_: Throwable) { null }
-        val all = (sizes(l.id) ?: l.parent?.let { sizes(it) } ?: emptyArray()).filter { it.width <= 1600 && it.height <= 1200 }
+        val all = (sizes(l.openId) ?: l.parent?.let { sizes(it) } ?: emptyArray()).filter { it.width <= 1600 && it.height <= 1200 }
         val four3 = all.filter { abs(it.width * 3 - it.height * 4) < 8 }
         return four3.ifEmpty { all }.maxByOrNull { it.width * it.height } ?: Size(1280, 960)
     }
@@ -539,6 +664,7 @@ class CameraTestActivity : Activity() {
 
     companion object {
         private const val REQ_CAMERA = 21
+        private const val REQ_PHOTO = 22
         private const val WHITE = 0xFFF0F6FC.toInt()
         private const val MUTED = 0xFF8B98A5.toInt()
         private const val ACC = 0xFF2DD4BF.toInt()
