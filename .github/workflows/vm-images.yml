@@ -1,0 +1,86 @@
+# Builds the downloads for CoreKit's Virtual Environment and publishes them on the
+# "vm-images" pre-release (not on every push):
+#   android9-lite.iso  slimmed Android-x86 9.0-r2 (tools/vm/slim.sh)
+#   data8g.ckt         empty 8 GB data-disk template (tools/vm/mktemplate.py)
+#   qemu-win64.zip     QEMU for Windows (from qemu.weilnetz.de), trimmed
+# Sources: Android-x86 https://www.android-x86.org (Apache 2.0, Linux kernel GPLv2),
+#          QEMU https://www.qemu.org (GPLv2). Their source code is available there.
+name: Virtual Environment images
+on:
+  workflow_dispatch:
+  push:
+    branches: [vm-images-build]
+permissions:
+  contents: write
+jobs:
+  android9:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 libarchive-tools squashfs-tools xorriso e2fsprogs
+          sudo chmod 666 /dev/kvm || true
+      - name: Official Android-x86 9.0-r2
+        timeout-minutes: 25
+        run: |
+          for i in 1 2 3 4 5 6; do
+            curl -fL -A corekit -C - --connect-timeout 20 --speed-limit 200000 --speed-time 25 -o /tmp/a9.iso "https://sourceforge.net/projects/android-x86/files/Release%209.0/android-x86_64-9.0-r2.iso/download" && break
+            echo "retry $i"; sleep 3
+          done
+          echo "f7eb8fc56f29ad5432335dc054183acf086c539f3990f0b6e9ff58bd6df4604e  /tmp/a9.iso" | sha256sum -c
+      - run: mkdir -p out && TEST_APK=$PWD/test.apk bash tools/vm/slim.sh /tmp/a9.iso out/android9-lite.iso
+      - run: python3 tools/vm/mktemplate.py out/data8g.ckt 8
+      - name: Boot test
+        timeout-minutes: 30
+        run: python3 -u tools/vm/probe2.py $PWD/out/android9-lite.iso "" kvm 10 $PWD/test.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: android9, path: out/ }
+  qemu-win:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq p7zip-full zip
+      - name: QEMU for Windows
+        run: |
+          set -e
+          f=$(curl -fsSL https://qemu.weilnetz.de/w64/ | grep -oE 'qemu-w64-setup-[0-9]+\.exe' | sort -u | tail -1)
+          echo "using $f"
+          curl -fsSL -o /tmp/q.exe "https://qemu.weilnetz.de/w64/$f"
+          curl -fsSL "https://qemu.weilnetz.de/w64/${f%.exe}.sha512" -o /tmp/q.sha512 && (cd /tmp && sed "s/ .*/  q.exe/" q.sha512 | sha512sum -c) || echo "no sha512 published"
+          mkdir -p /tmp/x && 7z x -y -o/tmp/x /tmp/q.exe >/dev/null
+          mkdir -p /tmp/z/share
+          cp /tmp/x/qemu-system-x86_64.exe /tmp/z/
+          cp /tmp/x/*.dll /tmp/z/
+          for b in bios-256k.bin kvmvapic.bin linuxboot_dma.bin linuxboot.bin vgabios-stdvga.bin vgabios.bin efi-virtio.rom efi-e1000.rom pxe-virtio.rom multiboot_dma.bin; do
+            [ -f /tmp/x/share/$b ] && cp /tmp/x/share/$b /tmp/z/share/ || ([ -f /tmp/x/$b ] && cp /tmp/x/$b /tmp/z/share/) || true
+          done
+          [ -d /tmp/x/share/keymaps ] && cp -r /tmp/x/share/keymaps /tmp/z/share/ || true
+          printf 'QEMU %s for Windows (https://qemu.weilnetz.de), repackaged for CoreKit.\nQEMU is free software under the GNU GPL v2; source: https://www.qemu.org/download/#source\n' "$f" > /tmp/z/README-CoreKit.txt
+          ls -la /tmp/z /tmp/z/share; du -sh /tmp/z
+          mkdir -p out && (cd /tmp/z && zip -q -9 -r $GITHUB_WORKSPACE/out/qemu-win64.zip .)
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with: { name: qemuwin, path: out/ }
+  qemu-win-test:
+    needs: qemu-win
+    runs-on: windows-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: qemuwin, path: q }
+      - shell: pwsh
+        run: |
+          Expand-Archive q/qemu-win64.zip -DestinationPath qx
+          ./qx/qemu-system-x86_64.exe -version
+          ./qx/qemu-system-x86_64.exe -accel help
+  publish:
+    needs: [android9, qemu-win-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd out && ls -la && sha256sum * | tee SHA256SUMS
+          stat -c '%n %s' * | tee SIZES
+          gh release view vm-images -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create vm-images -R "$GITHUB_REPOSITORY" --prerelease --title "Virtual Environment images" --notes "Downloads used by CoreKit's Virtual Environment. Android-x86 (android-x86.org, Apache 2.0 / Linux kernel GPLv2) and QEMU (qemu.org, GPLv2); source code is available from those projects."
+          gh release upload vm-images -R "$GITHUB_REPOSITORY" * --clobber

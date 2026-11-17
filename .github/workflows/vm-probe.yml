@@ -1,0 +1,37 @@
+name: VM probe (experiment)
+on:
+  push:
+    branches: [vm-exp*]
+jobs:
+  slim:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        comp: [gzip, xz]
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 libarchive-tools squashfs-tools xorriso e2fsprogs
+          sudo chmod 666 /dev/kvm
+      - name: Official Android 9
+        run: |
+          for i in 1 2 3 4 5 6; do
+            curl -fL -A corekit -C - --connect-timeout 20 --speed-limit 200000 --speed-time 25 -o /tmp/a9.iso "https://sourceforge.net/projects/android-x86/files/Release%209.0/android-x86_64-9.0-r2.iso/download" && break
+            echo "retry $i"; sleep 3
+          done
+          echo "f7eb8fc56f29ad5432335dc054183acf086c539f3990f0b6e9ff58bd6df4604e  /tmp/a9.iso" | sha256sum -c
+        timeout-minutes: 25
+      - name: Slim it
+        run: SQ_COMP=${{ matrix.comp }} TEST_APK=$PWD/test.apk bash tools/vm/slim.sh /tmp/a9.iso $PWD/android9-lite.iso; ls -la test.apk
+      - name: Boot test (KVM)
+        run: python3 -u tools/vm/probe2.py $PWD/android9-lite.iso "" kvm 10 $PWD/test.apk
+        timeout-minutes: 30
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: slim-${{ matrix.comp }}
+          path: |
+            android9-lite.iso
+            test.apk
+            *.log
