@@ -142,6 +142,7 @@ func runPicker() {
 					}
 					// asked when the profile is made: proxy (none, a saved one or a new link) and ad blocker
 					np := &brProfile{ID: newID(), Name: name, Color: color, Search: "google", Created: time.Now().Unix(), NoAdblock: !m.On}
+					np.setStartup(m.Engine, m.URL)
 					var px *brProxy
 					switch m.ID {
 					case "":

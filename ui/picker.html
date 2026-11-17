@@ -38,6 +38,7 @@ h1{margin:22px 0 4px;font:600 21px var(--fontd);color:var(--white);animation:in 
 .form select{height:34px;border-radius:9px;border:1px solid #223042;background:#0c1219;padding:0 8px;outline:none;color:var(--white)}
 .form textarea{min-height:64px;resize:vertical;border-radius:9px;border:1px solid #223042;background:#0c1219;padding:8px 10px;outline:none;color:var(--white);font-size:12px;user-select:text;word-break:break-all}
 .form .err{display:none;color:#fca5a5;font-size:12px}
+.form .hint{color:var(--muted);font-size:11.5px;margin-top:-4px}.form .hint.dng{color:#fca5a5}
 .tg{display:flex;align-items:center;gap:10px;cursor:pointer;color:var(--white);font-size:13px}
 .tg input{display:none}.tg .sw{width:34px;height:20px;border-radius:10px;background:#223042;position:relative;flex:none;transition:background .15s}
 .tg .sw::after{content:"";position:absolute;left:3px;top:3px;width:14px;height:14px;border-radius:50%;background:#8b98a5;transition:transform .15s,background .15s}
@@ -88,6 +89,10 @@ function render() {
         <select id="px"><option value="">No proxy (direct)</option>${(S.proxies || []).map(x => `<option value="${esc(x.id)}"${x.id === S.default ? " selected" : ""}>${esc(x.name)}</option>`).join("")}<option value="new">Add a proxy / VPN link…</option></select>
         <textarea id="lk" spellcheck="false" placeholder="Paste a vless://, vmess://, trojan://, ss:// or socks:// link" style="display:none"></textarea>
         <div class="err" id="err"></div>
+        <div class="fl">ON START</div>
+        <select id="st"><option value="restore">Continue where you left off</option><option value="newtab">Open a new tab</option><option value="page">Open a specific page…</option><option value="clear">Clear everything when closed</option></select>
+        <input id="pg" spellcheck="false" placeholder="Page address, e.g. example.com" style="display:none">
+        <div class="hint" id="stH">Reopens your tabs. Logins and history are kept.</div>
         <label class="tg"><input type="checkbox" id="ab" checked><span class="sw"></span><span>Ad blocker<small>Blocks ads and trackers</small></span></label>
         <div class="row">${S.profiles.length ? '<button class="btn" data-a="cancel">Cancel</button>' : ''}<button class="btn pri" data-a="create">Create &amp; check</button></div></div>`
       : `<div class="card add" tabindex="0" data-a="add"><span class="av"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span><span class="nm">Add profile</span><span class="px">&nbsp;</span></div>`);
@@ -104,12 +109,20 @@ function create() {
   const n = document.getElementById("nm").value.trim(); if (!n) { document.getElementById("nm").focus(); return; }
   const px = document.getElementById("px").value, link = document.getElementById("lk").value.trim();
   if (px === "new" && !link) { fieldErr("Paste the proxy link first.", "lk"); return; }
+  const st = document.getElementById("st").value, pg = document.getElementById("pg").value.trim();
+  if (st === "page" && !pg) { fieldErr("Type the page to open at start.", "pg"); return; }
   fieldErr("");
   document.getElementById("opT").textContent = "Creating " + n + "…"; document.getElementById("op").classList.add("show");
-  send({t:"new", name:n, color, id:px, link:px === "new" ? link : "", on:document.getElementById("ab").checked});
+  send({t:"new", name:n, color, id:px, link:px === "new" ? link : "", on:document.getElementById("ab").checked, engine:st, url:st === "page" ? pg : ""});
 }
 document.getElementById("grid").addEventListener("input", e => { if (e.target.id === "lk") fieldErr(""); });
 document.getElementById("grid").addEventListener("change", e => {
+  if (e.target.id === "st") {
+    const v = e.target.value, h = document.getElementById("stH");
+    document.getElementById("pg").style.display = v === "page" ? "block" : "none"; if (v === "page") document.getElementById("pg").focus();
+    h.textContent = {restore:"Reopens your tabs. Logins and history are kept.", newtab:"Starts fresh. Logins and history are kept.", page:"Starts with this page. Logins and history are kept.", clear:"Signs you out and erases cookies, history, cache and tabs each time the browser closes."}[v];
+    h.classList.toggle("dng", v === "clear"); fieldErr("");
+  }
   if (e.target.id === "px") { const nw = e.target.value === "new"; document.getElementById("lk").style.display = nw ? "block" : "none"; fieldErr(""); if (nw) document.getElementById("lk").focus(); }
 });
 function open(id) {
@@ -131,7 +144,7 @@ document.getElementById("grid").addEventListener("click", e => {
 });
 document.addEventListener("keydown", e => {
   if (e.key === "Enter") {
-    if (e.target.id === "nm") { create(); return; }
+    if (e.target.id === "nm" || e.target.id === "pg") { create(); return; }
     if (e.target.tagName === "TEXTAREA") return;
     const c = document.activeElement && document.activeElement.closest(".card");
     if (c) { c.click(); e.preventDefault(); }
