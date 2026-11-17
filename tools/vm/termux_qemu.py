@@ -14,8 +14,14 @@ out, share = sys.argv[1], sys.argv[2]
 os.makedirs(out, exist_ok=True); os.makedirs(share, exist_ok=True)
 
 def get(url):
-    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "corekit-ci"}), timeout=120) as r:
-        return r.read()
+    import time
+    for i in range(6):
+        try:
+            with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "corekit-ci"}), timeout=120) as r:
+                return r.read()
+        except Exception as e:
+            print("retry", url, e, flush=True); time.sleep(3 + 5 * i)
+    raise SystemExit("download failed: " + url)
 
 idx = get(REPO + f"dists/stable/main/binary-{ARCH}/Packages")
 pk = {}
