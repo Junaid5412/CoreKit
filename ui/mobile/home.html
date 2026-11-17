@@ -6,38 +6,80 @@
 <title>CoreKit</title>
 <meta name="color-scheme" content="dark">
 <style>
-:root{--bg:#0a0e13;--panel:#10161e;--line:#1a2431;--acc:#2dd4bf;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;
-  --font:"Segoe UI",Roboto,system-ui,sans-serif}
+:root{--bg:#0a0e13;--panel:#10161e;--panel2:#0d131a;--line:#1a2431;--acc:#2dd4bf;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;--red:#fca5a5;
+  --font:"Segoe UI",Roboto,system-ui,sans-serif;--hh:58px}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;min-height:100%;background:var(--bg);color:#c9d1d9;font:14px/1.45 var(--font);-webkit-font-smoothing:antialiased;user-select:none}
-body{padding:max(22px,env(safe-area-inset-top)) 18px 28px;background:radial-gradient(520px 380px at 50% 0%,rgba(45,212,191,.09),transparent 70%),var(--bg)}
-.top{display:flex;align-items:center;gap:12px;animation:in .45s ease both}
-.top svg{width:38px;height:38px;flex:none}
-.top b{font:700 22px var(--font);color:var(--white);letter-spacing:.3px}.top b span{color:var(--acc)}
-.top small{display:block;color:var(--muted);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:1px}
-.dev{margin:20px 0 6px;padding:14px 16px;border-radius:14px;background:var(--panel);border:1px solid var(--line);display:grid;grid-template-columns:auto 1fr;gap:5px 14px;font-size:12.5px;animation:in .45s .05s ease both}
+body{background:radial-gradient(520px 380px at 50% 0%,rgba(45,212,191,.08),transparent 70%),var(--bg)}
+button{font:inherit;color:inherit}
+svg.i{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+/* header */
+.hdr{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:6px;height:calc(var(--hh) + env(safe-area-inset-top));padding:env(safe-area-inset-top) 8px 0;background:rgba(10,14,19,.86);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid transparent;transition:border-color .2s}
+.hdr.sc{border-bottom-color:var(--line)}
+.hb{width:44px;height:44px;border-radius:13px;border:0;background:transparent;display:grid;place-items:center;color:var(--white);cursor:pointer}
+.hb:active{background:#141c26}
+.hb.exit{color:var(--red)}.hb.exit:active{background:#2a1215}
+.brand{flex:1;display:flex;align-items:center;gap:10px;min-width:0}
+.brand svg{width:30px;height:30px;flex:none}
+.brand b{font:700 19px var(--font);color:var(--white);letter-spacing:.3px}.brand b span{color:var(--acc)}
+
+main{padding:6px 16px calc(28px + env(safe-area-inset-bottom))}
+.hello{margin:12px 2px 14px;animation:in .45s ease both}
+.hello h1{margin:0;font:600 21px var(--font);color:var(--white)}
+.hello p{margin:3px 0 0;color:var(--muted2);font-size:13px}
+.dev{padding:14px 16px;border-radius:16px;background:var(--panel);border:1px solid var(--line);display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12.5px;animation:in .45s .05s ease both}
 .dev span:nth-child(odd){color:var(--muted)}.dev span:nth-child(even){color:var(--white);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 h2{margin:22px 4px 10px;font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted)}
-.mod{display:flex;align-items:center;gap:14px;padding:16px;margin-bottom:10px;border-radius:16px;background:var(--panel);border:1px solid var(--line);color:inherit;text-decoration:none;transition:transform .12s,border-color .15s;animation:in .45s ease both}
+.mods{display:grid;grid-template-columns:1fr;gap:10px}
+.mod{display:flex;align-items:center;gap:14px;padding:15px;border-radius:16px;background:var(--panel);border:1px solid var(--line);color:inherit;text-decoration:none;transition:transform .12s,border-color .15s;animation:in .45s ease both;min-width:0}
 .mod:active{transform:scale(.98);border-color:#2a3c50}
-.mod .ic{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;flex:none;background:#10262a;color:var(--acc)}
-.mod .ic svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mod .ic{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;flex:none;background:#10262a;color:var(--acc)}
 .mod .t{flex:1;min-width:0}
-.mod .t b{display:block;color:var(--white);font-size:15.5px;font-weight:600}
-.mod .t small{color:var(--muted2);font-size:12.5px}
-.mod .n{font:700 12px var(--font);color:var(--muted);width:24px;height:24px;border-radius:7px;border:1px solid var(--line);display:grid;place-items:center}
-.mod.soon{opacity:.55}
-.mod .tag{font-size:10px;font-weight:700;letter-spacing:.8px;color:#fbbf24;background:#2a2312;border-radius:5px;padding:2px 6px}
-.row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:14px;background:var(--panel);border:1px solid var(--line);margin-bottom:10px}
-.row .t{flex:1}.row .t b{display:block;color:var(--white);font-weight:600}.row .t small{color:var(--muted);font-size:12px}
-.sw{position:relative;width:46px;height:26px;border-radius:13px;background:#1f2b3a;border:0;flex:none;transition:background .2s}
-.sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#8b98a5;transition:left .22s,background .2s}
-.sw.on{background:var(--acc)}.sw.on::after{left:23px;background:#03201c}
-.exit{width:100%;margin-top:14px;height:48px;border-radius:14px;border:1px solid #3a1a20;background:#1a0f12;color:#fca5a5;font:600 14px var(--font)}
-.ft{text-align:center;color:#3c4652;font-size:11.5px;margin-top:18px}
+.mod .t b{display:block;color:var(--white);font-size:15px;font-weight:600}
+.mod .t small{display:block;color:var(--muted2);font-size:12.5px;overflow:hidden;text-overflow:ellipsis}
+.mod .go{color:#3c4a59}
+@media (min-width:620px){.mods{grid-template-columns:1fr 1fr}main{max-width:900px;margin:0 auto}}
+.ft{text-align:center;color:#3c4652;font-size:11.5px;margin-top:22px}
 @keyframes in{from{opacity:0;transform:translateY(8px)}}
+
+/* side menu */
+.scrim{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .25s}
+.scrim.show{opacity:1;pointer-events:auto}
+.side{position:fixed;top:0;bottom:0;left:0;z-index:41;width:min(84vw,330px);background:#0c1117;border-right:1px solid var(--line);transform:translateX(-102%);transition:transform .28s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;padding:calc(14px + env(safe-area-inset-top)) 12px calc(14px + env(safe-area-inset-bottom));overflow-y:auto;box-shadow:20px 0 60px rgba(0,0,0,.4)}
+.side.show{transform:none}
+.side .sh{display:flex;align-items:center;gap:12px;padding:6px 8px 16px;border-bottom:1px solid var(--line);margin-bottom:8px}
+.side .sh svg{width:40px;height:40px;flex:none}
+.side .sh b{display:block;font:700 18px var(--font);color:var(--white)}.side .sh b span{color:var(--acc)}
+.side .sh small{color:var(--muted);font-size:12px}
+.sec{margin:14px 10px 6px;font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:700}
+.it{display:flex;align-items:center;gap:13px;width:100%;min-height:46px;padding:8px 10px;border-radius:12px;border:0;background:transparent;color:#d6dde5;text-align:left;text-decoration:none;cursor:pointer}
+.it:active{background:#141c26}
+.it.on{background:#0f2420;color:var(--acc)}
+.it svg.i{width:20px;height:20px;color:var(--muted2)}.it.on svg.i{color:var(--acc)}
+.it .tx{flex:1;min-width:0}.it .tx b{display:block;font-weight:500;font-size:14px}.it .tx small{display:block;color:var(--muted);font-size:11.5px;line-height:1.3;margin-top:1px}
+.it.red{color:var(--red)}.it.red svg.i{color:var(--red)}
+.sw{position:relative;width:44px;height:25px;border-radius:13px;background:#1f2b3a;flex:none;transition:background .2s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#8b98a5;transition:left .22s,background .2s}
+.sw.on{background:var(--acc)}.sw.on::after{left:22px;background:#03201c}
+.side .grow{flex:1;min-height:12px}
+.side .ver{color:#3c4652;font-size:11px;text-align:center;margin-top:8px}
+
+/* exit confirm */
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:50;padding:20px 18px calc(18px + env(safe-area-inset-bottom));background:#10161e;border-top:1px solid var(--line);border-radius:20px 20px 0 0;transform:translateY(105%);transition:transform .25s ease}
+.sheet.show{transform:none}
+.sheet h3{margin:0 0 4px;color:var(--white);font:600 17px var(--font)}
+.sheet p{margin:0 0 16px;color:var(--muted2);font-size:13px}
+.sheet .row{display:flex;gap:10px}
+.btn{flex:1;height:48px;border-radius:14px;border:1px solid var(--line);background:#141c26;color:var(--white);font-weight:600;cursor:pointer}
+.btn.dng{background:#3a1218;border-color:#5a2a31;color:#fecaca}
+
+/* toast */
+#toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#16212d;border:1px solid #243446;color:var(--white);padding:10px 16px;border-radius:11px;font-size:13px;transition:all .25s;z-index:60;max-width:90vw;text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+
 /* goodbye */
-#bye{position:fixed;inset:0;background:#05080b;display:none;flex-direction:column;justify-content:center;padding:28px;font:13px/1.5 "Cascadia Mono",Consolas,"Roboto Mono",monospace;color:#c9d1d9}
+#bye{position:fixed;inset:0;z-index:70;background:#05080b;display:none;flex-direction:column;justify-content:center;padding:28px;font:13px/1.5 "Cascadia Mono",Consolas,"Roboto Mono",monospace;color:#c9d1d9}
 #bye.show{display:flex}
 #bye .l{white-space:pre;opacity:0;transition:opacity .2s}#bye .l.v{opacity:1}
 #bye .ok{color:#3fdc8a}
@@ -47,51 +89,146 @@ h2{margin:22px 4px 10px;font-size:11px;letter-spacing:1.6px;text-transform:upper
 </style>
 </head>
 <body>
-<div class="top">
-  <svg viewBox="0 0 48 48"><path d="M24 5 40.5 14.5v19L24 43 7.5 33.5v-19z" fill="none" stroke="#2dd4bf" stroke-width="3.4" stroke-linejoin="round"/><path d="M24 18.5 28.8 21.3v5.4L24 29.5l-4.8-2.8v-5.4z" fill="#2dd4bf"/></svg>
-  <div><b>Core<span>Kit</span></b><small>System toolkit · <span id="ver"></span></small></div>
+<header class="hdr" id="hdr">
+  <button class="hb" id="menuBtn" aria-label="Menu"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <div class="brand">
+    <svg viewBox="0 0 48 48"><path d="M24 5 40.5 14.5v19L24 43 7.5 33.5v-19z" fill="none" stroke="#2dd4bf" stroke-width="3.6" stroke-linejoin="round"/><path d="M24 18.5 28.8 21.3v5.4L24 29.5l-4.8-2.8v-5.4z" fill="#2dd4bf"/></svg>
+    <b>Core<span>Kit</span></b>
+  </div>
+  <button class="hb exit" id="exitBtn" aria-label="Exit CoreKit"><svg class="i" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></button>
+</header>
+
+<main>
+  <div class="hello"><h1 id="greet">Welcome</h1><p>Pick a tool to get started.</p></div>
+  <div class="dev" id="dev"></div>
+  <h2>Modules</h2>
+  <div class="mods" id="mods"></div>
+  <div class="ft">Same toolkit on Windows, Android and Linux</div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<nav class="side" id="side" aria-label="Menu">
+  <div class="sh">
+    <svg viewBox="0 0 48 48"><path d="M24 5 40.5 14.5v19L24 43 7.5 33.5v-19z" fill="none" stroke="#2dd4bf" stroke-width="3.4" stroke-linejoin="round"/><path d="M24 18.5 28.8 21.3v5.4L24 29.5l-4.8-2.8v-5.4z" fill="#2dd4bf"/></svg>
+    <div style="min-width:0"><b>Core<span>Kit</span></b><small id="sideDev">System toolkit</small></div>
+  </div>
+  <button class="it on" data-close><svg class="i" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span class="tx"><b>Home</b></span></button>
+  <div class="sec">Modules</div>
+  <div id="sideMods"></div>
+  <div class="sec">Settings</div>
+  <button class="it" id="shieldRow"><svg class="i" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9.5 12.5 11 14l3.5-3.5"/></svg><span class="tx"><b>Privacy: block screenshots</b><small>Screenshots, screen recording and remote viewers see black</small></span><span class="sw" id="shield"></span></button>
+  <button class="it" id="perms"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="tx"><b>App permissions</b><small>Camera, microphone, notifications, location</small></span></button>
+  <div class="grow"></div>
+  <button class="it red" id="exitSide"><svg class="i" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg><span class="tx"><b>Exit CoreKit</b></span></button>
+  <div class="ver" id="ver"></div>
+</nav>
+
+<div class="scrim" id="sheetScrim"></div>
+<div class="sheet" id="sheet">
+  <h3>Exit CoreKit?</h3>
+  <p id="sheetP"></p>
+  <div class="row"><button class="btn" id="stay">Cancel</button><button class="btn dng" id="leave">Exit</button></div>
 </div>
-<div class="dev" id="dev"></div>
-
-<h2>Modules</h2>
-<a class="mod" href="health" style="animation-delay:.08s"><span class="ic"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span><span class="t"><b>Health Inspector</b><small>Battery, storage, memory, CPU, sensors + score</small></span><span class="n">1</span></a>
-<a class="mod" href="net" style="animation-delay:.12s"><span class="ic"><svg viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg></span><span class="t"><b>Internet Troubleshooter</b><small>Wi-Fi, DNS, HTTPS problems + speed test</small></span><span class="n">2</span></a>
-<a class="mod" id="br" href="browser" style="animation-delay:.16s"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span><span class="t"><b>Safe Browser</b><small>Private profiles + proxy / VPN, leak-checked</small></span><span class="n">3</span></a>
-<a class="mod" href="logs" style="animation-delay:.2s"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/></svg></span><span class="t"><b>Activity Log</b><small>Apps opened &amp; unlocks while you were away</small></span><span class="n">4</span></a>
-<a class="mod" href="remote" style="animation-delay:.24s"><span class="ic"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="m10 9 2 2 3-3"/></svg></span><span class="t"><b>Remote Access</b><small>Control your PC from this phone, or share it · calls</small></span><span class="n">5</span></a>
-
-<h2>Privacy</h2>
-<div class="row"><span class="t"><b>Hide from screenshots</b><small>Screenshots, recording and remote viewers see black</small></span><button class="sw" id="shield"></button></div>
-
-<button class="exit" id="exit">Exit CoreKit</button>
-<div class="ft">Same toolkit on Windows, Android and Linux</div>
-
+<div id="toast"></div>
 <div id="bye"></div>
 <script>
 "use strict";
 const N = window.CoreKitNative;
+const $ = s => document.querySelector(s);
 let info = {model: "This device", android: "", api: 0, version: "", shield: true};
 try { if (N) info = JSON.parse(N.info()); } catch (e) {}
-document.getElementById("ver").textContent = "v" + (info.version || "dev");
-document.getElementById("dev").innerHTML = `<span>Device</span><span>${info.model}</span><span>Android</span><span>${info.android}${info.api ? " (API " + info.api + ")" : ""}</span><span>Time</span><span>${new Date().toLocaleString(undefined, {day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"})}</span>`;
-const sw = document.getElementById("shield");
+
+const MODS = [
+  {href: "health", t: "Health Inspector", d: "Battery, storage, memory, CPU, sensors + score", ic: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'},
+  {href: "net", t: "Internet Troubleshooter", d: "Wi-Fi, DNS, HTTPS problems + speed test", ic: '<path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/>'},
+  {href: "browser", t: "Safe Browser", d: "Private profiles + proxy / VPN, leak-checked", ic: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'},
+  {href: "logs", t: "Activity Log", d: "Apps opened & unlocks while you were away", ic: '<path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/>'},
+  {href: "remote", t: "Remote Access", d: "Control your PC from this phone, or share it · calls", ic: '<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="m10 9 2 2 3-3"/>'}
+];
+const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
+const icon = p => `<svg class="i" viewBox="0 0 24 24">${p}</svg>`;
+$("#mods").innerHTML = MODS.map((m, i) => `<a class="mod" href="${m.href}" data-mod="${m.href}" style="animation-delay:${.08 + i * .04}s"><span class="ic">${icon(m.ic)}</span><span class="t"><b>${esc(m.t)}</b><small>${esc(m.d)}</small></span><svg class="i go" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></a>`).join("");
+$("#sideMods").innerHTML = MODS.map(m => `<a class="it" href="${m.href}" data-mod="${m.href}">${icon(m.ic)}<span class="tx"><b>${esc(m.t)}</b></span></a>`).join("");
+
+const h = new Date().getHours();
+$("#greet").textContent = h < 5 ? "Good evening" : h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+$("#ver").textContent = "CoreKit v" + (info.version || "dev");
+$("#sideDev").textContent = info.model || "System toolkit";
+$("#dev").innerHTML = `<span>Device</span><span>${esc(info.model)}</span><span>Android</span><span>${esc(info.android)}${info.api ? " (API " + info.api + ")" : ""}</span><span>Version</span><span>v${esc(info.version || "dev")}</span>`;
+
+// header gets a line once the page scrolls
+addEventListener("scroll", () => $("#hdr").classList.toggle("sc", scrollY > 4), {passive: true});
+
+// Safe Browser is a native screen
+document.addEventListener("click", e => {
+  const a = e.target.closest('[data-mod="browser"]');
+  if (a) { e.preventDefault(); closeMenu(); if (N && N.browser) N.browser(); }
+});
+
+/* side menu */
+const side = $("#side"), scrim = $("#scrim");
+function openMenu() { side.classList.add("show"); scrim.classList.add("show"); }
+function closeMenu() { side.classList.remove("show"); scrim.classList.remove("show"); }
+$("#menuBtn").onclick = openMenu;
+scrim.onclick = closeMenu;
+document.querySelectorAll("[data-close]").forEach(b => b.onclick = closeMenu);
+// swipe the menu closed
+(() => { let x0 = null; side.addEventListener("touchstart", e => { x0 = e.touches[0].clientX; }, {passive: true});
+  side.addEventListener("touchend", e => { if (x0 != null && x0 - e.changedTouches[0].clientX > 60) closeMenu(); x0 = null; }, {passive: true}); })();
+// swipe in from the left edge to open it
+(() => { let x0 = null; addEventListener("touchstart", e => { const x = e.touches[0].clientX; x0 = x < 24 ? x : null; }, {passive: true});
+  addEventListener("touchend", e => { if (x0 != null && e.changedTouches[0].clientX - x0 > 60) openMenu(); x0 = null; }, {passive: true}); })();
+
+/* settings */
+let toastT;
+function toast(m) { const t = $("#toast"); t.textContent = m; t.classList.add("show"); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove("show"), 2600); }
+const sw = $("#shield");
 sw.classList.toggle("on", !!info.shield);
-sw.onclick = () => { const on = !sw.classList.contains("on"); sw.classList.toggle("on", on); if (N) N.setShield(on); };
-document.getElementById("br").onclick = e => { e.preventDefault(); if (N && N.browser) N.browser(); };
+$("#shieldRow").onclick = () => {
+  const on = !sw.classList.contains("on"); sw.classList.toggle("on", on);
+  if (N && N.setShield) N.setShield(on);
+  toast(on ? "Screenshots blocked" : "Screenshots allowed");
+};
+$("#perms").onclick = () => { closeMenu(); try { N.remoteOpen("appinfo"); } catch (e) {} };
+
+/* exit */
+const sheet = $("#sheet"), sheetScrim = $("#sheetScrim");
+function askExit() {
+  closeMenu(); $("#toast").classList.remove("show");
+  let st = {};
+  try { st = JSON.parse((N && N.remoteStatus && N.remoteStatus()) || "{}"); } catch (e) {}
+  $("#sheetP").textContent = st.sharing || st.session
+    ? "Remote Access is running. Exiting stops sharing and ends the session."
+    : "CoreKit will close and clear its temporary data.";
+  sheet.classList.add("show"); sheetScrim.classList.add("show");
+}
+function closeSheet() { sheet.classList.remove("show"); sheetScrim.classList.remove("show"); }
+$("#exitBtn").onclick = askExit;
+$("#exitSide").onclick = askExit;
+$("#stay").onclick = closeSheet;
+sheetScrim.onclick = closeSheet;
+$("#leave").onclick = () => { closeSheet(); goodbye(); };
+
+// Android Back: close the menu or the exit sheet first
+window.__ckBack = () => {
+  if (sheet.classList.contains("show")) { closeSheet(); return true; }
+  if (side.classList.contains("show")) { closeMenu(); return true; }
+  return false;
+};
 
 // 3-second goodbye, like the terminal version
-document.getElementById("exit").onclick = () => {
-  const el = document.getElementById("bye"); el.classList.add("show");
-  const lines = ["[+]  Stopping proxy tunnels", "[+]  Removing temporary files", "[+]  Wiping decrypted settings from memory"];
+function goodbye() {
+  const el = $("#bye"); el.classList.add("show");
+  const lines = ["[+]  Stopping remote sessions", "[+]  Stopping proxy tunnels", "[+]  Removing temporary files", "[+]  Wiping decrypted settings from memory"];
   el.innerHTML = '<div style="color:#2dd4bf;letter-spacing:3px">C O R E K I T <span style="color:#6b7785;letter-spacing:0">// shutting down securely</span></div><br>' +
     lines.map(l => `<div class="l"><span class="ok">${l.slice(0, 3)}</span>${l.slice(3)}</div>`).join("") + '<div class="big">GOODBYE</div><div class="msg"></div>';
   const ls = el.querySelectorAll(".l");
-  ls.forEach((l, i) => setTimeout(() => l.classList.add("v"), 200 + i * 260));
-  setTimeout(() => el.querySelector(".big").classList.add("v"), 1050);
+  ls.forEach((l, i) => setTimeout(() => l.classList.add("v"), 200 + i * 220));
+  setTimeout(() => el.querySelector(".big").classList.add("v"), 1100);
   const msg = "Stay secure. See you next time.", m = el.querySelector(".msg");
   [...msg].forEach((c, i) => setTimeout(() => m.textContent += c, 1650 + i * 22));
   setTimeout(() => { if (N) N.exit(); }, 3000);
-};
+}
 </script>
 </body>
 </html>

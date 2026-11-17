@@ -75,7 +75,28 @@ class MainActivity : Activity() {
         web.addJavascriptInterface(host.bridge, "CoreKitNative")
         WebView.setWebContentsDebuggingEnabled(false)
         if (savedInstanceState != null) web.restoreState(savedInstanceState)
-        else web.loadUrl(Host.BASE + "home")
+        else web.loadUrl(Host.BASE + if (intent?.action == ACTION_OPEN_REMOTE) "remote" else "home")
+    }
+
+    /** A Remote Access notification was tapped: show the Remote Access screen. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == ACTION_OPEN_REMOTE && !(web.url ?: "").endsWith("/remote")) web.loadUrl(Host.BASE + "remote")
+        else web.evaluateJavascript("window.__ckStatus&&__ckStatus()", null)
+    }
+
+    /** While viewing another device: screen stays on; wide screens turn the phone sideways. */
+    fun setViewerMode(on: Boolean, landscape: Boolean) = runOnUiThread {
+        if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        requestedOrientation = if (on && landscape) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        // the remote screen gets the whole display; swipe from an edge to see the system bars
+        WindowInsetsControllerCompat(window, root).apply {
+            if (on) { hide(WindowInsetsCompat.Type.systemBars()); systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE }
+            else if (fullView == null) show(WindowInsetsCompat.Type.systemBars())
+        }
     }
 
     /** Camera / microphone for the hands-on tests, and full screen for the screen tests. */
@@ -212,9 +233,13 @@ class MainActivity : Activity() {
     override fun onBackPressed() {
         if (fullView != null) { chrome.onHideCustomView(); return }
         val u = web.url ?: ""
-        when {
-            u.endsWith("/home") -> @Suppress("DEPRECATION") super.onBackPressed()
-            else -> web.loadUrl(Host.BASE + "home")
+        // let the page handle Back first (close a menu, leave the viewer safely, …)
+        web.evaluateJavascript("(window.__ckBack&&window.__ckBack())===true") { handled ->
+            if (handled == "true") return@evaluateJavascript
+            when {
+                u.endsWith("/home") -> @Suppress("DEPRECATION") super.onBackPressed()
+                else -> { setViewerMode(false, false); web.loadUrl(Host.BASE + "home") }
+            }
         }
     }
 
@@ -233,6 +258,7 @@ class MainActivity : Activity() {
         private const val REQ_PROJECTION = 32
         private const val REQ_NOTIF = 33
         private const val REQ_NOTIF_ONLY = 34
+        const val ACTION_OPEN_REMOTE = "com.corekit.OPEN_REMOTE"
         @Volatile var current: MainActivity? = null
     }
 }

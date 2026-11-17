@@ -226,7 +226,13 @@ class Host(private val act: MainActivity, private val web: WebView) {
         try { act.startActivity(Intent(Intent.ACTION_VIEW, u).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Throwable) {}
     }
 
-    fun shutdown() { stopped = true; pool.shutdownNow() }
+    private class Rec(val out: OutputStream, val uri: Uri, val label: String) { var size = 0L }
+    private val recs = HashMap<String, Rec>()
+
+    fun shutdown() {
+        stopped = true; pool.shutdownNow()
+        synchronized(recs) { recs.values.forEach { try { it.out.close() } catch (_: Throwable) {} }; recs.clear() }
+    }
 
     // ---------------------------------------------------------------- JavaScript bridge
 
@@ -313,6 +319,54 @@ class Host(private val act: MainActivity, private val web: WebView) {
             RemoteEngine.cmd(act, json)
         }
 
+        /** Viewer on screen: keep the display on, and turn sideways for a wide (PC) screen. */
+        @JavascriptInterface fun viewer(on: Boolean, landscape: Boolean) = act.setViewerMode(on, landscape)
+
+        /** Keep a viewing session or a call running while CoreKit is in the background. */
+        @JavascriptInterface fun sessionKeep(json: String) = SessionService.update(act, json)
+
+        // Session recording: the page sends one-second pieces; they go straight to Downloads/CoreKit.
+        @JavascriptInterface fun recBegin(name: String, ext: String, mime: String): String = try {
+            val safe = name.replace(Regex("[^A-Za-z0-9 _.\\-]+"), "").take(100).ifBlank { "CoreKit-Remote" } + "." + (if (ext == "mp4") "mp4" else "webm")
+            val type = if (mime.startsWith("video/")) mime else "video/webm"
+            val uri: Uri; val label: String
+            if (Build.VERSION.SDK_INT >= 29) {
+                val cv = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, safe)
+                    put(MediaStore.MediaColumns.MIME_TYPE, type)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/CoreKit")
+                }
+                uri = act.contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv) ?: error("storage unavailable")
+                label = "Downloads/CoreKit/$safe"
+            } else {
+                val dir = act.getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: act.filesDir
+                uri = Uri.fromFile(java.io.File(dir, safe)); label = "CoreKit/Movies/$safe"
+            }
+            val out = act.contentResolver.openOutputStream(uri) ?: error("storage unavailable")
+            val id = java.util.UUID.randomUUID().toString().take(12)
+            synchronized(recs) { recs[id] = Rec(out, uri, label) }
+            JSONObject().put("id", id).toString()
+        } catch (e: Throwable) { JSONObject().put("error", e.message ?: "could not create the file").toString() }
+
+        @JavascriptInterface fun recChunk(id: String, b64: String): Boolean {
+            val r = synchronized(recs) { recs[id] } ?: return false
+            return try {
+                val b = android.util.Base64.decode(b64, android.util.Base64.DEFAULT)
+                synchronized(r) { r.out.write(b); r.size += b.size }
+                true
+            } catch (_: Throwable) { false }
+        }
+
+        @JavascriptInterface fun recEnd(id: String): String {
+            val r = synchronized(recs) { recs.remove(id) } ?: return JSONObject().put("error", "no such recording").toString()
+            synchronized(r) { try { r.out.close() } catch (_: Throwable) {} }
+            if (r.size == 0L) {
+                try { act.contentResolver.delete(r.uri, null, null) } catch (_: Throwable) {}
+                return JSONObject().put("error", "nothing was recorded").toString()
+            }
+            return JSONObject().put("path", r.uri.toString()).put("label", r.label).toString()
+        }
+
         @JavascriptInterface fun remoteStatus(): String = JSONObject()
             .put("a11y", RemoteControlService.isOn(act))
             .put("notifNeeded", Build.VERSION.SDK_INT >= 33)
@@ -344,7 +398,18 @@ class Host(private val act: MainActivity, private val web: WebView) {
         /** Every-lens camera test (native screen); the result comes back to window.__camResult. */
         @JavascriptInterface fun cameraTest() = act.startCameraTest()
 
-        @JavascriptInterface fun exit() { act.runOnUiThread { act.finishAndRemoveTask() } }
+        /** Exit: end any Remote Access session and sharing, stop the engine, close CoreKit. */
+        @JavascriptInterface fun exit() {
+            try {
+                RemoteEngine.cmd(act, JSONObject().put("t", "disconnect").toString())
+                if (RemoteService.running) act.stopRemoteSharing()
+                SessionService.update(act, JSONObject().put("on", false).toString())
+            } catch (_: Throwable) {}
+            act.runOnUiThread {
+                act.setViewerMode(false, false)
+                web.postDelayed({ RemoteEngine.stop(); act.finishAndRemoveTask() }, 400)
+            }
+        }
     }
 
     private fun appVersion(): String = try {
