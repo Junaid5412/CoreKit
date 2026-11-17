@@ -90,6 +90,7 @@ func runInspector(module string) {
 	mux.HandleFunc(base+"api/logs/save", in.logsSave)
 	mountRemote(mux, base+"api/remote/", nil)
 	mountRemoteRec(mux, base+"api/remote/")
+	mountVM(mux, base+"api/vm/", nil)
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(ln)
 	url := fmt.Sprintf("http://127.0.0.1:%d%s", ln.Addr().(*net.TCPAddr).Port, base)
@@ -155,6 +156,10 @@ func (in *inspector) index(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.module == "remote" {
 		w.Write(remoteHTML)
+		return
+	}
+	if in.module == "vm" {
+		w.Write(vmHTML)
 		return
 	}
 	w.Write(indexHTML)

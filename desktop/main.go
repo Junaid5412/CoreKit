@@ -23,6 +23,7 @@ var netPS []byte
 var logsHTML = ui.Logs
 
 var remoteHTML = ui.Remote
+var vmHTML = ui.VM
 
 //go:embed scripts/activity.ps1
 var activityPS []byte
@@ -97,6 +98,13 @@ func main() {
 			rEng.shutdown()
 			fmt.Printf("\n    %s[*]%s Module closed. Sharing stopped.\n", cDGreen, cReset)
 			time.Sleep(600 * time.Millisecond)
+		case '6':
+			markUsed("Virtual Environment")
+			boot("virtual-environment")
+			runInspector("vm")
+			vmEng.shutdownAll()
+			fmt.Printf("\n    %s[*]%s Module closed. Virtual devices shut down.\n", cDGreen, cReset)
+			time.Sleep(600 * time.Millisecond)
 		case '3':
 			markUsed("Safe Browser")
 			logLine("*", "Launching CoreKit Browser")
@@ -111,7 +119,7 @@ func main() {
 			goodbye(false)
 			os.Exit(0)
 		default:
-			fmt.Printf("    %s[!] Unknown command. Press 1 or 0.%s\n", cRed, cReset)
+			fmt.Printf("    %s[!] Unknown command. Press 1-6 or 0.%s\n", cRed, cReset)
 			time.Sleep(900 * time.Millisecond)
 		}
 	}

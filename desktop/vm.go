@@ -586,9 +586,10 @@ func (a *vmAuto) run(cmd string, timeout time.Duration) (string, int, error) {
 		return "", -1, errors.New("the virtual Android is not ready")
 	}
 	a.seq++
-	mark := fmt.Sprintf("__CKA%d_%d", a.seq, time.Now().UnixNano()%1e9)
+	mark := fmt.Sprintf("__CKA%d_%d_", a.seq, time.Now().UnixNano()%1e9)
 	a.c.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	if _, err := a.c.Write([]byte(cmd + " ; echo " + mark + "=$?\n")); err != nil {
+	// the quotes split the marker, so only the shell's output (never an echoed command) matches
+	if _, err := a.c.Write([]byte(cmd + " ; echo \"" + mark + "\"\"END=$?\"\n")); err != nil {
 		a.dead = true
 		return "", -1, err
 	}
@@ -597,10 +598,10 @@ func (a *vmAuto) run(cmd string, timeout time.Duration) (string, int, error) {
 	var out bytes.Buffer
 	for {
 		line, err := a.r.ReadString('\n')
-		if i := strings.Index(line, mark+"="); i >= 0 {
+		if i := strings.Index(line, mark+"END="); i >= 0 {
 			out.WriteString(line[:i])
-			rc, _ := strconv.Atoi(strings.TrimSpace(line[i+len(mark)+1:]))
-			return strings.TrimRight(out.String(), "\r\n"), rc, nil
+			rc, _ := strconv.Atoi(strings.TrimSpace(line[i+len(mark)+4:]))
+			return strings.TrimRight(strings.ReplaceAll(out.String(), "\r", ""), "\n"), rc, nil
 		}
 		out.WriteString(line)
 		if err != nil {
@@ -867,7 +868,7 @@ func (e *vmEngine) boot(r *vmRun, p0, p1 int) {
 		c.Write([]byte("\n"))
 		// the clock stood still while it was saved
 		a.run(fmt.Sprintf("toybox date -u %s >/dev/null 2>&1", time.Now().UTC().Format("010215042006.05")), 5*time.Second)
-		vmNetUp(a)
+		r.ip = vmNetUp(a)
 		r.bootSec = int(time.Since(r.started).Seconds())
 		r.set("running", "")
 		logLine("+", fmt.Sprintf("Virtual Environment: %s resumed (%ds)", r.m.Name, r.bootSec))
@@ -889,7 +890,8 @@ wait:
 	}
 	r.set("booting", "Starting Android")
 	// hidden root shell for CoreKit on the second serial port
-	c.Write([]byte("setsid sh -c 'stty -F /dev/ttyS1 raw -echo; exec sh </dev/ttyS1 >/dev/ttyS1 2>&1' & clear\n"))
+	// (fed through a pipe, so it is not an interactive shell: no prompts in the output)
+	c.Write([]byte("setsid sh -c 'stty -F /dev/ttyS1 -echo; cat /dev/ttyS1 | sh >/dev/ttyS1 2>&1' & clear\n"))
 	ac, err := vmDial(p1, 10*time.Second)
 	if err != nil {
 		r.set("booting", "CoreKit could not attach to the device")
@@ -917,30 +919,39 @@ wait:
 		time.Sleep(3 * time.Second)
 	}
 	r.bootSec = int(time.Since(r.started).Seconds())
+	// no setup wizard in the slim image: mark the device as set up
+	a.run("settings put global device_provisioned 1; settings put secure user_setup_complete 1", 60*time.Second)
 	r.set("booting", "Connecting the network")
-	vmNetUp(a)
-	ip, _, _ := a.run("ip -4 -o addr show eth0 2>/dev/null | toybox sed -n 's/.* inet \\([0-9.]*\\).*/\\1/p'", 8*time.Second)
-	r.ip = strings.TrimSpace(ip)
+	r.ip = vmNetUp(a)
 	r.set("running", "")
 	logLine("+", fmt.Sprintf("Virtual Environment: %s is ready (%ds)", r.m.Name, r.bootSec))
 }
 
-// vmNetUp makes sure eth0 has an address and a default route (QEMU's built-in NAT:
-// guest 10.0.2.15, host 10.0.2.2, DNS 10.0.2.3).
-func vmNetUp(a *vmAuto) {
-	out, _, _ := a.run("ip route show default", 5*time.Second)
-	if strings.Contains(out, "default") {
-		return
+var vmInet = regexp.MustCompile(`inet (\d+\.\d+\.\d+\.\d+)`)
+
+// vmGuestIP returns the guest's IPv4 address (Android shows the virtual network as Wi-Fi).
+func vmGuestIP(a *vmAuto) string {
+	out, _, _ := a.run("ip -4 -o addr show | grep -v ' lo '", 8*time.Second)
+	if m := vmInet.FindStringSubmatch(out); m != nil {
+		return m[1]
 	}
-	a.run("ifconfig eth0 up; dhcptool eth0 >/dev/null 2>&1", 25*time.Second)
-	out, _, _ = a.run("ip route show default", 5*time.Second)
-	if strings.Contains(out, "default") {
-		return
+	return ""
+}
+
+// vmNetUp waits for Android to bring up its network (QEMU's built-in NAT: guest
+// 10.0.2.15, host 10.0.2.2, DNS 10.0.2.3) and sets it up by hand if it doesn't.
+func vmNetUp(a *vmAuto) string {
+	for i := 0; i < 20; i++ {
+		if ip := vmGuestIP(a); ip != "" {
+			return ip
+		}
+		time.Sleep(3 * time.Second)
 	}
 	a.run("ip addr add 10.0.2.15/24 dev eth0 2>/dev/null; ip link set eth0 up; ip route add default via 10.0.2.2 dev eth0 2>/dev/null;"+
 		" ndc network create 100 >/dev/null 2>&1; ndc network interface add 100 eth0 >/dev/null 2>&1;"+
 		" ndc network route add 100 eth0 0.0.0.0/0 10.0.2.2 >/dev/null 2>&1; ndc resolver setnetdns 100 '' 10.0.2.3 >/dev/null 2>&1;"+
 		" ndc network default set 100 >/dev/null 2>&1; setprop net.dns1 10.0.2.3", 15*time.Second)
+	return vmGuestIP(a)
 }
 
 func (e *vmEngine) stop(id string, force bool) error {

@@ -1215,10 +1215,13 @@ func runRemoteEngine() int {
 		}
 		return hmac.Equal([]byte(k), []byte(tok))
 	})
+	mountVM(mux, "/vm/", func(r *http.Request) bool {
+		return hmac.Equal([]byte(r.Header.Get("X-CK")), []byte(tok))
+	})
 	fmt.Printf("READY %d\n", ln.Addr().(*net.TCPAddr).Port)
 	os.Stdout.Sync()
 	// stop when the app goes away (its end of our stdin closes)
-	go func() { io.Copy(io.Discard, os.Stdin); rEng.shutdown(); os.Exit(0) }()
+	go func() { io.Copy(io.Discard, os.Stdin); rEng.shutdown(); vmEng.shutdownAll(); os.Exit(0) }()
 	_ = http.Serve(ln, mux)
 	return 0
 }
