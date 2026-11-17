@@ -231,6 +231,7 @@ select.in option{background:#10161e}
 .np .in{height:32px;font-size:12.5px}
 .np .sws{margin:10px 0;gap:8px}.np .swc{width:20px;height:20px}
 #veil{position:fixed;inset:0;z-index:2;display:none}#veil.show{display:block}
+html.ovl,html.ovl body{background:transparent!important}html.ovl #veil{background:rgba(0,0,0,.28);top:var(--th)}
 
 #altBtn.on{color:var(--acc);background:#10262a}
 #tabsBtn,#menuBtn,#sideClose{display:none}
@@ -389,7 +390,13 @@ function setCollapsed(v, tell) {
   if (tell) send({t:"collapsed", on:v});
 }
 const ro = new ResizeObserver(layout); ro.observe(document.body); ro.observe(document.getElementById("top"));
-function cover() { send({t:"cover", on: settingsOpen || histOpen || kOpen || (menuOpen && collapsed) || (PHONE && !collapsed)}); }
+// Pages are native views beside this screen. Full panels (settings, history, tab list) hide the page;
+// small menus ("light") are drawn over it with this screen made see-through, so the page stays visible.
+function cover() {
+  const full = settingsOpen || histOpen || (PHONE && !collapsed), light = !full && (kOpen || (menuOpen && collapsed));
+  document.documentElement.classList.toggle("ovl", light);
+  send({t:"cover", on: full || light, light});
+}
 let kOpen = false;
 function setK(v) {
   kOpen = v;

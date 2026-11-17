@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.Uri
 import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Build
 import android.os.LocaleList
 import android.os.Bundle
@@ -89,6 +90,7 @@ class BrowserActivity : Activity() {
     private val closed = mutableListOf<JSONObject>()
     private val history = mutableListOf<JSONObject>()
     private var covered = false
+    private var overlay = false // covered only by a small menu: page stays visible under it
     private var layoutOk = false
     private var state = ""
     private var stateMsg = ""
@@ -119,7 +121,7 @@ class BrowserActivity : Activity() {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         root = FrameLayout(this).apply { setBackgroundColor(MainActivity.BG) }
-        chrome = WebView(this).apply { setBackgroundColor(MainActivity.BG) }
+        chrome = WebView(this).apply { setBackgroundColor(Color.TRANSPARENT) } // the page paints its own background; see-through over pages while a menu is open
         content = FrameLayout(this).apply { setBackgroundColor(MainActivity.BG); visibility = View.INVISIBLE }
         root.addView(chrome, FrameLayout.LayoutParams(-1, -1))
         root.addView(content, FrameLayout.LayoutParams(1, 1))
@@ -349,7 +351,7 @@ class BrowserActivity : Activity() {
                 content.layoutParams = lp
                 layoutOk = true; updateVisibility()
             }
-            "cover" -> { covered = m.optBoolean("on"); updateVisibility() }
+            "cover" -> { covered = m.optBoolean("on"); overlay = covered && m.optBoolean("light"); updateVisibility() }
             "nav" -> {
                 val input = m.optString("url"); val newTab = m.optBoolean("on")
                 bg.execute {
@@ -485,7 +487,10 @@ class BrowserActivity : Activity() {
     private fun tabTitle(t: Tab): String = if (isStart(tabUrl(t))) "New tab" else t.title.ifEmpty { tabUrl(t) }
 
     private fun updateVisibility() {
-        val show = fullView == null && ready && layoutOk && state == "ready" && !covered
+        val show = fullView == null && ready && layoutOk && state == "ready" && (!covered || overlay)
+        // a small menu is drawn above the page (this screen is see-through then); otherwise the page is on top
+        val top = if (overlay && show) chrome else content
+        if (root.indexOfChild(top) != root.childCount - 1 && fullView == null) top.bringToFront()
         content.visibility = if (show) View.VISIBLE else View.INVISIBLE
     }
 
