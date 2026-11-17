@@ -662,10 +662,11 @@ function speakerTest() {
 }
 
 /* cameras: every lens in its own tile, checked automatically, then marked by hand */
-const camState = {ok: 'Working', black: 'Black picture', fail: 'Could not open', off: 'Not available to apps', depth: 'Depth sensor (no picture)', wait: 'Not checked'};
+const camState = {ok: 'Working', black: 'Black picture', fail: 'Could not open', off: 'Not available to apps', depth: 'Depth sensor (no picture)', wait: 'Not checked', manual: 'Checked in camera app'};
+const camUsed = l => l.state !== 'off' && l.state !== 'depth' && !(l.state === 'manual' && !l.mark);
 const camBad = l => l.state === 'fail' || l.mark === -1 || (l.state === 'black' && l.mark !== 1);
 function camSummary(list) { // list: [{state, mark}] -> detail text for the report
-  const use = list.filter(l => l.state !== 'off' && l.state !== 'depth'), n = use.length;
+  const use = list.filter(camUsed), n = use.length;
   const bad = use.filter(camBad).length;
   return ok => ok ? `${n - bad} of ${n} lens${n === 1 ? '' : 'es'} working` : `Problem: ${bad || 'some'} of ${n} lens${n === 1 ? '' : 'es'}`;
 }
@@ -779,7 +780,7 @@ function nativeCameraTest() {
       return `<div class="cam-t ${bad ? 'bad' : off ? '' : 'ok'}"><div class="cam-v">${l.img ? `<img src="${l.img}">` : `<span class="cam-s">${esc(camState[l.state] || '')}</span>`}</div>` +
         `<div class="cam-l"><b>${esc(l.name)}</b><small>${esc(l.spec || '')}</small><small class="${bad ? 'st-bad' : off ? 'st-off' : ''}">${esc(camState[l.state] || '')}</small></div>${off ? '' : mk}</div>`;
     }).join('');
-    const use = list.filter(l => l.state !== 'off' && l.state !== 'depth');
+    const use = list.filter(camUsed);
     const bad = use.filter(camBad).length;
     $('#fl').textContent = `${list.length} lens${list.length === 1 ? '' : 'es'} found · ${bad ? bad + ' with a problem' : 'no problems marked'}`;
     $(`[data-r="webcam|${bad ? 0 : 1}"]`)?.focus();
