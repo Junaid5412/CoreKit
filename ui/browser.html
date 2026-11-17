@@ -171,6 +171,14 @@ textarea.in{height:78px;padding:9px 12px;resize:none;font:12px/1.45 Consolas,mon
 .swc{width:26px;height:26px;border-radius:50%;box-shadow:0 0 0 2px #0f151d;transition:transform .15s,box-shadow .15s}
 .swc.sel{box-shadow:0 0 0 2px #0f151d,0 0 0 4px #f0f6fc;transform:scale(1.08)}
 .chk{display:flex;align-items:center;gap:9px;margin-top:12px;color:var(--text);cursor:pointer}
+.sopts{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+.sopt{display:flex;align-items:flex-start;gap:11px;width:100%;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid #1c2733;background:#0c1219;color:var(--text);cursor:pointer;font:inherit}
+.sopt:hover{border-color:#2a3c50}.sopt.on{border-color:#1f5a52;background:#0e1d1c}
+.sopt i{width:18px;height:18px;border-radius:50%;border:2px solid #3a4756;flex:none;margin-top:1px;display:grid;place-items:center}
+.sopt.on i{border-color:var(--acc)}.sopt.on i::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--acc)}
+.sopt b{display:block;color:var(--white);font-weight:600;font-size:13px}.sopt small{display:block;color:var(--muted);font-size:12px;margin-top:1px}
+.sopt.dng.on{border-color:#5a1f26;background:#1d0f12}.sopt.dng.on i{border-color:#f87171}.sopt.dng.on i::after{background:#f87171}
+.spage{display:flex;gap:8px;margin:2px 0 0 29px}
 .chk i{width:18px;height:18px;border-radius:5px;border:2px solid #3a4756;display:grid;place-items:center;flex:none}
 .chk.on i{background:var(--acc);border-color:var(--acc)}
 .chk.on i::after{content:"";width:5px;height:9px;border:solid #04201c;border-width:0 2px 2px 0;transform:rotate(45deg) translate(-1px,-1px)}
@@ -397,6 +405,12 @@ $("#menuBtn").onclick = () => setK(!kOpen);
 $("#tabsBtn").onclick = () => setCollapsed(false, false);
 $("#sideClose").onclick = () => setCollapsed(true, false);
 $("#altBtn").onclick = () => send({t:"siteMode", on: !T.alt});
+// on start / on close (also asked when a profile is created)
+const START_OPTS = [["restore", "Continue where you left off", "Reopens your tabs. Logins and history are kept."],
+  ["newtab", "Open a new tab", "Starts fresh. Logins and history are kept."],
+  ["page", "Open a specific page", "Starts with a page you choose. Logins and history are kept."],
+  ["clear", "Clear everything when closed", "Signs you out and erases cookies, history, cache and tabs each time."]];
+let stPick = "";
 $("#kmenu").addEventListener("click", e => {
   const b = e.target.closest("[data-k]"); if (!b || b.disabled) return;
   const k = b.dataset.k; setK(false);
@@ -670,7 +684,12 @@ function renderSettingsInner() {
 
   <div class="card" id="sec-shield">
     <div class="ch"><span class="ic">${svg("eye")}</span><span class="t"><b>Hide from screen capture</b><small>Screenshots, screen recorders and remote viewers (VNC, TeamViewer, AnyDesk, Quick Assist) see an empty area instead of this window. Turn off to take a screenshot.</small></span><button class="sw${S.shield ? " on" : ""}" data-priv="capture" title="On / off"></button></div>
-    <div class="ch" style="margin-top:16px"><span class="ic">${svg("broom")}</span><span class="t"><b>Leave no trace on close</b><small>Erases history, cache, open tabs and logs when the window closes. Logins, cookies and saved passwords stay.</small></span><button class="sw${S.noTrace ? " on" : ""}" data-priv="trace" title="On / off"></button></div>
+  </div>
+
+  <div class="card" id="sec-start">
+    <div class="ch"><span class="ic">${svg("broom")}</span><span class="t"><b>On start and close</b><small>What this profile does when you close the browser and open it again.</small></span></div>
+    <div class="sopts">${START_OPTS.map(([k, l, d]) => `<button class="sopt${k === "clear" ? " dng" : ""}${(stPick || S.startup || "restore") === k ? " on" : ""}" data-start="${k}"><i></i><span><b>${l}</b><small>${d}</small></span></button>` +
+      (k === "page" && (stPick || S.startup) === "page" ? `<div class="spage"><input class="in" id="stPage" spellcheck="false" placeholder="example.com" value="${esc(S.startPage || "")}"><button class="btn sm pri" data-start="pageSave">Save</button></div>` : "")).join("")}</div>
   </div>
 
   <div class="card" id="sec-privacy">
@@ -699,9 +718,17 @@ setEl.addEventListener("input", e => {
   if (e.target.id === "byp") { D.bypass = e.target.value; $("#apply").classList.toggle("show", dirty()); }
   if (e.target.id === "prName") pName = e.target.value;
 });
+setEl.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.id === "stPage") setEl.querySelector('[data-start="pageSave"]')?.click(); });
 setEl.addEventListener("click", e => {
   const g = (sel) => e.target.closest(sel);
   let x;
+  if ((x = g("[data-start]"))) {
+    const k = x.dataset.start;
+    if (k === "page") { stPick = "page"; renderSettings(); $("#stPage")?.focus(); return; }
+    if (k === "pageSave") { const u = ($("#stPage")?.value || "").trim(); if (!u) { $("#stPage")?.focus(); return; } stPick = ""; S.startup = "page"; S.startPage = u; S.noTrace = false; send({t:"startup", id:"page", url:u}); renderSettings(); toast("This page opens at start"); return; }
+    stPick = ""; S.startup = k; S.noTrace = k === "clear"; send({t:"startup", id:k}); renderSettings();
+    toast({restore:"Your tabs will reopen next time", newtab:"A new tab opens next time", clear:"Everything is erased when the browser closes"}[k]); return;
+  }
   if ((x = g("[data-test]"))) { testing[x.dataset.test] = true; send({t:"proxyTest", id:x.dataset.test}); renderSettings(); return; }
   if ((x = g("[data-pdel]"))) { if (x.dataset.ask) { send({t:"proxyDel", id:x.dataset.pdel}); } else { x.dataset.ask = 1; x.innerHTML = "<b style='font-size:10px;color:#fca5a5'>DEL?</b>"; } return; }
   if ((x = g("[data-pick]"))) { D.id = x.dataset.pick; D.on = true; renderSettings(); return; }
@@ -709,7 +736,7 @@ setEl.addEventListener("click", e => {
   if ((x = g("[data-opt]"))) { const on = !x.classList.contains("on"); x.classList.toggle("on", on); S[x.dataset.opt] = on; send({t:x.dataset.opt, on}); toast(S.platform === "windows" ? "Restarting to apply…" : "Applied"); return; }
   if ((x = g("[data-topt]"))) { const on = !x.classList.contains("on"); x.classList.toggle("on", on); S[{offer:"transOffer", auto:"transAuto", google:"googleFix"}[x.dataset.topt]] = on; send({t:"transOpt", id:x.dataset.topt, on}); return; }
   if ((x = g("[data-lrm]"))) { send({t:"langList", id:x.dataset.lrm}); return; }
-  if ((x = g("[data-priv]"))) { const on = !x.classList.contains("on"); x.classList.toggle("on", on); if (x.dataset.priv === "capture") S.shield = on; else S.noTrace = on; send({t:"privacy", id:x.dataset.priv, on}); toast(x.dataset.priv === "capture" ? (on ? "Hidden from screen capture" : "Screen capture allowed") : (on ? "No trace will be left on close" : "History will be kept")); return; }
+  if ((x = g("[data-priv]"))) { const on = !x.classList.contains("on"); x.classList.toggle("on", on); S.shield = on; send({t:"privacy", id:x.dataset.priv, on}); toast(on ? "Hidden from screen capture" : "Screen capture allowed"); return; }
   if ((x = g("[data-pc]"))) { pColor = x.dataset.pc; renderSettings(); return; }
   if (!(x = g("[data-s]"))) return;
   const k = x.dataset.s;
@@ -755,7 +782,7 @@ function renderHist() {
   const row = it => { const h = hostOf(it.u), hs = h.replace(/^www\./, ""); return `<div class="hrow" data-u="${esc(it.u)}" data-at="${it.at}" title="${esc(it.u)}"><span class="tm">${new Date(it.at * 1000).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</span><span class="fav"><span class="lt" style="background:${colorFor(h || it.u)}">${esc((hs[0] || "•").toUpperCase())}</span></span><span class="ttl">${esc(it.t || it.u)}</span><span class="hst">${esc(hs)}</span><button class="del" data-hdel="1" title="Remove">${svg("x")}</button></div>`; };
   el.innerHTML = `<div class="sh"><button class="ib" data-h="close" title="Back to browsing">${svg("back")}</button><h1>History</h1><button class="btn dng sm" data-h="clear">${clearAsk ? "Click again to clear everything" : "Clear history"}</button></div>
     <div class="hsearch"><input class="in" id="hq" placeholder="Search history" value="${esc(hq)}" spellcheck="false"></div>
-    ${H.persist ? "" : '<div class="hnote">"Leave no trace" is on: this history is erased when the window closes.</div>'}
+    ${H.persist ? "" : '<div class="hnote">"Clear everything when closed" is on: this history is erased when the browser closes.</div>'}
     ${groups.length ? groups.map(g => `<div class="hday">${esc(g.lb)}</div><div class="hlist">${g.items.map(row).join("")}</div>`).join("")
       : `<div class="empty" style="max-width:760px;margin:30px auto">${hq ? "No matches" : "No history yet"}</div>`}`;
   if (focusQ) { const i = $("#hq"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }

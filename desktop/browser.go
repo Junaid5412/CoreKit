@@ -35,16 +35,17 @@ type brProfile struct {
 	ID       string `json:"id"`
 	Name     string `json:"name"`
 	Color    string `json:"color"`
-	Browser  string `json:"browser"` // auto | chrome | edge
-	Proxy    string `json:"proxy"`   // "" = direct, "default", or a proxy id
-	StartURL string `json:"startUrl"`
+	Browser  string `json:"browser"`  // auto | chrome | edge
+	Proxy    string `json:"proxy"`    // "" = direct, "default", or a proxy id
+	StartURL string `json:"startUrl"` // page opened at start when Startup is "page"
+	Startup  string `json:"startup"`  // restore (default) | newtab | page | clear
 	Search   string `json:"search"`
 	Bypass   string `json:"bypass"`
 	// secure defaults: zero value = protected
 	NoAdblock    bool `json:"noAdblock"`    // ad blocker off
 	NoLangMatch  bool `json:"noLangMatch"`  // don't match page language to the VPN country
 	AllowCapture bool `json:"allowCapture"` // let screenshots / remote viewers see the window
-	KeepHistory  bool `json:"keepHistory"`  // keep history, cache and tabs after closing
+	KeepHistory  bool `json:"keepHistory"`  // old setting, replaced by Startup
 	// languages
 	Lang         string   `json:"lang"`         // page / translation language ("" = English)
 	NoTransOffer bool     `json:"noTransOffer"` // don't offer to translate
@@ -149,6 +150,31 @@ func (c *brConfig) proxy(id string) *brProxy {
 }
 
 // proxyFor resolves the proxy a profile uses (nil = direct).
+// startMode is what the profile does when it closes and opens again. Data is kept unless
+// the user picked "clear everything when closed".
+func (p *brProfile) startMode() string {
+	switch p.Startup {
+	case "newtab", "page", "clear":
+		return p.Startup
+	}
+	return "restore"
+}
+
+// setStartup stores the start/close choice; a page needs an address.
+func (p *brProfile) setStartup(mode, page string) {
+	page = strings.TrimSpace(page)
+	switch mode {
+	case "newtab", "clear", "restore":
+		p.Startup = mode
+	case "page":
+		if page == "" {
+			p.Startup = "newtab"
+			return
+		}
+		p.Startup, p.StartURL = "page", normalizeInput(page, p.Search)
+	}
+}
+
 // newProxy turns a pasted link into a saved-proxy entry; the name comes from the link when
 // none is given.
 func newProxy(name, link string) (*brProxy, error) {

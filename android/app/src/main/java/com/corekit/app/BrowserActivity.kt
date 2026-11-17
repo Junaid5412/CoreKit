@@ -136,6 +136,7 @@ class BrowserActivity : Activity() {
         picker = want == null
         if (!picker) {
             profId = pickProfile(want!!)
+            if (!keepData()) wipeProfileData()
             applyShield()
         } else window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
 
@@ -163,11 +164,7 @@ class BrowserActivity : Activity() {
             xray.stop()
             if (WebViewFeature.isFeatureSupported(WebViewFeature.PROXY_OVERRIDE) && proxyOn)
                 ProxyController.getInstance().clearProxyOverride({ it.run() }, {})
-            if (prof().optBoolean("keepHistory").not()) {
-                WebView(this).apply { clearCache(true); destroy() }
-                vault.delete("p/$profId/session.bin")
-                vault.delete("p/$profId/history.bin")
-            }
+            if (!keepData()) wipeProfileData()
         }
         chrome.destroy()
         if (LocaleList.getDefault() != sysLocales) { LocaleList.setDefault(sysLocales); java.util.Locale.setDefault(sysLocales[0]) }
@@ -200,6 +197,34 @@ class BrowserActivity : Activity() {
     private fun chosenProxy(p: JSONObject = prof()): JSONObject? = when (val x = p.optString("proxy")) {
         "" -> null; "default" -> proxyById(cfg.optString("default")); else -> proxyById(x)
     }
+    /** What the profile does on close / next start: restore (default) | newtab | page | clear. */
+    private fun startMode(p: JSONObject = prof()): String = p.optString("startup").takeIf { it in setOf("newtab", "page", "clear") } ?: "restore"
+    private fun keepData() = startMode() != "clear"
+
+    /** Stores the start/close choice; the page address goes through the shared normalizer. */
+    private fun setStartup(p: JSONObject, mode: String, page: String, then: () -> Unit) {
+        when (mode) {
+            "restore", "newtab", "clear" -> { p.put("startup", mode); then() }
+            "page" -> {
+                if (page.isBlank()) { p.put("startup", "newtab"); then(); return }
+                bg.execute {
+                    val u = helper.call("normalize", JSONObject().put("input", page.trim()).put("engine", p.optString("search", "google"))).optString("url")
+                    main.post { if (u.isNotEmpty()) p.put("startup", "page").put("startUrl", u) else p.put("startup", "newtab"); then() }
+                }
+            }
+            else -> then()
+        }
+    }
+
+    /** Clear everything: logins, cookies, site data, cache, history and tabs of this profile. */
+    private fun wipeProfileData() {
+        if (multiProfile) try { ProfileStore.getInstance().deleteProfile(profileName()) } catch (_: Throwable) {}
+        else { CookieManager.getInstance().removeAllCookies(null); WebStorage.getInstance().deleteAllData() }
+        try { WebView(this).apply { clearCache(true); destroy() } } catch (_: Throwable) {}
+        vault.delete("p/$profId/session.bin")
+        vault.delete("p/$profId/history.bin")
+    }
+
     private fun newId() = java.util.UUID.randomUUID().toString().replace("-", "").take(12)
     private fun colors(): List<String> = info.optJSONArray("colors")?.let { a -> (0 until a.length()).map { a.getString(it) } }
         ?: listOf("#2dd4bf", "#60a5fa", "#a78bfa", "#f472b6", "#fb923c", "#facc15", "#4ade80", "#f87171")
@@ -281,7 +306,7 @@ class BrowserActivity : Activity() {
                 val p = JSONObject().put("id", newId()).put("name", name).put("color", m.optString("color", "#60a5fa")).put("search", "google").put("created", now())
                     .put("noAdblock", !m.optBoolean("on"))
                 val choice = m.optString("id")
-                fun create() { profiles().put(p); saveConfig(); openProfile(p.getString("id")) }
+                fun create() = setStartup(p, m.optString("engine"), m.optString("url")) { profiles().put(p); saveConfig(); openProfile(p.getString("id")) }
                 when (choice) {
                     "" -> create()
                     "new" -> {
@@ -359,12 +384,12 @@ class BrowserActivity : Activity() {
             "proxyDel" -> deleteProxy(m.optString("id"))
             "proxyApply" -> applyProxy(m.optBoolean("on"), m.optString("id"), m.optString("bypass"))
             "proxyOff" -> applyProxy(false, "", prof().optString("bypass"))
+            "startup" -> setStartup(prof(), m.optString("id"), m.optString("url")) { saveConfig(); sendState(); if (!keepData()) history.clear() }
             "retry" -> begin()
             "reset" -> resetIdentity()
             "privacy" -> {
                 when (m.optString("id")) {
                     "capture" -> { prof().put("allowCapture", !m.optBoolean("on")); applyShield(); if (proxyOn) setCheck("capture", if (m.optBoolean("on")) "ok" else "warn", if (m.optBoolean("on")) "Screenshots & screen recording see nothing" else "Off in settings") }
-                    "trace" -> prof().put("keepHistory", !m.optBoolean("on"))
                 }
                 saveConfig(); sendState()
             }
@@ -408,7 +433,7 @@ class BrowserActivity : Activity() {
             .put("profile", JSONObject().put("id", profId).put("name", p.optString("name")).put("color", p.optString("color")).put("search", p.optString("search", "google")).put("bypass", p.optString("bypass")))
             .put("profiles", ps).put("proxies", pxs).put("proxyActive", if (proxyOn) chosen?.optString("id") ?: "" else "").put("proxyChosen", chosen?.optString("id") ?: "")
             .put("proxyOn", p.optString("proxy").isNotEmpty()).put("engines", info.optJSONArray("engines") ?: JSONArray()).put("collapsed", true)
-            .put("colors", JSONArray(colors())).put("shield", !p.optBoolean("allowCapture")).put("noTrace", !p.optBoolean("keepHistory")).put("tz", geo.optString("tz"))
+            .put("colors", JSONArray(colors())).put("shield", !p.optBoolean("allowCapture")).put("noTrace", startMode(p) == "clear").put("startup", startMode(p)).put("startPage", p.optString("startUrl")).put("tz", geo.optString("tz"))
             .put("lang", lang()).put("langs", info.optJSONArray("langs") ?: JSONArray()).put("transOffer", !p.optBoolean("noTransOffer")).put("transAuto", p.optBoolean("transAuto"))
             .put("googleFix", !p.optBoolean("noGoogleFix")).put("alwaysLangs", named(p.optJSONArray("alwaysLangs"))).put("neverLangs", named(p.optJSONArray("neverLangs")))
             .put("platform", "android").put("adblock", !p.optBoolean("noAdblock")).put("langMatch", !p.optBoolean("noLangMatch")))
@@ -649,10 +674,12 @@ class BrowserActivity : Activity() {
     private fun restoreTabs() {
         if (restored) { active?.let { activate(it) }; updateVisibility(); return }
         restored = true
-        val keep = prof().optBoolean("keepHistory")
+        val mode = startMode()
+        val keep = mode != "clear"
         if (keep) vault.read("p/$profId/history.bin")?.let { s -> try { val a = JSONArray(s); for (i in 0 until a.length()) history += a.getJSONObject(i) } catch (_: Throwable) {} }
         val sess = vault.read("p/$profId/session.bin")?.let { try { JSONObject(it) } catch (_: Throwable) { null } }
-        if (keep && sess != null) {
+        if (mode == "page" && prof().optString("startUrl").isNotEmpty()) { newTab(prof().optString("startUrl"), true); return }
+        if (mode == "restore" && sess != null) {
             val a = sess.optJSONArray("tabs") ?: JSONArray()
             for (i in 0 until a.length()) { val r = a.getJSONObject(i); tabs += Tab(nextId++).apply { pending = r.optString("u"); title = r.optString("t") } }
             sess.optJSONArray("closed")?.let { for (i in 0 until it.length()) closed += it.getJSONObject(i) }
@@ -842,7 +869,7 @@ class BrowserActivity : Activity() {
             if (items.length() >= 400) break
             if (ql.isEmpty() || h.optString("t").lowercase().contains(ql) || h.optString("u").lowercase().contains(ql)) items.put(h)
         }
-        post(JSONObject().put("t", "history").put("items", items).put("persist", prof().optBoolean("keepHistory")))
+        post(JSONObject().put("t", "history").put("items", items).put("persist", keepData()))
     }
 
     private fun scheduleSave() {
@@ -851,7 +878,7 @@ class BrowserActivity : Activity() {
     }
 
     private fun saveNow() {
-        if (picker || !restored || !prof().optBoolean("keepHistory")) return
+        if (picker || !restored || !keepData()) return
         val a = JSONArray()
         for (t in tabs) a.put(JSONObject().put("u", if (isStart(tabUrl(t))) "" else tabUrl(t)).put("t", tabTitle(t)))
         val s = JSONObject().put("tabs", a).put("active", tabs.indexOf(active).coerceAtLeast(0)).put("closed", JSONArray(closed)).toString()

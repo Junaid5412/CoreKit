@@ -146,15 +146,25 @@ func runBrowser(id string, waitPID int, reset, keepPw bool) {
 	}
 	procCoInitializeEx.Call(0, 0x2) // apartment threaded
 	setDPIAwareness()
-	a.noTrace = !p.KeepHistory
+	mode := p.startMode()
+	a.noTrace = mode == "clear"
 	if a.noTrace && waitPID == 0 && !reset {
-		wipeTraces(p.ID) // leftovers of a crash or of a session that ended with the power button
+		// leftovers of a crash or of a session that ended with the power button
+		if err := resetIdentity(p.ID, false); err != nil {
+			sbLog("clear at start: %v", err)
+		}
+		os.MkdirAll(udf, 0700)
 	}
 	a.sess = loadSession(p.ID)
-	if a.noTrace {
-		if waitPID == 0 {
-			a.sess.Tabs, a.sess.Active = nil, 0 // nothing from earlier sessions
+	if waitPID == 0 { // a fresh start (a restart of this window keeps its tabs)
+		switch mode {
+		case "newtab", "clear":
+			a.sess.Tabs, a.sess.Active = nil, 0
+		case "page":
+			a.sess.Tabs, a.sess.Active = []sbTabRec{{URL: p.StartURL}}, 0
 		}
+	}
+	if a.noTrace {
 		a.sess.Closed = nil
 		os.Remove(sessionPath(p.ID))
 	}
@@ -717,8 +727,6 @@ func (a *sbApp) onUIMessage(js string) {
 				switch m.ID {
 				case "capture":
 					p.AllowCapture = !m.On
-				case "trace":
-					p.KeepHistory = !m.On
 				}
 			}
 		})
@@ -733,10 +741,18 @@ func (a *sbApp) onUIMessage(js string) {
 					a.setCheck("capture", "warn", "Off in settings")
 				}
 			}
-		case "trace":
-			a.noTrace = m.On
-			a.hist.setPersist(!m.On)
 		}
+		a.sendState()
+	case "startup":
+		var mode string
+		brMutate(func(c *brConfig) {
+			if p := c.profile(a.profID); p != nil {
+				p.setStartup(m.ID, m.URL)
+				mode = p.startMode()
+			}
+		})
+		a.noTrace = mode == "clear"
+		a.hist.setPersist(!a.noTrace)
 		a.sendState()
 	}
 }
@@ -777,7 +793,7 @@ func (a *sbApp) sendState() {
 		"profile":  map[string]any{"id": p.ID, "name": p.Name, "color": p.Color, "search": p.Search, "bypass": p.Bypass},
 		"profiles": profs, "proxies": pxs, "proxyActive": activeProxy, "proxyChosen": chosen, "proxyOn": p.Proxy != "",
 		"engines": engines, "collapsed": a.sess.Collapsed, "colors": profileColors,
-		"shield": a.capture, "noTrace": a.noTrace, "tz": a.geo.TZ, "platform": "windows",
+		"shield": a.capture, "noTrace": a.noTrace, "startup": a.prof().startMode(), "startPage": a.prof().StartURL, "tz": a.geo.TZ, "platform": "windows",
 		"adblock": !p.NoAdblock, "langMatch": !p.NoLangMatch,
 		"lang": a.lang(), "langs": uiLanguages, "transOffer": !p.NoTransOffer, "transAuto": p.TransAuto, "googleFix": !p.NoGoogleFix,
 		"alwaysLangs": namedLangs(p.AlwaysLangs), "neverLangs": namedLangs(p.NeverLangs),
@@ -1680,7 +1696,10 @@ func (a *sbApp) shutdown() {
 	if a.noTrace && !a.relaunched {
 		waitProfileFree(profileDir(a.profID))
 		waitProfileFree(filepath.Join(profileDir(a.profID), "EBWebView"))
-		wipeTraces(a.profID)
+		if err := resetIdentity(a.profID, false); err != nil { // everything: logins, cookies, history, tabs
+			sbLog("clear on close: %v", err)
+			wipeTraces(a.profID)
+		}
 		os.Remove(sbLogPath())
 		os.Remove(sbLogPath() + ".old")
 		return
