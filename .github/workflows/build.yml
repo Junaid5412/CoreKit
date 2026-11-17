@@ -19,8 +19,12 @@ jobs:
   checks:
     name: Checks (Go tests, UI scripts)
     runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.detect.outputs.android }}
     steps:
       - uses: actions/checkout@v4
+      - id: detect
+        run: echo "android=$([ -f android/settings.gradle.kts ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@v5
         with: { go-version: "1.24", cache: false }
       - name: Shared UI is up to date
@@ -66,7 +70,7 @@ jobs:
   android:
     name: Android (CoreKit.apk)
     needs: checks
-    if: hashFiles('android/settings.gradle.kts') != ''
+    if: needs.checks.outputs.android == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
