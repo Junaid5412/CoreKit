@@ -2,6 +2,7 @@
 <html lang="en" style="background:#0a0e13">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CoreKit · Health Inspector</title>
 <meta name="theme-color" content="#0a0e13">
 <meta name="color-scheme" content="dark">
@@ -141,6 +142,18 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 .kv tr.h span{color:var(--muted);font-weight:400;margin-left:8px}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:9px;vertical-align:1px}
 @media (max-width:1000px){.grid2{grid-template-columns:1fr}.ov{flex-direction:column;align-items:flex-start}.specs{border-left:0;padding-left:6px}}
+/* phones (Android app) */
+@media (max-width:600px){
+.bar{height:auto;min-height:56px;flex-wrap:wrap;padding:8px 12px;gap:6px}
+.brand{width:100%;margin:0 0 2px}
+.bar .btn{flex:1 1 0;justify-content:center;padding:0 8px;font-size:12.5px;min-width:0}
+.vsep{display:none}
+#testBtns{width:100%;gap:6px!important;overflow-x:auto}#testBtns .btn{flex:0 0 auto}
+.rep{padding:16px 12px 34px}
+.gauges{gap:6px;justify-content:space-around;flex-wrap:wrap;padding:0}
+.gauge svg{max-width:27vw;height:auto}
+.card{padding:14px!important}
+}
 
 /* ---------------- modal / tests ---------------- */
 .modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(4,7,10,.62);backdrop-filter:blur(7px);opacity:0;pointer-events:none;transition:opacity .25s}
@@ -273,13 +286,14 @@ function weighted(list) { let tw = 0, s = 0; for (const x of list) { tw += +x.We
 
 let DATA = null;
 const manual = {};
+const ANDROID = !!window.CoreKitNative; // same screen, Android app host
 const TESTS = [
   ['keyboard', 'Keyboard & Touchpad', 'keyboard'],
   ['screen', 'Screen / Dead Pixels', 'screen'],
   ['speakers', 'Speakers (Left / Right)', 'speaker'],
   ['webcam', 'Webcam', 'camera'],
   ['mic', 'Microphone', 'mic'],
-];
+].filter(t => !ANDROID || t[0] !== 'keyboard').map(t => ANDROID && t[0] === 'webcam' ? ['webcam', 'Camera', 'camera'] : t);
 
 function summary() {
   const secs = arr(DATA.sections);
@@ -331,7 +345,7 @@ function reportHTML() {
     <div class="verdict" style="color:${sm.vc};border-color:${sm.vc}66;background:${sm.vc}12"><i></i>${sm.v}</div></div>`;
 
   h += `<div class="card" style="--d:.02s"><div class="ov"><div class="gauges">${gauge(sm.o, 150, 12, 'Overall')}${gauge(sm.h, 108, 9, 'Health')}${sm.p != null ? gauge(sm.p, 108, 9, 'Performance') : ''}</div><dl class="specs">`;
-  for (const k of ['Processor', 'Memory', 'Storage', 'Graphics', 'Battery', 'Windows']) if (q[k]) h += `<dt>${k}</dt><dd>${esc(q[k])}</dd>`;
+  for (const k of ['Processor', 'Memory', 'Storage', 'Graphics', 'Battery', 'Display', 'Windows', 'Android']) if (q[k]) h += `<dt>${k}</dt><dd>${esc(q[k])}</dd>`;
   h += `</dl></div></div>`;
 
   // component scores
@@ -465,6 +479,13 @@ async function saveReport() {
   const q = DATA.quick || {}, d = new Date(), p = n => String(n).padStart(2, '0');
   const name = `CoreKit-Health_${(q.Model || DATA.host || 'PC').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '_')}_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
   try {
+    const N = window.CoreKitNative;
+    if (N) { // Android: saved to Downloads/CoreKit
+      const j = JSON.parse(N.save(name, exportHTML()));
+      if (j.error) throw new Error(j.error);
+      toast('Saved to ' + j.label, false, {label: 'Open', fn: () => N.open(j.path)});
+      return;
+    }
     const r = await fetch(API + 'save', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, html: exportHTML()})});
     if (!r.ok) throw new Error(await r.text());
     const j = await r.json();

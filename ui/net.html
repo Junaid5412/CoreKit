@@ -2,6 +2,7 @@
 <html lang="en" style="background:#0a0e13">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CoreKit · Internet Troubleshooter</title>
 <meta name="theme-color" content="#0a0e13">
 <meta name="color-scheme" content="dark">
@@ -141,6 +142,18 @@ body.done .mark path{transition:stroke-dashoffset .5s .15s ease-out;stroke-dasho
 .kv tr.h span{color:var(--muted);font-weight:400;margin-left:8px}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:9px;vertical-align:1px}
 @media (max-width:1000px){.grid2{grid-template-columns:1fr}.ov{flex-direction:column;align-items:flex-start}.specs{border-left:0;padding-left:6px}}
+/* phones (Android app) */
+@media (max-width:600px){
+.bar{height:auto;min-height:56px;flex-wrap:wrap;padding:8px 12px;gap:6px}
+.brand{width:100%;margin:0 0 2px}
+.bar .btn{flex:1 1 0;justify-content:center;padding:0 8px;font-size:12.5px;min-width:0}
+.vsep{display:none}
+#testBtns{width:100%;gap:6px!important;overflow-x:auto}#testBtns .btn{flex:0 0 auto}
+.rep{padding:16px 12px 34px}
+.gauges{gap:6px;justify-content:space-around;flex-wrap:wrap;padding:0}
+.gauge svg{max-width:27vw;height:auto}
+.card{padding:14px!important}
+}
 
 /* ---------------- modal / tests ---------------- */
 .modal{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:rgba(4,7,10,.62);backdrop-filter:blur(7px);opacity:0;pointer-events:none;transition:opacity .25s}
@@ -215,6 +228,7 @@ body.scanning .site-in,body.done .site-in{opacity:0;pointer-events:none}
 .nd-ic svg{width:25px;height:25px}
 .node .nm{font-weight:600;color:var(--white);font-size:13px}
 .node .st{font-size:12px;color:var(--c);margin-top:-5px;font-variant-numeric:tabular-nums}
+@media (max-width:600px){.card table{display:block;overflow-x:auto}.path{padding:6px 0 0}.node{width:56px;gap:6px}.nd-ic{width:40px;height:40px}.nd-ic svg{width:18px;height:18px}.node .nm{font-size:10.5px}.node .st{font-size:10px;margin-top:-3px}.link{margin-top:20px}}
 .link{flex:1;height:2px;margin-top:30px;background:var(--lc);position:relative;overflow:hidden;border-radius:1px}
 .link.flow::after{content:"";position:absolute;top:0;left:-35%;width:35%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);animation:flow 1.9s linear infinite}
 @keyframes flow{to{left:100%}}
@@ -371,6 +385,7 @@ ping(); setInterval(ping, 1000);
 addEventListener('pagehide', () => navigator.sendBeacon(API + 'bye'));
 
 /* ---------- fix catalogue ---------- */
+const ANDROID = !!window.CoreKitNative; // same screen, Android app host
 const FIX = {
   'flushdns': {n: 'Flush DNS cache', d: 'Clears stored website addresses', ic: 'trash'},
   'dns:cloudflare': {n: 'Use Cloudflare DNS', d: '1.1.1.1 · fast and private, encrypted on Windows 11', ic: 'dns'},
@@ -394,7 +409,14 @@ const FIX = {
   'open:devmgmt': {n: 'Device Manager', d: 'Check network drivers', ic: 'chip'},
   'open:network': {n: 'Network settings', d: 'Windows network status', ic: 'settings'},
   'open:ncpa': {n: 'Network connections', d: 'Adapters control panel', ic: 'plug'},
+  'open:privatedns': {n: 'Private DNS settings', d: 'Encrypted DNS for the whole phone', ic: 'dns'},
+  'open:datetime': {n: 'Date & time settings', d: 'Turn on automatic time', ic: 'clock'},
+  'open:mobile': {n: 'Mobile data settings', ic: 'globe'},
+  'open:vpn': {n: 'VPN settings', ic: 'shield'},
 };
+if (ANDROID) for (const [k, n] of [['cloudflare', 'Cloudflare'], ['google', 'Google'], ['quad9', 'Quad9'], ['opendns', 'OpenDNS']])
+  FIX['dns:' + k] = {n: `Use ${n} Private DNS`, d: 'Copies the name, opens Private DNS: paste it there', ic: 'dns'};
+if (ANDROID) FIX['dns:auto'] = {n: 'Automatic Private DNS', d: 'Opens Private DNS settings', ic: 'dns'};
 const EST = {'flushdns': 2, 'renew-ip': 30, 'restart-adapter': 20, 'enable-adapters': 8, 'sync-time': 10, 'reset-proxy': 2, 'clear-cert-cache': 3, 'update-roots': 30, 'clear-browser-cache': 10, 'reset-hosts': 2, 'reset-stack': 8, 'reboot': 2};
 const est = a => EST[a] || (a.startsWith('dns:') ? 5 : 3);
 const fmtSec = n => n < 60 ? `${n} s` : `${Math.floor(n / 60)} min ${n % 60 ? (n % 60) + ' s' : ''}`.trim();
@@ -531,7 +553,7 @@ function reportHTML() {
 
   // connection path
   const L = N.layers || {};
-  const nodes = [['adapter', A.kind === 'Wi-Fi' ? 'wifi' : 'pc', 'This PC'], ['router', 'router', 'Router'], ['internet', 'globe', 'Internet'], ['dns', 'dns', 'DNS'], ['web', 'lock', 'Websites']];
+  const nodes = [['adapter', A.kind === 'Wi-Fi' ? 'wifi' : 'pc', ANDROID ? 'This phone' : 'This PC'], ['router', 'router', 'Router'], ['internet', 'globe', 'Internet'], ['dns', 'dns', 'DNS'], ['web', 'lock', 'Websites']];
   let p = '<div class="path">';
   nodes.forEach(([k, ic, nm], i) => {
     const l = L[k] || {status: 'idle', text: '-'}, c = ST[l.status] || ST.idle;
@@ -610,23 +632,23 @@ function reportHTML() {
     ['Adapter', A.desc], ['Type', A.kind], ['Network', A.network], ['IPv4 address', A.ipv4 ? `${A.ipv4} / ${A.prefix}` : null], ['Gateway (router)', A.gateway],
     ['DNS servers', arr(A.dns).concat(arr(A.dns6)).join(', ')], ['Address from', A.ipv4 ? (A.dhcp ? 'DHCP (automatic)' : 'Static (manual)') : null],
     ['Link speed', A.speed], ['MAC address', A.mac], ['IPv6', A.ipv6 ? `${A.ipv6}${N.ipv6 && N.ipv6.ok ? ' · working' : ' · no IPv6 internet'}` : 'Not available'],
-    ['Windows status', A.connectivity, A.connectivity === 'Internet' ? 'ok' : A.connectivity ? 'warn' : null]])}</div>`);
+    [ANDROID ? 'Android status' : 'Windows status', A.connectivity, A.connectivity === 'Internet' ? 'ok' : A.connectivity ? 'warn' : null]])}</div>`);
   if (W && W.ssid) cards.push(`<div class="card" style="--d:.34s"><div class="ct"><span>Wi-Fi</span></div>${kvTable([
     ['Network (SSID)', W.ssid], ['Signal', W.signal ? W.signal + ' %' : null, W.signal >= 60 ? 'ok' : W.signal >= 45 ? 'warn' : 'bad'], ['Band', W.band], ['Channel', W.channel],
     ['Standard', W.radio], ['Link rate', W.rx ? `${W.rx} Mbps down · ${W.tx} Mbps up` : null], ['Security', W.auth ? `${W.auth}${W.cipher ? ' · ' + W.cipher : ''}` : null],
     ['Router latency', G.ok ? `${G.avg} ms · ${G.loss}% loss` : null, G.ok ? (G.loss >= 10 ? 'warn' : 'ok') : null]])}</div>`);
   cards.push(`<div class="card" style="--d:.38s"><div class="ct"><span>Security &amp; Settings</span></div>${kvTable([
-    ['PC clock', has(K.skew) ? (Math.abs(K.skew) <= 120 ? `Correct (${K.skew >= 0 ? '+' : ''}${K.skew} s)` : `Off by ${K.skew} s`) : 'Not checked', has(K.skew) ? (Math.abs(K.skew) <= 120 ? 'ok' : 'bad') : null],
+    [ANDROID ? 'Phone clock' : 'PC clock', has(K.skew) ? (Math.abs(K.skew) <= 120 ? `Correct (${K.skew >= 0 ? '+' : ''}${K.skew} s)` : `Off by ${K.skew} s`) : 'Not checked', has(K.skew) ? (Math.abs(K.skew) <= 120 ? 'ok' : 'bad') : null],
     ['Time zone', K.tz], ['Time service', K.service ? `${K.service} (${K.startup})` : null],
     ['Proxy', P.enabled ? `On · ${P.server}` : P.pac ? `Script · ${P.pac}` : 'Off', P.enabled || P.pac ? 'warn' : 'ok'],
-    ['System proxy', P.winhttpDirect ? 'Direct (none)' : 'Set', P.winhttpDirect ? 'ok' : 'warn'],
-    ['Hosts file', arr(N.hosts).length ? `${arr(N.hosts).length} custom entr${arr(N.hosts).length > 1 ? 'ies' : 'y'}` : 'Clean', arr(N.hosts).length ? 'warn' : 'ok'],
+    ANDROID ? null : ['System proxy', P.winhttpDirect ? 'Direct (none)' : 'Set', P.winhttpDirect ? 'ok' : 'warn'],
+    ANDROID ? null : ['Hosts file', arr(N.hosts).length ? `${arr(N.hosts).length} custom entr${arr(N.hosts).length > 1 ? 'ies' : 'y'}` : 'Clean', arr(N.hosts).length ? 'warn' : 'ok'],
     ['HTTPS interception', N.intercept ? `Yes · ${N.intercept}` : 'None', N.intercept ? 'bad' : 'ok'],
     ['DNS hijacking', N.dnsHijack ? 'Detected' : 'None', N.dnsHijack ? 'warn' : 'ok'],
-    ['Encrypted DNS', arr(N.doh).length ? 'On' : N.dohSupported === false ? 'Needs Windows 11' : 'Off'],
+    ['Encrypted DNS', arr(N.doh).length ? 'On' : N.dohSupported === false ? (ANDROID ? 'Off (use Private DNS)' : 'Needs Windows 11') : 'Off'],
     ['VPN', arr(N.vpn).length ? arr(N.vpn).join(', ') : 'None'],
-    ['Firewall', arr(N.firewall).map(f => `${f.name} ${f.on ? 'on' : 'off'}`).join(' · ')],
-    ['Antivirus', arr(N.av).join(', ')]])}</div>`);
+    ANDROID ? null : ['Firewall', arr(N.firewall).map(f => `${f.name} ${f.on ? 'on' : 'off'}`).join(' · ')],
+    ANDROID ? null : ['Antivirus', arr(N.av).join(', ')]])}</div>`);
   if (arr(N.adapters).length) cards.push(`<div class="card" style="--d:.42s"><div class="ct"><span>Network Adapters</span></div>${kvTable(arr(N.adapters).map(a => [a.name, `${a.desc} · ${a.status}${a.status === 'Up' ? ' · ' + a.speed : ''}`, a.status === 'Up' ? 'ok' : a.disabled ? 'bad' : null]))}</div>`);
   h += `<div class="cols">${cards.join('')}</div>`;
 
@@ -744,6 +766,13 @@ async function saveReport() {
   const d = new Date(), p = n => String(n).padStart(2, '0');
   const name = `CoreKit-Network_${String(DATA.net.host || 'PC').replace(/[^\w\-]+/g, '')}_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
   try {
+    const N = window.CoreKitNative;
+    if (N) { // Android: saved to Downloads/CoreKit
+      const j = JSON.parse(N.save(name, exportHTML()));
+      if (j.error) throw new Error(j.error);
+      toast('Saved to ' + j.label, false, {label: 'Open', fn: () => N.open(j.path)});
+      return;
+    }
     const r = await fetch(API + 'save', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name, html: exportHTML()})});
     if (!r.ok) throw new Error(await r.text());
     const j = await r.json();

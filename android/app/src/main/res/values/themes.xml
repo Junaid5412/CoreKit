@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.CoreKit" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/ck_bg</item>
+        <item name="android:statusBarColor">@color/ck_bg</item>
+        <item name="android:navigationBarColor">@color/ck_bg</item>
+        <item name="android:colorAccent">@color/ck_teal</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

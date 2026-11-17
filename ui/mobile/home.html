@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#0a0e13">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CoreKit</title>
+<meta name="color-scheme" content="dark">
+<style>
+:root{--bg:#0a0e13;--panel:#10161e;--line:#1a2431;--acc:#2dd4bf;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;
+  --font:"Segoe UI",Roboto,system-ui,sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;min-height:100%;background:var(--bg);color:#c9d1d9;font:14px/1.45 var(--font);-webkit-font-smoothing:antialiased;user-select:none}
+body{padding:max(22px,env(safe-area-inset-top)) 18px 28px;background:radial-gradient(520px 380px at 50% 0%,rgba(45,212,191,.09),transparent 70%),var(--bg)}
+.top{display:flex;align-items:center;gap:12px;animation:in .45s ease both}
+.top svg{width:38px;height:38px;flex:none}
+.top b{font:700 22px var(--font);color:var(--white);letter-spacing:.3px}.top b span{color:var(--acc)}
+.top small{display:block;color:var(--muted);font-size:12px;letter-spacing:2px;text-transform:uppercase;margin-top:1px}
+.dev{margin:20px 0 6px;padding:14px 16px;border-radius:14px;background:var(--panel);border:1px solid var(--line);display:grid;grid-template-columns:auto 1fr;gap:5px 14px;font-size:12.5px;animation:in .45s .05s ease both}
+.dev span:nth-child(odd){color:var(--muted)}.dev span:nth-child(even){color:var(--white);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+h2{margin:22px 4px 10px;font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted)}
+.mod{display:flex;align-items:center;gap:14px;padding:16px;margin-bottom:10px;border-radius:16px;background:var(--panel);border:1px solid var(--line);color:inherit;text-decoration:none;transition:transform .12s,border-color .15s;animation:in .45s ease both}
+.mod:active{transform:scale(.98);border-color:#2a3c50}
+.mod .ic{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;flex:none;background:#10262a;color:var(--acc)}
+.mod .ic svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mod .t{flex:1;min-width:0}
+.mod .t b{display:block;color:var(--white);font-size:15.5px;font-weight:600}
+.mod .t small{color:var(--muted2);font-size:12.5px}
+.mod .n{font:700 12px var(--font);color:var(--muted);width:24px;height:24px;border-radius:7px;border:1px solid var(--line);display:grid;place-items:center}
+.mod.soon{opacity:.55}
+.mod .tag{font-size:10px;font-weight:700;letter-spacing:.8px;color:#fbbf24;background:#2a2312;border-radius:5px;padding:2px 6px}
+.row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:14px;background:var(--panel);border:1px solid var(--line);margin-bottom:10px}
+.row .t{flex:1}.row .t b{display:block;color:var(--white);font-weight:600}.row .t small{color:var(--muted);font-size:12px}
+.sw{position:relative;width:46px;height:26px;border-radius:13px;background:#1f2b3a;border:0;flex:none;transition:background .2s}
+.sw::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#8b98a5;transition:left .22s,background .2s}
+.sw.on{background:var(--acc)}.sw.on::after{left:23px;background:#03201c}
+.exit{width:100%;margin-top:14px;height:48px;border-radius:14px;border:1px solid #3a1a20;background:#1a0f12;color:#fca5a5;font:600 14px var(--font)}
+.ft{text-align:center;color:#3c4652;font-size:11.5px;margin-top:18px}
+@keyframes in{from{opacity:0;transform:translateY(8px)}}
+/* goodbye */
+#bye{position:fixed;inset:0;background:#05080b;display:none;flex-direction:column;justify-content:center;padding:28px;font:13px/1.5 "Cascadia Mono",Consolas,"Roboto Mono",monospace;color:#c9d1d9}
+#bye.show{display:flex}
+#bye .l{white-space:pre;opacity:0;transition:opacity .2s}#bye .l.v{opacity:1}
+#bye .ok{color:#3fdc8a}
+#bye .big{font:800 44px/1.1 var(--font);letter-spacing:6px;margin:26px 0 10px;background:linear-gradient(90deg,#2dd4bf,#22d3ee,#60a5fa);-webkit-background-clip:text;background-clip:text;color:transparent;clip-path:inset(0 100% 0 0);transition:clip-path .55s ease}
+#bye .big.v{clip-path:inset(0 0 0 0)}
+#bye .msg{color:#2dd4bf;min-height:20px}
+</style>
+</head>
+<body>
+<div class="top">
+  <svg viewBox="0 0 48 48"><path d="M24 5 40.5 14.5v19L24 43 7.5 33.5v-19z" fill="none" stroke="#2dd4bf" stroke-width="3.4" stroke-linejoin="round"/><path d="M24 18.5 28.8 21.3v5.4L24 29.5l-4.8-2.8v-5.4z" fill="#2dd4bf"/></svg>
+  <div><b>Core<span>Kit</span></b><small>System toolkit · <span id="ver"></span></small></div>
+</div>
+<div class="dev" id="dev"></div>
+
+<h2>Modules</h2>
+<a class="mod" href="health" style="animation-delay:.08s"><span class="ic"><svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span><span class="t"><b>Health Inspector</b><small>Battery, storage, memory, CPU, sensors + score</small></span><span class="n">1</span></a>
+<a class="mod" href="net" style="animation-delay:.12s"><span class="ic"><svg viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg></span><span class="t"><b>Internet Troubleshooter</b><small>Wi-Fi, DNS, HTTPS problems + speed test</small></span><span class="n">2</span></a>
+<a class="mod" id="br" href="browser" style="animation-delay:.16s"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span><span class="t"><b>Safe Browser</b><small>Private profiles + proxy / VPN, leak-checked</small></span><span class="n">3</span></a>
+
+<h2>Privacy</h2>
+<div class="row"><span class="t"><b>Hide from screenshots</b><small>Screenshots, recording and remote viewers see black</small></span><button class="sw" id="shield"></button></div>
+
+<button class="exit" id="exit">Exit CoreKit</button>
+<div class="ft">Same toolkit on Windows, Android and Linux</div>
+
+<div id="bye"></div>
+<script>
+"use strict";
+const N = window.CoreKitNative;
+let info = {model: "This device", android: "", api: 0, version: "", shield: true};
+try { if (N) info = JSON.parse(N.info()); } catch (e) {}
+document.getElementById("ver").textContent = "v" + (info.version || "dev");
+document.getElementById("dev").innerHTML = `<span>Device</span><span>${info.model}</span><span>Android</span><span>${info.android}${info.api ? " (API " + info.api + ")" : ""}</span><span>Time</span><span>${new Date().toLocaleString(undefined, {day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit"})}</span>`;
+const sw = document.getElementById("shield");
+sw.classList.toggle("on", !!info.shield);
+sw.onclick = () => { const on = !sw.classList.contains("on"); sw.classList.toggle("on", on); if (N) N.setShield(on); };
+if (!N || !N.browser) { const b = document.getElementById("br"); b.classList.add("soon"); b.removeAttribute("href"); b.querySelector(".n").outerHTML = '<span class="tag">NEXT UPDATE</span>'; }
+
+// 3-second goodbye, like the terminal version
+document.getElementById("exit").onclick = () => {
+  const el = document.getElementById("bye"); el.classList.add("show");
+  const lines = ["[+]  Stopping proxy tunnels", "[+]  Removing temporary files", "[+]  Wiping decrypted settings from memory"];
+  el.innerHTML = '<div style="color:#2dd4bf;letter-spacing:3px">C O R E K I T <span style="color:#6b7785;letter-spacing:0">// shutting down securely</span></div><br>' +
+    lines.map(l => `<div class="l"><span class="ok">${l.slice(0, 3)}</span>${l.slice(3)}</div>`).join("") + '<div class="big">GOODBYE</div><div class="msg"></div>';
+  const ls = el.querySelectorAll(".l");
+  ls.forEach((l, i) => setTimeout(() => l.classList.add("v"), 200 + i * 260));
+  setTimeout(() => el.querySelector(".big").classList.add("v"), 1050);
+  const msg = "Stay secure. See you next time.", m = el.querySelector(".msg");
+  [...msg].forEach((c, i) => setTimeout(() => m.textContent += c, 1650 + i * 22));
+  setTimeout(() => { if (N) N.exit(); }, 3000);
+};
+</script>
+</body>
+</html>
