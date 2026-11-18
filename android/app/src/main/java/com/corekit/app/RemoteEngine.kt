@@ -43,6 +43,9 @@ object RemoteEngine {
             qemuShare(ctx)?.let { pb.environment()["CK_QEMU_SHARE"] = it }
         }
         pb.environment()["CK_VMDIR"] = File(ctx.filesDir, "vm").path
+        // root certificates for HTTPS downloads (Android 14 keeps the current ones in an APEX)
+        listOf("/apex/com.android.conscrypt/cacerts", "/system/etc/security/cacerts").filter { File(it).isDirectory }
+            .takeIf { it.isNotEmpty() }?.let { pb.environment()["SSL_CERT_DIR"] = it.joinToString(":") }
         val p = try { pb.start() } catch (e: Throwable) { lastError = "could not run the engine (${e.message})"; return false }
         val early = StringBuilder()
         proc = p
