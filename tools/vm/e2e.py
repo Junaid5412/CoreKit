@@ -58,6 +58,16 @@ if os.environ.get("APK"):
         cmd("input", id=mid, s=f"free -m; cat /proc/loadavg; top -b -n 1 -m 12; lsmod | grep -i balloon; df -h /data; echo DIAG-{tag}-END\r")
         term_has(f"DIAG-{tag}-END\n", 3); r = call(f"term?id={mid}&since=0"); print(f"---- {tag} ----\n" + r.get("t", "")[-3500:], flush=True)
     diag("before")
+    # how busy is the screen compositor (surfaceflinger) with each setting? (CPU ticks in 20 s)
+    def sh(c, tag, mins=3):
+        cmd("input", id=mid, s=c + f'; echo "{tag}""-END"\r'); term_has(f"{tag}-END", mins)
+        r = call(f"term?id={mid}&since=0"); t = r.get("t", ""); i = t.rfind(f"{tag}-END"); print(f"---- {tag} ----\n" + t[max(0, i - 900):i], flush=True)
+    SF = "p=$(pidof surfaceflinger); a=$(cut -d' ' -f14,15 /proc/$p/stat); sleep 20; b=$(cut -d' ' -f14,15 /proc/$p/stat); echo SFTICKS $a / $b"
+    sh("wm size; wm density; dumpsys power | grep -E 'mWakefulness=|Display Power'; " + SF, "sf-base")
+    sh("settings put global window_animation_scale 0; settings put global transition_animation_scale 0; settings put global animator_duration_scale 0; sleep 3; " + SF, "sf-noanim")
+    sh("wm size 480x800; wm density 160; sleep 5; " + SF, "sf-small")
+    sh("input keyevent 26; sleep 3; dumpsys power | grep -E 'mWakefulness='; " + SF, "sf-off")
+    sh("input keyevent 224; wm size reset; wm density reset; sleep 3; dumpsys power | grep -E 'mWakefulness='", "sf-on")
     big = os.path.join(os.path.dirname(os.environ["APK"]), "big.apk")
     with open(big, "wb") as f: f.write(os.urandom(45 << 20))
     os.chmod(big, 0o644)
