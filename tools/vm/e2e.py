@@ -31,7 +31,10 @@ mid = cmd("create", image=img, name="CI phone")["id"]
 m = [x for x in call("state")["machines"] if x["id"] == mid][0]; print("created", m, flush=True)
 def mach(s): return [x for x in s["machines"] if x["id"] == mid][0]
 cmd("start", id=mid)
-wait("running (first start)", lambda s: mach(s)["state"] == "running" or (mach(s)["state"] == "off" and sys.exit("stopped: " + str(mach(s).get("lastExit")))), 100)
+def died(s):
+    if mach(s)["state"] != "off": return False
+    print(call(f"term?id={mid}&since=0").get("t", "")[-5000:]); sys.exit("stopped: " + str(mach(s).get("lastExit")))
+wait("running (first start)", lambda s: mach(s)["state"] == "running" or died(s), 100)
 def term_has(text, mins=5):
     since = 0; buf = ""; t0 = time.time()
     while time.time() - t0 < mins * 60:

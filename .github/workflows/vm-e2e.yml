@@ -75,6 +75,10 @@ jobs:
   windows:
     needs: apk
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        accel: [default, tcg]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -87,6 +91,7 @@ jobs:
         run: |
           go build -o ck.exe ./desktop
           export PCHI_URLFILE="$PWD/url.txt" CK_VMDIR="$PWD/vmd"
+          [ "${{ matrix.accel }}" = tcg ] && export CK_VM_ACCEL="tcg,thread=multi"
           ./ck.exe --serve vm --no-elevate > ck.log 2>&1 &
           for i in $(seq 1 60); do [ -s url.txt ] && break; sleep 1; done
           U=$(cat url.txt); echo "$U"
@@ -94,4 +99,4 @@ jobs:
           APK="$(cygpath -w "$PWD/apk/test.apk")" python -u tools/vm/e2e.py "${U}api/vm/"
       - if: always()
         shell: bash
-        run: tail -40 ck.log; tail -20 vmd/machines/*/qemu.log || true
+        run: tail -40 ck.log; cat vmd/machines/*/qemu.log || true; ls -la vmd/machines/* || true

@@ -826,6 +826,9 @@ func (e *vmEngine) start(id string) error {
 	snap, _ := vmSnapFor(m)
 	cpu := "max"
 	accel := q.accel
+	if a := os.Getenv("CK_VM_ACCEL"); a != "" {
+		accel = a
+	}
 	args := append([]string{}, q.pre...)
 	args = append(args,
 		"-name", "CoreKit-"+m.Name,
@@ -913,13 +916,14 @@ func (e *vmEngine) start(id string) error {
 		}
 		r.term.write([]byte("\r\n\x1b[90m[CoreKit] Virtual device " + msg + ".\x1b[0m\r\n"))
 		vmLastExit.Store(id, msg)
+		vmLastTerm.Store(id, r.term) // the console stays readable after it stops
 		logLine("*", "Virtual Environment: "+m.Name+" "+msg)
 	}()
 	go e.boot(r, p0, p1)
 	return nil
 }
 
-var vmLastExit sync.Map
+var vmLastExit, vmLastTerm sync.Map
 
 func lastLine(s string) string {
 	s = strings.TrimSpace(s)
@@ -1498,13 +1502,20 @@ func mountVM(mux *http.ServeMux, prefix string, auth func(*http.Request) bool) {
 		if !ok(w, r) {
 			return
 		}
-		run := vmEng.running(r.URL.Query().Get("id"))
+		id := r.URL.Query().Get("id")
+		run := vmEng.running(id)
 		since, _ := strconv.ParseInt(r.URL.Query().Get("since"), 10, 64)
-		if run == nil {
+		var ring *vmRing
+		if run != nil {
+			ring = run.term
+		} else if v, ok := vmLastTerm.Load(id); ok {
+			ring = v.(*vmRing)
+		}
+		if ring == nil {
 			writeJSON(w, map[string]any{"t": "", "n": since, "off": true})
 			return
 		}
-		data, n := run.term.since(since)
+		data, n := ring.since(since)
 		writeJSON(w, map[string]any{"t": string(bytes.ToValidUTF8(data, []byte("?"))), "n": n})
 	})
 	mux.HandleFunc(prefix+"cmd", func(w http.ResponseWriter, r *http.Request) {
