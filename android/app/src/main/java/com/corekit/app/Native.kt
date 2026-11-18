@@ -41,7 +41,7 @@ class Helper(private val ctx: Context) {
 
     private fun dnsServer(): String? = try {
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        cm.getLinkProperties(cm.activeNetwork)?.dnsServers?.firstOrNull { it is java.net.Inet4Address }?.hostAddress
+        cm.getLinkProperties(cm.activeNetwork)?.dnsServers?.mapNotNull { it.hostAddress?.substringBefore('%') }?.takeIf { it.isNotEmpty() }?.joinToString(",")
     } catch (_: Throwable) { null }
 }
 

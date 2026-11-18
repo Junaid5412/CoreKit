@@ -1197,6 +1197,7 @@ func subnetBroadcast() string {
 // runRemoteEngine is the Android mode: a long-running engine with a loopback API that
 // the app forwards the page to. Prints "READY <port>" once listening.
 func runRemoteEngine() int {
+	helperResolver() // DNS on Android (downloads for Virtual Environment)
 	tok := os.Getenv("CK_TOKEN")
 	if len(tok) < 16 {
 		fmt.Println("ERR token")

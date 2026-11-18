@@ -65,7 +65,9 @@ jobs:
           mkdir -p /tmp/vmd && chmod 777 /tmp/vmd
           docker run -d --name tx --network host -v /tmp/q:/q -v /tmp/vmd:/tmp/vmd -v /etc/ssl/certs:/etc/ssl/certs:ro termux/termux-docker:aarch64 sleep infinity
           sleep 5
-          docker exec -d tx sh -c 'sleep 100000 | SSL_CERT_DIR=/etc/ssl/certs CK_TOKEN=0123456789abcdef0123456789abcdef CK_NAME=CI CK_VMDIR=/tmp/vmd CK_QEMU=/q/lib/libqemu.so CK_QEMU_LIB=/q/lib CK_QEMU_SHARE=/q/share /q/lib/libcorekit.so --remote > /tmp/vmd/engine.log 2>&1'
+          # like a real phone: resolv.conf ignored, the network's DNS server handed over in CK_DNS
+          DNS=$(sed -n 's/^nameserver //p' /run/systemd/resolve/resolv.conf | head -1); echo "DNS=$DNS"
+          docker exec -d tx sh -c "sleep 100000 | CK_NO_RESOLV=1 CK_DNS=$DNS SSL_CERT_DIR=/etc/ssl/certs CK_TOKEN=0123456789abcdef0123456789abcdef CK_NAME=CI CK_VMDIR=/tmp/vmd CK_QEMU=/q/lib/libqemu.so CK_QEMU_LIB=/q/lib CK_QEMU_SHARE=/q/share /q/lib/libcorekit.so --remote > /tmp/vmd/engine.log 2>&1"
           for i in $(seq 1 30); do grep -q READY /tmp/vmd/engine.log 2>/dev/null && break; sleep 1; done
           P=$(sed -n 's/^READY //p' /tmp/vmd/engine.log)
           cp /tmp/apk/test.apk /tmp/vmd/test.apk && chmod 644 /tmp/vmd/test.apk

@@ -16,6 +16,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -46,18 +47,42 @@ func helperClient(port int, timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
 }
 
-// Android has no /etc/resolv.conf: the app passes the network's DNS server in CK_DNS.
+// Android has no /etc/resolv.conf, so Go's resolver would ask 127.0.0.1 and fail with
+// "connection refused". The app passes the network's DNS servers in CK_DNS
+// (comma-separated); public resolvers are the fallback (the network can change while
+// the engine runs).
 func helperResolver() {
-	dns := os.Getenv("CK_DNS")
-	if dns == "" {
-		dns = "1.1.1.1"
+	var servers []string
+	for _, s := range strings.Split(os.Getenv("CK_DNS"), ",") {
+		if s = strings.Trim(strings.TrimSpace(s), "[]"); s != "" && net.ParseIP(s) != nil {
+			servers = append(servers, net.JoinHostPort(s, "53"))
+		}
 	}
-	if !strings.Contains(dns, ":") || strings.Count(dns, ":") > 1 && !strings.HasPrefix(dns, "[") {
-		dns = net.JoinHostPort(dns, "53")
+	if b, err := os.ReadFile("/etc/resolv.conf"); err == nil && os.Getenv("CK_NO_RESOLV") == "" { // outside Android
+		for _, l := range strings.Split(string(b), "\n") {
+			if f := strings.Fields(l); len(f) >= 2 && f[0] == "nameserver" && net.ParseIP(strings.Split(f[1], "%")[0]) != nil {
+				servers = append(servers, net.JoinHostPort(strings.Split(f[1], "%")[0], "53"))
+			}
+		}
 	}
+	servers = append(servers, "1.1.1.1:53", "8.8.8.8:53", "9.9.9.9:53")
+	var next atomic.Uint32
 	net.DefaultResolver = &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
-		var d net.Dialer
-		return d.DialContext(ctx, network, dns)
+		// UDP "connects" even to a dead server, so each new try (Go retries a query with a
+		// fresh Dial) starts at the next server: a stale or silent one can't block lookups
+		start := int(next.Add(1)-1) % len(servers)
+		var last error
+		for i := range servers {
+			s := servers[(start+i)%len(servers)]
+			d := net.Dialer{Timeout: 3 * time.Second}
+			c, err := d.DialContext(ctx, network, s)
+			if err != nil {
+				last = err
+				continue
+			}
+			return c, nil // (a plain *net.UDPConn: Go only speaks UDP DNS over a PacketConn)
+		}
+		return nil, last
 	}}
 }
 
