@@ -19,7 +19,11 @@ android {
     namespace = "com.corekit.app"
     compileSdk = 36
     // NDK tools strip the bundled programs and pull out their symbol tables (CI sets ANDROID_NDK_LATEST_HOME)
-    System.getenv("ANDROID_NDK_LATEST_HOME")?.takeIf { file(it).isDirectory }?.let { ndkPath = it }
+    System.getenv("ANDROID_NDK_LATEST_HOME")?.let { file(it) }?.takeIf { it.isDirectory }?.let { ndk ->
+        ndkPath = ndk.path
+        ndk.resolve("source.properties").takeIf { it.exists() }?.readLines()
+            ?.firstOrNull { it.startsWith("Pkg.Revision") }?.substringAfter("=")?.trim()?.let { ndkVersion = it }
+    }
 
     defaultConfig {
         applicationId = "com.hostzelon.corekit"
