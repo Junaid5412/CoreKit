@@ -1303,6 +1303,9 @@ func vmInstallError(out string) string {
 	if m != "" {
 		return "Install failed: " + m
 	}
+	if l := strings.TrimSpace(lastLine(out)); l != "" {
+		return "Install failed: " + l
+	}
 	return "Install failed."
 }
 

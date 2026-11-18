@@ -37,6 +37,9 @@ def term_has(text, mins=5):
         time.sleep(1)
     print(buf[-1500:]); return False
 cmd("input", id=mid, s="id\r"); print("root console:", term_has("uid=0(root)"), flush=True)
+cmd("input", id=mid, s="uptime; date; ps -A | grep -E 'system_server|zygote|surfaceflinger'; service check activity; service check package; logcat -d -b crash | tail -15; echo DIAG-DONE\r")
+term_has("DIAG-DONE\n", 3)
+r = call(f"term?id={mid}&since=0"); print("---- console ----\n" + r.get("t", "")[-4000:], flush=True)
 print("apps:", cmd("apps", id=mid), flush=True)
 import os
 if os.environ.get("APK"):
@@ -46,7 +49,7 @@ if os.environ.get("APK"):
     print("apps after install:", cmd("apps", id=mid), flush=True)
     print("launch:", cmd("launch", id=mid, pkg="ck.test"), flush=True)
 j = cmd("arm", id=mid)["job"]
-wait("ARM support job", lambda s: any(x["id"] == j and x["state"] != "running" for x in s["jobs"]), 20)
+wait("ARM support job", lambda s: any(x["id"] == j and x["state"] != "running" for x in s["jobs"]) or (print("   arm:", [x["detail"] for x in s["jobs"] if x["id"] == j]) and False), 40)
 print("arm job:", [x for x in call("state")["jobs"] if x["id"] == j], flush=True)
 t = time.time(); cmd("suspend", id=mid)
 wait("saved", lambda s: mach(s)["state"] == "off", 20); print("saved:", mach(call("state")).get("saved"), mach(call("state")).get("savedSize"), flush=True)
