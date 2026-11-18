@@ -1197,7 +1197,7 @@ func subnetBroadcast() string {
 // runRemoteEngine is the Android mode: a long-running engine with a loopback API that
 // the app forwards the page to. Prints "READY <port>" once listening.
 func runRemoteEngine() int {
-	helperResolver() // DNS on Android (downloads for Virtual Environment)
+	helperResolver() // DNS on Android (no /etc/resolv.conf)
 	tok := os.Getenv("CK_TOKEN")
 	if len(tok) < 16 {
 		fmt.Println("ERR token")
@@ -1216,13 +1216,10 @@ func runRemoteEngine() int {
 		}
 		return hmac.Equal([]byte(k), []byte(tok))
 	})
-	mountVM(mux, "/vm/", func(r *http.Request) bool {
-		return hmac.Equal([]byte(r.Header.Get("X-CK")), []byte(tok))
-	})
 	fmt.Printf("READY %d\n", ln.Addr().(*net.TCPAddr).Port)
 	os.Stdout.Sync()
 	// stop when the app goes away (its end of our stdin closes)
-	go func() { io.Copy(io.Discard, os.Stdin); rEng.shutdown(); vmEng.shutdownAll(); os.Exit(0) }()
+	go func() { io.Copy(io.Discard, os.Stdin); rEng.shutdown(); os.Exit(0) }()
 	_ = http.Serve(ln, mux)
 	return 0
 }

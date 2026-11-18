@@ -209,7 +209,7 @@ func goodbyeScreen(quick bool) {
 	// session summary
 	session.mu.Lock()
 	var used []string
-	for _, k := range []string{"Health Inspector", "Internet Troubleshooter", "Safe Browser", "Activity Log", "Remote Access", "Virtual Environment"} {
+	for _, k := range []string{"Health Inspector", "Internet Troubleshooter", "Safe Browser", "Activity Log", "Remote Access"} {
 		if n := session.used[k]; n > 0 {
 			if n > 1 {
 				used = append(used, fmt.Sprintf("%s ×%d", k, n))

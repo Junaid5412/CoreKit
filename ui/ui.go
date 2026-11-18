@@ -19,6 +19,4 @@ var (
 	Logs []byte
 	//go:embed remote.html
 	Remote []byte
-	//go:embed vm.html
-	VM []byte
 )

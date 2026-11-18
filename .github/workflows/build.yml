@@ -93,19 +93,6 @@ jobs:
           unzip -o -j /tmp/xray.zip xray -d /tmp/xr
           cp /tmp/xr/xray "$J/libxray.so"
           ls -la "$J"
-      - name: Emulator for Virtual Environment (QEMU arm64, pinned on the vm-images release)
-        run: |
-          set -e
-          J=android/app/src/main/jniLibs/arm64-v8a; A=android/app/src/main/assets/qemu
-          if [ -s tools/vm/qemu-android.sha256 ]; then
-            curl -fsSL -o /tmp/qa.tgz https://github.com/${{ github.repository }}/releases/download/vm-images/qemu-android-arm64.tar.gz
-            echo "$(cat tools/vm/qemu-android.sha256)  /tmp/qa.tgz" | sha256sum -c
-            mkdir -p /tmp/qa "$A" && tar -C /tmp/qa -xzf /tmp/qa.tgz && cp /tmp/qa/lib/*.so "$J"/ && cp -r /tmp/qa/share/. "$A"/
-          else
-            sudo apt-get install -y -qq patchelf binutils >/dev/null
-            python3 tools/vm/termux_qemu.py "$J" "$A"
-          fi
-          du -sh "$J" "$A"
       - uses: gradle/actions/setup-gradle@v4
       - name: Build APK
         working-directory: android
