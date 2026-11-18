@@ -26,7 +26,11 @@ android {
         versionName = ckVersion
         versionCode = ckParts[0] * 10000 + ckParts[1] * 100 + ckParts[2]
         // libcorekit.so (shared Go code) and libxray.so (proxy engine) are 64-bit ARM builds
-        ndk { abiFilters += "arm64-v8a" }
+        ndk {
+            abiFilters += "arm64-v8a"
+            // Google Play: ship symbol tables inside the .aab so native crash reports are readable
+            debugSymbolLevel = "SYMBOL_TABLE"
+        }
     }
 
     signingConfigs {
@@ -43,7 +47,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 shrinks the libraries; the map file goes inside the .aab for Google Play crash reports
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
