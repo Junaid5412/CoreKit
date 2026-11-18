@@ -16,6 +16,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -65,9 +66,14 @@ func helperResolver() {
 		}
 	}
 	servers = append(servers, "1.1.1.1:53", "8.8.8.8:53", "9.9.9.9:53")
+	var next atomic.Uint32
 	net.DefaultResolver = &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+		// UDP "connects" even to a dead server, so each new try (Go retries a query with a
+		// fresh Dial) starts at the next server: a stale or silent one can't block lookups
+		start := int(next.Add(1)-1) % len(servers)
 		var last error
-		for _, s := range servers {
+		for i := range servers {
+			s := servers[(start+i)%len(servers)]
 			d := net.Dialer{Timeout: 3 * time.Second}
 			c, err := d.DialContext(ctx, network, s)
 			if err != nil {
