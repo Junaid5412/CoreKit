@@ -28,7 +28,10 @@ RM_APPS="BasicDreams Browser2 Calendar Camera2 Email Exchange2 Gallery2 Music Mu
  BuiltInPrintService Traceur HTMLViewer Email2 FMRadio Gallery Gallery3D SpeechRecorder CaptivePortalLogin
  OneTimeInitializer StorageManager EmergencyInfo
  Taskbar PicoTts Chrome Velvet Gmail2 TermOnePlus Eleven Traceur GoogleFeedback GooglePartnerSetup
- AnalyticsService GoogleRestore SetupWizard WallpaperPicker SettingsIntelligence"
+ AnalyticsService GoogleRestore SetupWizard WallpaperPicker SettingsIntelligence
+ GmsCore GmsCoreSetup Phonesky GoogleServicesFramework GoogleLoginService GoogleOneTimeInitializer
+ GoogleCalendarSyncAdapter GoogleContactsSyncAdapter GooglePrintRecommendationService GoogleBackupTransport
+ GoogleTTS GoogleSpeechServices CellBroadcastReceiver LatinIME ExactCalculator LiveWallpapersPicker"
 for a in $RM_APPS; do sudo rm -rf "$S/app/$a" "$S/priv-app/$a"; done
 sudo rm -rf "$S"/lib/firmware "$S"/vendor/firmware "$M"/vendor/firmware 2>/dev/null || true
 for d in media bluetooth staging gpu/drm/amd gpu/drm/radeon gpu/drm/nouveau gpu/drm/i915 sound usb/serial infiniband isdn; do
@@ -36,7 +39,30 @@ for d in media bluetooth staging gpu/drm/amd gpu/drm/radeon gpu/drm/nouveau gpu/
 done
 sudo find "$S"/lib/modules -path "*kernel/sound/*" -name '*.ko' -delete 2>/dev/null || true
 sudo rm -rf "$S"/media/audio "$S"/media/bootanimation.zip "$S"/media/*.mp4 2>/dev/null || true
-sudo rm -f "$S"/fonts/NotoSansCJK* "$S"/fonts/NotoSerifCJK* 2>/dev/null || true
+# fonts: keep Roboto, Droid and a few scripts (Arabic/Urdu, symbols); Android skips missing fallbacks
+sudo find "$S"/fonts -type f ! -name 'Roboto*' ! -name 'Droid*' ! -name 'Clock*' ! -name 'Cutive*' \
+  ! -name 'NotoNaskhArabic*' ! -name 'NotoNastaliqUrdu*' ! -name 'NotoSansSymbols*' ! -name 'NotoSansDevanagari*' \
+  ! -name 'CarroisGothic*' ! -name 'ComingSoon*' ! -name 'DancingScript*' ! -name 'NotoSerif-*' \
+  ! -name 'SourceSansPro*' ! -name '*.xml' -delete 2>/dev/null || true
+# debug builds of the Android runtime are never used
+for f in libartd.so libartd-compiler.so libartd-disassembler.so libartd-dexlayout.so libopenjdkjvmd.so \
+  libopenjdkjvmtid.so libopenjdkd.so libadbconnectiond.so libprofiled.so libdexfiled.so libartbased.so; do
+  sudo rm -f "$S/lib/$f" "$S/lib64/$f"
+done
+sudo rm -f "$S"/bin/dex2oatd "$S"/bin/patchoatd "$S"/bin/oatdumpd "$S"/bin/dexoptanalyzerd "$S"/bin/profmand 2>/dev/null || true
+# kernel drivers for hardware a virtual phone never has
+for d in net/ethernet net/usb net/can input/touchscreen input/joystick input/tablet iio platform/x86 mmc nfc \
+  thunderbolt hwmon w1 leds power/supply gpu/drm/gma500 gpu/drm/vmwgfx gpu/drm/ast gpu/drm/mgag200 hid usb/gadget usb/misc; do
+  sudo find "$S"/lib/modules -path "*kernel/drivers/$d/*" -name '*.ko' -delete 2>/dev/null || true
+done
+sudo find "$S"/lib/modules -path "*kernel/net/bluetooth/*" -name '*.ko' -delete 2>/dev/null || true
+# apps install fast: no ahead-of-time compiling at install (the app runtime still compiles hot code)
+sudo sed -i '/^pm\.dexopt\./d' "$S"/build.prop
+printf '%s\n' pm.dexopt.install=extract pm.dexopt.bg-dexopt=verify pm.dexopt.shared=verify \
+  pm.dexopt.inactive=verify pm.dexopt.boot=extract pm.dexopt.ab-ota=verify pm.dexopt.first-boot=verify \
+  dalvik.vm.usejit=true | sudo tee -a "$S"/build.prop >/dev/null
+echo "== build.prop dexopt"; sudo grep -E '^(pm\.dexopt|dalvik\.vm\.(usejit|dex2oat))' "$S"/build.prop || true
+echo "== fonts left"; ls "$S"/fonts | head -60
 # wireless drivers aren't needed, except virt_wifi: Android-x86 shows the network as Wi-Fi through it
 if [ "${NETMODE:-wifi}" = ether ]; then
   sudo find "$S"/lib/modules -path "*kernel/drivers/net/wireless/*" -name '*.ko' -delete 2>/dev/null || true
@@ -44,7 +70,8 @@ else
   sudo find "$S"/lib/modules -path "*kernel/drivers/net/wireless/*" -name '*.ko' ! -name 'virt_wifi.ko' ! -name 'mac80211_hwsim.ko' -delete 2>/dev/null || true
 fi
 echo "== enable_nativebridge"; sudo cat "$S"/bin/enable_nativebridge 2>/dev/null | head -80 || true
-echo "== size after"; sudo du -sh "$M"
+echo "== size after"; sudo du -sh "$M"; sudo du -sh "$S"/* 2>/dev/null | sort -h | tail -12
+echo "== apps left"; sudo du -s "$S"/app/* "$S"/priv-app/* 2>/dev/null | sort -n | tail -25
 # free blocks still hold the deleted files: punch them out so they compress to nothing
 sudo fstrim -v "$M" || true
 sudo umount "$M"

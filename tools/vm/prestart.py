@@ -10,7 +10,7 @@ import gzip, hashlib, json, os, re, shlex, socket, struct, subprocess, sys, thre
 
 iso, prefix, out = sys.argv[1], sys.argv[2], sys.argv[3]
 minutes = float(sys.argv[4]) if len(sys.argv) > 4 else 300
-RAM, CPUS = int(os.environ.get("VMRAM", "2048")), int(os.environ.get("VMCPU", "4"))
+RAM, CPUS = int(os.environ.get("VMRAM", "1536")), int(os.environ.get("VMCPU", "4"))
 W = os.environ.get("VMW", "/tmp/vmps"); os.makedirs(W, exist_ok=True); os.makedirs(out, exist_ok=True)
 name = os.path.basename(iso)[:-4]
 here = os.path.dirname(os.path.abspath(__file__))
@@ -39,6 +39,7 @@ args = shlex.split(prefix) + [
     "-drive", f"file={disk},format=raw,if=virtio,cache=writeback,discard=unmap,detect-zeroes=unmap",
     "-display", "none", "-vga", "std",
     "-netdev", "user,id=n0", "-device", "virtio-net-pci,netdev=n0",
+    "-device", "virtio-balloon-pci,id=bl0",
     "-serial", f"tcp:127.0.0.1:{P0},server=on,wait=off", "-serial", f"tcp:127.0.0.1:{P1},server=on,wait=off",
     "-qmp", f"tcp:127.0.0.1:{P2},server=on,wait=off", "-monitor", "none", "-no-reboot"]
 print(" ".join(args), flush=True)
@@ -103,16 +104,37 @@ while True:
     time.sleep(20)
 boot = time.time() - t0
 print(f"BOOT COMPLETED after {boot/60:.1f} min", flush=True)
-for c in ["settings put global device_provisioned 1; settings put secure user_setup_complete 1",
+for c in ["settings put global device_provisioned 1; settings put secure user_setup_complete 1; "
+          "settings put global package_verifier_enable 0; settings put global verifier_verify_adb_installs 0",
           "ip link set wifi_eth up; ip addr add 10.0.2.15/24 dev wifi_eth; ndc network create 100; ndc network interface add 100 wifi_eth; "
           "ndc network route add 100 wifi_eth 10.0.2.0/24; ndc network route add 100 wifi_eth 0.0.0.0/0 10.0.2.2; "
           "ndc resolver setnetdns 100 '' 10.0.2.3; ndc network default set 100; setprop net.dns1 10.0.2.3",
-          "sleep 300; sync; echo 3 > /proc/sys/vm/drop_caches; free -m"]:  # free memory full of zeros: a much smaller save
+          "sleep 300; am kill-all; sync; echo 3 > /proc/sys/vm/drop_caches; free -m"]:
     o, rc = a.run(c, 900); print(f"$ {c[:80]} -> {rc}\n{o.strip()[-600:]}", flush=True)
 # the save must be of a healthy system
 o, _ = a.run("service check activity; service check package; logcat -d -b crash | grep -c 'system died'", 120)
 print("health:", o, flush=True)
 if o.count("found") < 2 or "not found" in o: sys.exit("Android's system services are not running; not saving")
+# memory balloon: free guest memory still holds old data; take it back so it saves as zeros
+# (same as vmShrink in desktop/vm_snap.go; CoreKit gives the memory back after resuming)
+o, _ = a.run("modprobe virtio_balloon 2>/dev/null; grep MemFree: /proc/meminfo", 60)
+free_kb = int(re.findall(r"MemFree:\s*(\d+)", o)[-1])
+take = free_kb * 1024 - 192 * 2**20
+if take > 64 * 2**20:
+    target = RAM * 2**20 - take
+    print("balloon", qmp([{"execute": "balloon", "arguments": {"value": target}}]), flush=True)
+    last, same = 0, 0
+    for _ in range(300):
+        time.sleep(1)
+        act = qmp([{"execute": "query-balloon"}])[-1].get("return", {}).get("actual", 0)
+        if act <= target + 8 * 2**20: break
+        same = same + 1 if act == last else 0
+        if same >= 5: break
+        last = act
+    print(f"balloon: guest memory now {act >> 20} MB (target {target >> 20} MB)", flush=True)
+    time.sleep(5)
+o, _ = a.run("free -m; service check activity; service check package", 120); print(o, flush=True)
+if o.count("found") < 2 or "not found" in o: sys.exit("system services stopped after the balloon; not saving")
 ts = time.time()
 print(qmp([{"execute": "stop"}, {"execute": "migrate", "arguments": {"uri": "file:" + snap}}]), flush=True)
 while True:
@@ -173,7 +195,8 @@ ok = False
 for _ in range(900):
     try:
         stt = qmp([{"execute": "query-status"}])[-1].get("return", {}).get("status")
-        if stt == "running": ok = True; break
+        if stt == "running":
+            ok = True; qmp([{"execute": "balloon", "arguments": {"value": RAM * 2**20}}]); break
         if stt in ("paused", "postmigrate"): qmp([{"execute": "cont"}])  # it was saved paused
     except Exception: pass
     time.sleep(1)

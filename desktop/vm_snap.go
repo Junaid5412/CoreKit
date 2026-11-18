@@ -14,6 +14,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -103,7 +104,7 @@ func vmSnapFor(m *vmMachine) (string, *vmSnapMeta) {
 		return "", nil
 	}
 	var meta vmSnapMeta
-	if json.Unmarshal(b, &meta) != nil || meta.Image != m.Image || meta.RAM != m.RAM || meta.CPUs != m.CPUs || meta.Version != vmQemuID() {
+	if json.Unmarshal(b, &meta) != nil || meta.Image != m.Image || meta.RAM != m.RAM || meta.CPUs != m.CPUs || meta.Version != vmSnapVersion(m.Image) {
 		vmDropSnap(m.ID)
 		return "", nil
 	}
@@ -150,6 +151,7 @@ func (e *vmEngine) doSuspend(r *vmRun) error {
 		// drop file caches: the save gets smaller and faster
 		r.set("stopping", "Preparing to save")
 		r.auto.run("sync; echo 3 > /proc/sys/vm/drop_caches", 3*time.Minute)
+		vmShrink(r.auto, q, r.m.RAM, 192)
 	}
 	if _, err := q.do("stop", nil); err != nil {
 		return err
@@ -189,7 +191,7 @@ func (e *vmEngine) doSuspend(r *vmRun) error {
 			if err := os.Rename(part, vmSnapPath(r.m.ID)); err != nil {
 				return err
 			}
-			meta, _ := json.Marshal(vmSnapMeta{Image: r.m.Image, RAM: r.m.RAM, CPUs: r.m.CPUs, Version: vmQemuID(), Saved: time.Now().Unix(), Size: fi.Size()})
+			meta, _ := json.Marshal(vmSnapMeta{Image: r.m.Image, RAM: r.m.RAM, CPUs: r.m.CPUs, Version: vmSnapVersion(r.m.Image), Saved: time.Now().Unix(), Size: fi.Size()})
 			os.WriteFile(vmSnapMetaPath(r.m.ID), meta, 0600)
 			r.set("stopping", "Saved")
 			q.do("quit", nil)
@@ -234,6 +236,7 @@ func (e *vmEngine) afterResume(r *vmRun) bool {
 		json.Unmarshal(raw, &st)
 		if st.Status == "running" {
 			vmDropSnap(r.m.ID)
+			q.do("balloon", map[string]any{"value": int64(r.m.RAM) << 20}) // give back the memory taken before the save
 			return true
 		}
 		if st.Status == "paused" || st.Status == "postmigrate" { // saved while paused: continue it
@@ -276,4 +279,60 @@ func vmQemuID() string {
 		vmQemuIDVal = fmt.Sprintf("%d-%x", st.Size(), h.Sum(nil)[:8])
 	})
 	return vmQemuIDVal
+}
+
+// vmSnapVersion ties a save to the emulator build, the machine layout and the image build.
+func vmSnapVersion(img string) string {
+	v := vmQemuID() + "/b2"
+	if im := vmImageByID(img); im != nil && len(im.SHA256) >= 12 {
+		v += "/" + im.SHA256[:12]
+	}
+	return v
+}
+
+// vmShrink makes a save small: free guest memory still holds old data, so the memory
+// balloon takes it back (those pages are saved as zeros), leaving keepMB free for Android.
+// The memory is returned after the next start (afterResume).
+func vmShrink(a *vmAuto, q *vmQMP, ramMB, keepMB int) {
+	out, _, err := a.run("modprobe virtio_balloon 2>/dev/null; grep MemFree: /proc/meminfo", 30*time.Second)
+	if err != nil {
+		return
+	}
+	var freeKB int64
+	for _, f := range strings.Fields(out) {
+		if n, err := strconv.ParseInt(f, 10, 64); err == nil {
+			freeKB = n
+		}
+	}
+	take := freeKB<<10 - int64(keepMB)<<20
+	if take < 64<<20 {
+		return
+	}
+	target := int64(ramMB)<<20 - take
+	if _, err := q.do("balloon", map[string]any{"value": target}); err != nil {
+		return
+	}
+	last, same := int64(0), 0
+	for end := time.Now().Add(2 * time.Minute); time.Now().Before(end); {
+		time.Sleep(time.Second)
+		raw, err := q.do("query-balloon", nil)
+		if err != nil {
+			return
+		}
+		var b struct {
+			Actual int64 `json:"actual"`
+		}
+		json.Unmarshal(raw, &b)
+		if b.Actual <= target+(8<<20) {
+			return
+		}
+		if b.Actual == last {
+			if same++; same >= 5 { // the guest gave all it could
+				return
+			}
+		} else {
+			same = 0
+		}
+		last = b.Actual
+	}
 }

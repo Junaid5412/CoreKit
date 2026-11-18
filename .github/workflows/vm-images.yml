@@ -1,6 +1,6 @@
 # Builds the downloads for CoreKit's Virtual Environment and publishes them on the
 # "vm-images" pre-release (not on every push):
-#   android9-lite.iso  slimmed Android-x86 9.0-r2 (tools/vm/slim.sh)
+#   android9-mini.iso  slimmed Android-x86 9.0-r2 (tools/vm/slim.sh), + pre-started save for phones
 #   data8g.ckt         empty 8 GB data-disk template (tools/vm/mktemplate.py)
 #   qemu-win64.zip     QEMU for Windows (from qemu.weilnetz.de), trimmed
 # Sources: Android-x86 https://www.android-x86.org (Apache 2.0, Linux kernel GPLv2),
@@ -32,23 +32,23 @@ jobs:
             echo "retry $i"; sleep 3
           done
           echo "f7eb8fc56f29ad5432335dc054183acf086c539f3990f0b6e9ff58bd6df4604e  /tmp/a9.iso" | sha256sum -c
-      - run: mkdir -p out && TEST_APK=$PWD/test.apk bash tools/vm/slim.sh /tmp/a9.iso out/android9-lite.iso
+      - run: mkdir -p out && TEST_APK=$PWD/test.apk bash tools/vm/slim.sh /tmp/a9.iso out/android9-mini.iso
       - run: python3 tools/vm/mktemplate.py out/data8g.ckt 8
       - name: Boot test
         timeout-minutes: 30
-        run: python3 -u tools/vm/probe2.py $PWD/out/android9-lite.iso "" kvm 10 $PWD/test.apk
+        run: python3 -u tools/vm/probe2.py $PWD/out/android9-mini.iso "" kvm 10 $PWD/test.apk
       - uses: actions/upload-artifact@v4
         with: { name: android9, path: out/ }
   qemu-android:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq patchelf binutils
-      - name: QEMU for Android (arm64, from Termux packages), pinned as a release file
+      - name: QEMU for Android (the pinned build the APK ships; saves only load in the same build)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          python3 tools/vm/termux_qemu.py /tmp/qa/lib /tmp/qa/share
-          mkdir -p out && tar -C /tmp/qa -czf out/qemu-android-arm64.tar.gz lib share
-          ls -la out
+          mkdir -p out && gh release download vm-images -R "$GITHUB_REPOSITORY" -p qemu-android-arm64.tar.gz -D out
+          echo "$(cat tools/vm/qemu-android.sha256)  out/qemu-android-arm64.tar.gz" | sha256sum -c
       - uses: actions/upload-artifact@v4
         with: { name: qemuandroid, path: out/ }
   prestart:
@@ -68,7 +68,7 @@ jobs:
           mkdir -p /tmp/q /tmp/vmps && tar -C /tmp/q -xzf /tmp/qa/qemu-android-arm64.tar.gz
           docker run -d --name tx --network host -v /tmp/q:/q -v /tmp/vmps:/tmp/vmps -v /tmp/img:/tmp/img termux/termux-docker:aarch64 sleep infinity
           sleep 5
-          QHOST=/tmp/q VMW=/tmp/vmps python3 -u tools/vm/prestart.py /tmp/img/android9-lite.iso "docker exec tx env LD_LIBRARY_PATH=/q/lib TMPDIR=/tmp/vmps /q/lib/libqemu.so -L /q/share" out 320
+          QHOST=/tmp/q VMW=/tmp/vmps python3 -u tools/vm/prestart.py /tmp/img/android9-mini.iso "docker exec tx env LD_LIBRARY_PATH=/q/lib TMPDIR=/tmp/vmps /q/lib/libqemu.so -L /q/share" out 320
           ls -la out
       - uses: actions/upload-artifact@v4
         if: always()
@@ -112,7 +112,7 @@ jobs:
           ./qx/qemu-system-x86_64.exe -version
           ./qx/qemu-system-x86_64.exe -accel help
   publish:
-    needs: [android9, qemu-android, qemu-win-test, prestart]
+    needs: [android9, prestart]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -120,7 +120,9 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cd out && ls -la && sha256sum * | tee SHA256SUMS
-          stat -c '%n %s' * | tee SIZES
-          gh release view vm-images -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create vm-images -R "$GITHUB_REPOSITORY" --prerelease --title "Virtual Environment images" --notes "Downloads used by CoreKit's Virtual Environment. Android-x86 (android-x86.org, Apache 2.0 / Linux kernel GPLv2) and QEMU (qemu.org, GPLv2); source code is available from those projects."
-          gh release upload vm-images -R "$GITHUB_REPOSITORY" * --clobber
+          cd out && ls -la
+          # only the new image files: the emulators and the data template stay as published
+          F="android9-mini.iso android9-mini.state.gz android9-mini-started.ckt prestart.json"
+          sha256sum $F | tee SHA256SUMS-mini
+          stat -c '%n %s' $F | tee SIZES-mini
+          gh release upload vm-images -R "$GITHUB_REPOSITORY" $F SHA256SUMS-mini SIZES-mini --clobber
