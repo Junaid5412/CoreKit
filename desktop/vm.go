@@ -1310,8 +1310,19 @@ func vmInstallError(out string) string {
 	if m != "" {
 		return "Install failed: " + m
 	}
-	if l := strings.TrimSpace(lastLine(out)); l != "" {
-		return "Install failed: " + l
+	for _, l := range strings.Split(out, "\n") { // pm's own one-line reason
+		if l = strings.TrimSpace(l); strings.HasPrefix(l, "Failure") || strings.HasPrefix(l, "Error:") {
+			if strings.Contains(l, "Failed to parse") || strings.Contains(l, "INVALID_APK") {
+				return "This file is not a valid app (APK)."
+			}
+			if len(l) > 160 {
+				l = l[:160]
+			}
+			return "Install failed: " + l
+		}
+	}
+	if strings.Contains(out, "Can't find service") || strings.Contains(out, "Failure calling service") {
+		return "Android inside the device is still starting. Try again in a minute."
 	}
 	return "Install failed."
 }
