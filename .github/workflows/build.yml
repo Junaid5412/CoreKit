@@ -94,6 +94,7 @@ jobs:
           cp /tmp/xr/xray "$J/libxray.so"
           ls -la "$J"
       - name: Emulator for Virtual Environment (QEMU arm64, pinned on the vm-images release)
+        if: false # Virtual Environment is out of CoreKit for now (planned as its own app)
         run: |
           set -e
           J=android/app/src/main/jniLibs/arm64-v8a; A=android/app/src/main/assets/qemu
