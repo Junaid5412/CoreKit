@@ -1196,6 +1196,7 @@ func (e *vmEngine) install(id, label string, files []string) (*vmJob, error) {
 			// stdin must stay open, or netcat stops before the whole file has arrived
 			out, rc, err := a.run(fmt.Sprintf("toybox nc -w 30 10.0.2.2 %d </dev/zero > %s; wc -c < %s", port, name, name), 10*time.Minute)
 			if derr := <-done; err != nil || rc != 0 || derr != nil || strings.TrimSpace(out) != strconv.FormatInt(st.Size(), 10) {
+				logLine("!", fmt.Sprintf("Virtual Environment: copy failed (rc=%d err=%v serve=%v out=%q)", rc, err, derr, lastLine(out)))
 				e.jobSet(j, "error", "Copying into the virtual device failed. Is its network up?", 0)
 				return
 			}
@@ -1305,6 +1306,7 @@ func (e *vmEngine) enableARM(r *vmRun, j *vmJob) {
 	hs, _ := os.Stat(dst)
 	out, rc, err := a.run(fmt.Sprintf("mkdir -p /data/arm && toybox nc -w 30 10.0.2.2 %d </dev/zero > /data/arm/houdini9_y.sfs; wc -c < /data/arm/houdini9_y.sfs", port), 5*time.Minute)
 	if derr := <-done; err != nil || rc != 0 || derr != nil || hs == nil || strings.TrimSpace(out) != strconv.FormatInt(hs.Size(), 10) {
+		logLine("!", fmt.Sprintf("Virtual Environment: copy failed (rc=%d err=%v serve=%v out=%q)", rc, err, derr, lastLine(out)))
 		e.jobSet(j, "error", "Copying into the virtual device failed. Is its network up?", 0)
 		return
 	}
