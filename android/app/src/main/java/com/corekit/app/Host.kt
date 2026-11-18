@@ -38,14 +38,13 @@ class Prefs(ctx: Context) {
  */
 class Host(private val act: MainActivity, private val web: WebView) {
     private val pool = Executors.newCachedThreadPool()
-    private val iconPool = Executors.newFixedThreadPool(2)
     private val busy = AtomicBoolean(false)
     @Volatile private var job: FixJob? = null
 
     companion object {
         const val ORIGIN = "https://appassets.androidplatform.net"
         const val BASE = "$ORIGIN/ck/"
-        private val PAGES = mapOf("home" to "mobile/home.html", "health" to "health.html", "net" to "net.html", "logs" to "logs.html", "remote" to "remote.html", "vm" to "vm.html")
+        private val PAGES = mapOf("home" to "mobile/home.html", "health" to "health.html", "net" to "net.html", "logs" to "logs.html", "remote" to "remote.html")
     }
 
     val client = object : WebViewClient() {
@@ -320,64 +319,6 @@ class Host(private val act: MainActivity, private val web: WebView) {
             RemoteEngine.cmd(act, json)
         }
 
-        // ---- Virtual Environment
-        @JavascriptInterface fun vmGet(path: String): String = RemoteEngine.vm(act, path, null)
-        @JavascriptInterface fun vmPost(path: String, body: String): String = RemoteEngine.vm(act, path, body)
-
-        /** Same calls without blocking the page: the answer comes back through window.__vmcb(id, text).
-         *  kind: get, post (engine), apps (this phone's apps), icon (one app icon). */
-        @JavascriptInterface fun vmAsync(id: Int, kind: String, a: String, b: String) {
-            (if (kind == "icon") iconPool else pool).execute {
-                val res = try {
-                    when (kind) {
-                        "get" -> RemoteEngine.vm(act, a, null)
-                        "post" -> RemoteEngine.vm(act, a, b)
-                        "apps" -> vmDeviceApps()
-                        "icon" -> vmAppIcon(a)
-                        else -> ""
-                    }
-                } catch (t: Throwable) { JSONObject().put("error", t.message ?: "failed").toString() }
-                val js = "window.__vmcb&&window.__vmcb($id," + JSONObject.quote(res) + ")"
-                act.runOnUiThread { web.evaluateJavascript(js, null) }
-            }
-        }
-
-        /** Keep virtual devices running while CoreKit is in the background. */
-        @JavascriptInterface fun vmKeep(on: Boolean) { if (on) VmService.start(act) }
-        @JavascriptInterface fun vmRunning(): Boolean = VmService.running
-
-        @JavascriptInterface fun vmView(on: Boolean) = act.runOnUiThread {
-            if (on) act.window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-            else act.window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        }
-
-        /** Apps on this phone that can be copied into a virtual device (with all their APK parts). */
-        @JavascriptInterface fun vmDeviceApps(): String {
-            val pm = act.packageManager
-            val out = JSONArray()
-            val seen = HashSet<String>()
-            val launch = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-            for (ri in pm.queryIntentActivities(launch, 0)) {
-                val ai = ri.activityInfo?.applicationInfo ?: continue
-                if (!seen.add(ai.packageName) || ai.packageName == act.packageName) continue
-                if ((ai.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0 && (ai.flags and android.content.pm.ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0) continue
-                val files = JSONArray().put(ai.sourceDir)
-                var size = java.io.File(ai.sourceDir).length()
-                ai.splitSourceDirs?.forEach { files.put(it); size += java.io.File(it).length() }
-                out.put(JSONObject().put("pkg", ai.packageName).put("label", ai.loadLabel(pm).toString()).put("files", files).put("size", size))
-            }
-            val list = (0 until out.length()).map { out.getJSONObject(it) }.sortedBy { it.optString("label").lowercase() }
-            return JSONArray(list).toString()
-        }
-
-        @JavascriptInterface fun vmAppIcon(pkg: String): String = try {
-            val d = act.packageManager.getApplicationIcon(pkg)
-            val b = android.graphics.Bitmap.createBitmap(72, 72, android.graphics.Bitmap.Config.ARGB_8888)
-            val c = android.graphics.Canvas(b); d.setBounds(0, 0, 72, 72); d.draw(c)
-            val o = java.io.ByteArrayOutputStream(); b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, o); b.recycle()
-            android.util.Base64.encodeToString(o.toByteArray(), android.util.Base64.NO_WRAP)
-        } catch (_: Throwable) { "" }
-
         /** Viewer on screen: keep the display on, and turn sideways for a wide (PC) screen. */
         @JavascriptInterface fun viewer(on: Boolean, landscape: Boolean) = act.setViewerMode(on, landscape)
 
@@ -463,11 +404,10 @@ class Host(private val act: MainActivity, private val web: WebView) {
                 RemoteEngine.cmd(act, JSONObject().put("t", "disconnect").toString())
                 if (RemoteService.running) act.stopRemoteSharing()
                 SessionService.update(act, JSONObject().put("on", false).toString())
-                if (VmService.running) RemoteEngine.vm(act, "cmd", JSONObject().put("t", "stopAll").toString())
             } catch (_: Throwable) {}
             act.runOnUiThread {
                 act.setViewerMode(false, false)
-                web.postDelayed({ RemoteEngine.stop(); act.finishAndRemoveTask() }, if (VmService.running) 2500L else 400L)
+                web.postDelayed({ RemoteEngine.stop(); act.finishAndRemoveTask() }, 400L)
             }
         }
     }

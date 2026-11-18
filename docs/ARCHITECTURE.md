@@ -35,15 +35,8 @@ The UIs never know which platform they run on. They talk to the host through:
   `window.__corekit(msg)` / web messages from the host (message list in `desktop/sb_windows.go`
   `onUIMessage`). Android provides the same `chrome.webview` object through a small shim.
 
-* **Virtual Environment** – the Go engine in `desktop/vm*.go` runs on both platforms
-  (Windows: inside CoreKit.exe, `api/vm/...`; Android: inside `libcorekit.so --remote`, reached
-  through the `vmGet`/`vmPost` bridge). `GET state` → `{images, machines, host, jobs, defaults}`;
-  `GET term?id=&since=` → `{t, n}` (console text since offset `n`); `POST cmd {t, ...}` with
-  `t` = download, cancelDownload, deleteImage, create, update, start, stop, suspend, kill,
-  reset, delete, discardSave, input, install, apps, uninstall, freeze, arm, getEmulator,
-  enableFast, stopAll. Images, the data-disk template, QEMU for Windows/Android and the
-  pre-started phone save are built by `.github/workflows/vm-images.yml` (`tools/vm/`) and
-  published on the `vm-images` pre-release with pinned SHA-256s (`desktop/vm_pins.go`).
+* **Virtual Environment** – not part of CoreKit. Its code (engine, page, image tools and
+  workflows) is kept on the `virtual-environment` branch for a separate app.
 
 Because the contract is identical, **a UI change ships to every platform at once**, and a new
 check only needs its collector written per platform, returning the same JSON fields.

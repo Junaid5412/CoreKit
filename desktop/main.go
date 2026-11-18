@@ -23,7 +23,6 @@ var netPS []byte
 var logsHTML = ui.Logs
 
 var remoteHTML = ui.Remote
-var vmHTML = ui.VM
 
 //go:embed scripts/activity.ps1
 var activityPS []byte
