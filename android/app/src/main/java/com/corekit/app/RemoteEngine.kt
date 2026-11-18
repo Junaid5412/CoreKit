@@ -43,6 +43,12 @@ object RemoteEngine {
             qemuShare(ctx)?.let { pb.environment()["CK_QEMU_SHARE"] = it }
         }
         pb.environment()["CK_VMDIR"] = File(ctx.filesDir, "vm").path
+        // Android has no /etc/resolv.conf: hand the network's DNS servers to the engine
+        try {
+            val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            cm.getLinkProperties(cm.activeNetwork)?.dnsServers?.mapNotNull { it.hostAddress?.substringBefore('%') }
+                ?.takeIf { it.isNotEmpty() }?.let { pb.environment()["CK_DNS"] = it.joinToString(",") }
+        } catch (_: Throwable) {}
         // root certificates for HTTPS downloads (Android 14 keeps the current ones in an APEX)
         listOf("/apex/com.android.conscrypt/cacerts", "/system/etc/security/cacerts").filter { File(it).isDirectory }
             .takeIf { it.isNotEmpty() }?.let { pb.environment()["SSL_CERT_DIR"] = it.joinToString(":") }

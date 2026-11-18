@@ -46,19 +46,43 @@ func helperClient(port int, timeout time.Duration) *http.Client {
 	return &http.Client{Timeout: timeout}
 }
 
-// Android has no /etc/resolv.conf: the app passes the network's DNS server in CK_DNS.
+// Android has no /etc/resolv.conf, so Go's resolver would ask 127.0.0.1 and fail with
+// "connection refused". The app passes the network's DNS servers in CK_DNS
+// (comma-separated); public resolvers are the fallback (the network can change while
+// the engine runs).
 func helperResolver() {
-	dns := os.Getenv("CK_DNS")
-	if dns == "" {
-		dns = "1.1.1.1"
+	var servers []string
+	for _, s := range strings.Split(os.Getenv("CK_DNS"), ",") {
+		if s = strings.Trim(strings.TrimSpace(s), "[]"); s != "" && net.ParseIP(s) != nil {
+			servers = append(servers, net.JoinHostPort(s, "53"))
+		}
 	}
-	if !strings.Contains(dns, ":") || strings.Count(dns, ":") > 1 && !strings.HasPrefix(dns, "[") {
-		dns = net.JoinHostPort(dns, "53")
-	}
+	servers = append(servers, "1.1.1.1:53", "8.8.8.8:53", "9.9.9.9:53")
 	net.DefaultResolver = &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
-		var d net.Dialer
-		return d.DialContext(ctx, network, dns)
+		var last error
+		for _, s := range servers {
+			d := net.Dialer{Timeout: 3 * time.Second}
+			c, err := d.DialContext(ctx, network, s)
+			if err != nil {
+				last = err
+				continue
+			}
+			if strings.HasPrefix(network, "udp") { // UDP "connects" even to a dead server: check it answers
+				return &dnsProbeConn{Conn: c}, nil
+			}
+			return c, nil
+		}
+		return nil, last
 	}}
+}
+
+// dnsProbeConn gives each DNS query a short deadline so a silent server fails fast and the
+// resolver retries (Go tries every query attempt on a fresh Dial).
+type dnsProbeConn struct{ net.Conn }
+
+func (c *dnsProbeConn) Read(b []byte) (int, error) {
+	c.Conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	return c.Conn.Read(b)
 }
 
 func runHelper(cmd string) int {
