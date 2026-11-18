@@ -18,6 +18,8 @@ val copyUi by tasks.registering(Sync::class) {
 android {
     namespace = "com.corekit.app"
     compileSdk = 36
+    // NDK tools strip the bundled programs and pull out their symbol tables (CI sets ANDROID_NDK_LATEST_HOME)
+    System.getenv("ANDROID_NDK_LATEST_HOME")?.takeIf { file(it).isDirectory }?.let { ndkPath = it }
 
     defaultConfig {
         applicationId = "com.hostzelon.corekit"
