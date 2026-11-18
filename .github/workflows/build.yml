@@ -106,11 +106,20 @@ jobs:
           CK_KEYSTORE_B64: ${{ secrets.CK_KEYSTORE_B64 }}
           CK_KEYSTORE_PASS: ${{ secrets.CK_KEYSTORE_PASS }}
         run: |
-          if [ -n "$CK_KEYSTORE_B64" ]; then echo "$CK_KEYSTORE_B64" | base64 -d > release.jks; fi
-          gradle --no-daemon assembleRelease bundleRelease
-          mkdir -p ../dist && cp app/build/outputs/apk/release/*.apk ../dist/CoreKit.apk
-          # Google Play takes the App Bundle (.aab); the .apk is for direct installs
-          cp app/build/outputs/bundle/release/*.aab ../dist/CoreKit.aab
+          mkdir -p ../dist
+          if [ -n "$CK_KEYSTORE_B64" ]; then
+            echo "$CK_KEYSTORE_B64" | base64 -d > release.jks
+            gradle --no-daemon assembleRelease bundleRelease
+            # Google Play takes the App Bundle (.aab); the .apk is for direct installs
+            cp app/build/outputs/bundle/release/*.aab ../dist/CoreKit.aab
+            unzip -p ../dist/CoreKit.aab 'META-INF/*.RSA' | openssl pkcs7 -inform DER -print_certs -noout | head -1
+          else
+            # no upload key: a test-signed .apk only (Google Play refuses test-signed bundles)
+            echo "::warning::No signing key (secrets CK_KEYSTORE_B64 / CK_KEYSTORE_PASS): APK is test-signed and no .aab is made"
+            gradle --no-daemon assembleRelease
+          fi
+          cp app/build/outputs/apk/release/*.apk ../dist/CoreKit.apk
+          rm -f release.jks
       - uses: actions/upload-artifact@v4
         with: { name: android, path: "dist/CoreKit.*" }
 
