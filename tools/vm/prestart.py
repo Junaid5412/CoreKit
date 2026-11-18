@@ -107,9 +107,12 @@ for c in ["settings put global device_provisioned 1; settings put secure user_se
           "ip link set wifi_eth up; ip addr add 10.0.2.15/24 dev wifi_eth; ndc network create 100; ndc network interface add 100 wifi_eth; "
           "ndc network route add 100 wifi_eth 10.0.2.0/24; ndc network route add 100 wifi_eth 0.0.0.0/0 10.0.2.2; "
           "ndc resolver setnetdns 100 '' 10.0.2.3; ndc network default set 100; setprop net.dns1 10.0.2.3",
-          "sleep 120; sync; echo 3 > /proc/sys/vm/drop_caches; free -m",  # let start-up jobs settle
-          "F=$(grep MemFree /proc/meminfo | tr -s ' ' | cut -d' ' -f2); N=$(( F/1024 - 300 )); [ $N -gt 0 ] && dd if=/dev/zero of=/dev/ck_zero bs=1048576 count=$N 2>/dev/null; rm -f /dev/ck_zero; free -m"]:  # free memory full of zeros: a much smaller save
+          "sleep 300; sync; echo 3 > /proc/sys/vm/drop_caches; free -m"]:  # free memory full of zeros: a much smaller save
     o, rc = a.run(c, 900); print(f"$ {c[:80]} -> {rc}\n{o.strip()[-600:]}", flush=True)
+# the save must be of a healthy system
+o, _ = a.run("service check activity; service check package; logcat -d -b crash | grep -c 'system died'", 120)
+print("health:", o, flush=True)
+if o.count("found") < 2 or "not found" in o: sys.exit("Android's system services are not running; not saving")
 ts = time.time()
 print(qmp([{"execute": "stop"}, {"execute": "migrate", "arguments": {"uri": "file:" + snap}}]), flush=True)
 while True:
@@ -178,7 +181,12 @@ print(f"RESUME: running={ok} after {time.time()-tr:.0f}s", flush=True)
 if not ok:
     q.kill(); print(open(f"{log}/prestart-resume.log", errors="replace").read()[-3000:]); sys.exit("resume failed")
 a = Ser(P1, f"{log}/prestart-resume1.log")
-for c in ["id", "getprop sys.boot_completed; uptime", "pm list packages | wc -l", "ip -4 -o addr show | grep -v ' lo '"]:
-    t = time.time(); o, rc = a.run(c, 600); print(f"$ {c} -> {rc} in {time.time()-t:.1f}s: {o.strip()[-300:]}", flush=True)
+res = {}
+for c in ["id", "getprop sys.boot_completed; uptime", "service check activity; service check package", "pm list packages | wc -l", "ip -4 -o addr show | grep -v ' lo '"]:
+    t = time.time(); o, rc = a.run(c, 600); res[c] = o
+    print(f"$ {c} -> {rc} in {time.time()-t:.1f}s:\n{o.strip()[-400:]}", flush=True)
+time.sleep(60)  # still healthy a minute later?
+o, _ = a.run("service check activity; service check package; pm list packages | wc -l", 600); print("after 60s:", o, flush=True)
+if "not found" in o or o.count("found") < 2: q.kill(); sys.exit("system services are not running after resume")
 q.kill()
 print(f"resume test total {time.time()-tr:.0f}s", flush=True)
