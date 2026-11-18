@@ -301,7 +301,7 @@ class Host(private val act: MainActivity, private val web: WebView) {
         }
 
         @JavascriptInterface fun openUsageAccess() {
-            act.runOnUiThread {
+            act.disclose(MainActivity.Disclosure.USAGE) {
                 try { act.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
                 catch (_: Throwable) { try { act.startActivity(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Throwable) {} }
             }
@@ -380,7 +380,9 @@ class Host(private val act: MainActivity, private val web: WebView) {
             act.runOnUiThread {
                 try {
                     when (what) {
-                        "a11y" -> act.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        "a11y" -> act.disclose(MainActivity.Disclosure.ACCESSIBILITY) {
+                            try { act.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Throwable) {}
+                        }
                         "appinfo" -> act.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + act.packageName)))
                         "notif" -> act.requestNotifications()
                     }

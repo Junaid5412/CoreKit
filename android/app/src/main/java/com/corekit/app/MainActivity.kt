@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.net.Uri
 import android.os.Bundle
 import android.print.PrintAttributes
 import android.print.PrintManager
@@ -38,6 +39,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         current = this
+        routeBack { handleBack() }
         // Screenshots, screen recording and remote-viewing apps see a black screen.
         if (Prefs(this).captureShield) {
             window.setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE)
@@ -222,22 +224,70 @@ class MainActivity : Activity() {
         web.evaluateJavascript("window.__camResult&&__camResult(JSON.parse(${org.json.JSONObject.quote(r)}))", null)
     }
 
-    /** Wi-Fi name and band need location permission on Android 8+. */
+    /** Wi-Fi name and band need location permission on Android 8+. Google Play: explain first,
+     *  then ask (prominent disclosure). A "Not now" is respected until CoreKit is opened again. */
+    private var locationAsked = false
     fun ensureLocationPermission() = runOnUiThread {
-        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (locationAsked || isFinishing) return@runOnUiThread
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) return@runOnUiThread
+        locationAsked = true
+        disclose(Disclosure.LOCATION) {
             requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), REQ_LOCATION)
         }
     }
 
+    /** Google Play prominent disclosure: a separate explanation with a clear choice, shown right
+     *  before CoreKit asks for a sensitive permission or opens its settings page. */
+    fun disclose(d: Disclosure, onAgree: () -> Unit) = runOnUiThread {
+        if (isFinishing) return@runOnUiThread
+        android.app.AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle(d.title)
+            .setMessage(d.body)
+            .setCancelable(true)
+            .setPositiveButton(d.agree) { _, _ -> onAgree() }
+            .setNegativeButton("Not now", null)
+            .setNeutralButton("Privacy Policy") { _, _ ->
+                try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(PRIVACY_URL))) } catch (_: Throwable) {}
+            }
+            .show()
+    }
+
+    enum class Disclosure(val title: String, val body: String, val agree: String) {
+        ACCESSIBILITY(
+            "Allow remote control?",
+            "CoreKit uses Android's Accessibility service (\"CoreKit Remote Control\") only for Remote Access.\n\n" +
+                "It lets a device you connected to and allowed tap, swipe and type on this phone, and press Back, Home and Recents.\n\n" +
+                "It works only during a session you allow, while a notification is shown. It does not collect, store or share " +
+                "what is on your screen, your messages, passwords or any other personal data.\n\n" +
+                "Tap Agree to open Accessibility settings, then turn on CoreKit Remote Control. You can turn it off at any time.",
+            "Agree"),
+        USAGE(
+            "Allow usage access?",
+            "The Activity Log shows which apps were opened and when this phone was unlocked, so you can see how it was used while you were away.\n\n" +
+                "For this, CoreKit needs Android's Usage access. The information is read only when you open the Activity Log, " +
+                "stays on this phone and is never sent anywhere.\n\n" +
+                "Tap Agree to open the setting, then turn on CoreKit. You can turn it off at any time.",
+            "Agree"),
+        LOCATION(
+            "Show your Wi-Fi name?",
+            "Android shares the Wi-Fi network name only with apps that have location permission.\n\n" +
+                "CoreKit uses it only to show your Wi-Fi details in the Internet Troubleshooter. It does not track your location, " +
+                "does not use it in the background and does not send it anywhere.\n\n" +
+                "Tap Continue, then choose in the Android prompt. Without it, everything else still works.",
+            "Continue")
+    }
+
     @Deprecated("Back navigation inside the CoreKit screens")
-    override fun onBackPressed() {
+    override fun onBackPressed() = handleBack()
+
+    private fun handleBack() {
         if (fullView != null) { chrome.onHideCustomView(); return }
         val u = web.url ?: ""
         // let the page handle Back first (close a menu, leave the viewer safely, …)
         web.evaluateJavascript("(window.__ckBack&&window.__ckBack())===true") { handled ->
             if (handled == "true") return@evaluateJavascript
             when {
-                u.endsWith("/home") -> @Suppress("DEPRECATION") super.onBackPressed()
+                u.endsWith("/home") -> moveTaskToBack(true)
                 else -> { setViewerMode(false, false); web.loadUrl(Host.BASE + "home") }
             }
         }
@@ -258,6 +308,7 @@ class MainActivity : Activity() {
         private const val REQ_PROJECTION = 32
         private const val REQ_NOTIF = 33
         private const val REQ_NOTIF_ONLY = 34
+        const val PRIVACY_URL = "https://junaid5412.github.io/CoreKit/privacy.html"
         const val ACTION_OPEN_REMOTE = "com.corekit.OPEN_REMOTE"
         @Volatile var current: MainActivity? = null
     }

@@ -119,6 +119,7 @@ class BrowserActivity : Activity() {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        routeBack { handleBack() }
         WindowCompat.setDecorFitsSystemWindows(window, false)
         root = FrameLayout(this).apply { setBackgroundColor(MainActivity.BG) }
         chrome = WebView(this).apply { setBackgroundColor(Color.TRANSPARENT) } // the page paints its own background; see-through over pages while a menu is open
@@ -177,12 +178,14 @@ class BrowserActivity : Activity() {
     }
 
     @Deprecated("system back")
-    override fun onBackPressed() {
+    override fun onBackPressed() = handleBack()
+
+    private fun handleBack() {
         if (fullView != null) { tabChrome.onHideCustomView(); return }
         if (covered) { js("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}))"); return }
         val v = active?.view
         if (v != null && v.canGoBack()) { v.goBack(); return }
-        @Suppress("DEPRECATION") super.onBackPressed()
+        finish()
     }
 
     // ---------------------------------------------------------------- config (encrypted)
