@@ -1179,14 +1179,21 @@ func vmServeFile(path string) (port int, done chan error, err error) {
 			return
 		}
 		defer f.Close()
+		// the guest's netcat keeps sending (from /dev/zero) until it has read everything:
+		// swallow that the whole time, or both sides block on full buffers
+		drained := make(chan struct{})
+		go func() {
+			io.Copy(io.Discard, c)
+			close(drained)
+		}()
 		_, err = io.Copy(c, f)
 		if tc, ok := c.(*net.TCPConn); ok {
 			tc.CloseWrite()
 		}
-		// the guest's netcat keeps sending (from /dev/zero) until it has read everything;
-		// swallow that so closing doesn't reset the connection under it
-		c.SetReadDeadline(time.Now().Add(2 * time.Minute))
-		io.Copy(io.Discard, c)
+		select { // let netcat see the end and close first, so closing doesn't reset the data
+		case <-drained:
+		case <-time.After(2 * time.Minute):
+		}
 		done <- err
 	}()
 	return l.Addr().(*net.TCPAddr).Port, done, nil
