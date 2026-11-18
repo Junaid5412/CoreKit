@@ -72,3 +72,26 @@ jobs:
           APK=/tmp/vmd/test.apk python3 -u tools/vm/e2e.py "http://127.0.0.1:$P/vm/" 0123456789abcdef0123456789abcdef
       - if: always()
         run: tail -50 /tmp/vmd/engine.log; tail -20 /tmp/vmd/machines/*/qemu.log 2>/dev/null || true
+  windows:
+    needs: apk
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24", cache: false }
+      - uses: actions/download-artifact@v4
+        with: { name: testapk, path: apk }
+      - name: Engine on Windows (emulator downloaded on first use; software speed here)
+        shell: bash
+        timeout-minutes: 150
+        run: |
+          go build -o ck.exe ./desktop
+          export PCHI_URLFILE="$PWD/url.txt" CK_VMDIR="$PWD/vmd"
+          ./ck.exe --serve vm --no-elevate > ck.log 2>&1 &
+          for i in $(seq 1 60); do [ -s url.txt ] && break; sleep 1; done
+          U=$(cat url.txt); echo "$U"
+          (while true; do curl -s "${U}api/ping" >/dev/null; sleep 1; done) &
+          APK="$(cygpath -w "$PWD/apk/test.apk")" python -u tools/vm/e2e.py "${U}api/vm/"
+      - if: always()
+        shell: bash
+        run: tail -40 ck.log; tail -20 vmd/machines/*/qemu.log || true

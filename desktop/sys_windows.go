@@ -221,6 +221,10 @@ func screenSize() (int, int) {
 
 // launchWindow opens the UI as a standalone app window (Edge/Chrome --app mode, private temp profile).
 func launchWindow(url string) *appWindow {
+	if p := os.Getenv("PCHI_URLFILE"); p != "" { // automated tests drive the page themselves
+		os.WriteFile(p, []byte(url), 0644)
+		return nil
+	}
 	br := findBrowser()
 	if br == "" {
 		openDefaultBrowser(url)

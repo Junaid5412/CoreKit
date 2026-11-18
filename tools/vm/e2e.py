@@ -20,6 +20,9 @@ def wait(desc, fn, mins):
         time.sleep(3)
     sys.exit(f"TIMEOUT waiting for {desc}")
 st = call("state"); print(json.dumps(st["host"]), json.dumps(st["images"]), flush=True)
+if st["host"].get("needsEmulator") and not st["host"].get("emulator"):
+    cmd("getEmulator")
+    wait("emulator download", lambda s: s["host"].get("emulator") or ((s["host"].get("emulatorDl") or {}).get("state") == "error" and sys.exit(str(s["host"]["emulatorDl"]))), 20)
 img = st["images"][0]["id"]
 if not st["images"][0]["have"]:
     cmd("download", image=img)
@@ -28,7 +31,7 @@ mid = cmd("create", image=img, name="CI phone")["id"]
 m = [x for x in call("state")["machines"] if x["id"] == mid][0]; print("created", m, flush=True)
 def mach(s): return [x for x in s["machines"] if x["id"] == mid][0]
 cmd("start", id=mid)
-wait("running (first start)", lambda s: mach(s)["state"] == "running", 90)
+wait("running (first start)", lambda s: mach(s)["state"] == "running" or (mach(s)["state"] == "off" and sys.exit("stopped: " + str(mach(s).get("lastExit")))), 100)
 def term_has(text, mins=5):
     since = 0; buf = ""; t0 = time.time()
     while time.time() - t0 < mins * 60:
