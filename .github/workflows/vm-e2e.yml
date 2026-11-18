@@ -1,0 +1,47 @@
+name: Virtual Environment end-to-end
+on:
+  push:
+    branches: [vm-e2e*]
+jobs:
+  linux-kvm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24", cache: false }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 && sudo chmod 666 /dev/kvm
+      - name: Engine against the real images (published release)
+        timeout-minutes: 60
+        run: |
+          go build -o /tmp/ck ./desktop
+          (CK_VMDIR=/tmp/vmd PCHI_URLFILE=/tmp/url /tmp/ck --serve vm --no-elevate > /tmp/ck.log 2>&1 &)
+          for i in $(seq 1 30); do [ -s /tmp/url ] && break; sleep 1; done
+          U=$(cat /tmp/url)
+          # keep the module open (it closes when the page stops pinging)
+          (while true; do curl -s "${U}api/ping" >/dev/null; sleep 1; done) &
+          python3 -u tools/vm/e2e.py "${U}api/vm/"
+      - if: always()
+        run: tail -50 /tmp/ck.log; cat /tmp/vmd/machines/*/qemu.log 2>/dev/null | tail -20
+  android-arm:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24", cache: false }
+      - name: Android engine (libcorekit.so) + shipped emulator, in a bionic container
+        timeout-minutes: 90
+        run: |
+          set -e
+          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -o /tmp/q/lib/libcorekit.so ./desktop
+          curl -fsSL -o /tmp/qa.tgz https://github.com/${{ github.repository }}/releases/download/vm-images/qemu-android-arm64.tar.gz
+          echo "$(cat tools/vm/qemu-android.sha256)  /tmp/qa.tgz" | sha256sum -c
+          tar -C /tmp/q -xzf /tmp/qa.tgz
+          mkdir -p /tmp/vmd && chmod 777 /tmp/vmd
+          docker run -d --name tx --network host -v /tmp/q:/q -v /tmp/vmd:/tmp/vmd termux/termux-docker:aarch64 sleep infinity
+          sleep 5
+          docker exec -d tx sh -c 'CK_TOKEN=0123456789abcdef0123456789abcdef CK_NAME=CI CK_VMDIR=/tmp/vmd CK_QEMU=/q/lib/libqemu.so CK_QEMU_LIB=/q/lib CK_QEMU_SHARE=/q/share /q/lib/libcorekit.so --remote > /tmp/vmd/engine.log 2>&1 < /dev/zero'
+          for i in $(seq 1 30); do grep -q READY /tmp/vmd/engine.log 2>/dev/null && break; sleep 1; done
+          P=$(sed -n 's/^READY //p' /tmp/vmd/engine.log)
+          python3 -u tools/vm/e2e.py "http://127.0.0.1:$P/vm/" 0123456789abcdef0123456789abcdef
+      - if: always()
+        run: tail -50 /tmp/vmd/engine.log; tail -20 /tmp/vmd/machines/*/qemu.log 2>/dev/null || true
