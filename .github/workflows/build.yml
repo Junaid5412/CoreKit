@@ -84,7 +84,7 @@ jobs:
           J=android/app/src/main/jniLibs/arm64-v8a
           mkdir -p "$J"
           V=$(cat VERSION)
-          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.appVersion=$V" -o "$J/libcorekit.so" ./desktop
+          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-w -X main.appVersion=$V" -o "$J/libcorekit.so" ./desktop
           base=https://github.com/XTLS/Xray-core/releases/latest/download/Xray-android-arm64-v8a.zip
           curl -fsSL -o /tmp/xray.zip "$base"
           want=$(curl -fsSL "$base.dgst" | sed -n 's/^SHA2-256= *//p' | tr -d '\r ')
@@ -113,12 +113,24 @@ jobs:
             # Google Play takes the App Bundle (.aab); the .apk is for direct installs
             cp app/build/outputs/bundle/release/*.aab ../dist/CoreKit.aab
             unzip -p ../dist/CoreKit.aab 'META-INF/*.RSA' | openssl pkcs7 -inform DER -print_certs -noout | head -1
+            # Google Play warnings: the bundle must carry the R8 map and the native symbol tables
+            unzip -l ../dist/CoreKit.aab | grep -E 'BUNDLE-METADATA/(com.android.tools.build.obfuscation|com.android.tools.build.debugsymbols)/' \
+              || { echo "::error::.aab is missing the R8 map or native symbols"; exit 1; }
+            unzip -l ../dist/CoreKit.aab | grep -q 'com.android.tools.build.obfuscation/proguard.map' || { echo "::error::no R8 map in .aab"; exit 1; }
+            unzip -l ../dist/CoreKit.aab | grep -q 'com.android.tools.build.debugsymbols/' || { echo "::error::no native symbols in .aab"; exit 1; }
           else
             # no upload key: a test-signed .apk only (Google Play refuses test-signed bundles)
             echo "::warning::No signing key (secrets CK_KEYSTORE_B64 / CK_KEYSTORE_PASS): APK is test-signed and no .aab is made"
             gradle --no-daemon assembleRelease
           fi
           cp app/build/outputs/apk/release/*.apk ../dist/CoreKit.apk
+          # the packaged (stripped) programs must still be 16 KB aligned
+          rm -rf /tmp/apklib && mkdir /tmp/apklib && unzip -q -o ../dist/CoreKit.apk 'lib/*' -d /tmp/apklib
+          for f in /tmp/apklib/lib/*/*.so; do
+            a=$(readelf -lW "$f" | awk '$1=="LOAD"{print $NF}' | sort -u)
+            echo "packaged $(basename "$f") $(stat -c%s "$f") bytes, LOAD align: $a"
+            for x in $a; do [ $((x)) -ge 16384 ] || { echo "::error::packaged $(basename "$f") is not 16 KB aligned"; exit 1; }; done
+          done
           rm -f release.jks
       - uses: actions/upload-artifact@v4
         with: { name: android, path: "dist/CoreKit.*" }
