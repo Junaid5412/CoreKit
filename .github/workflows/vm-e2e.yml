@@ -1,0 +1,102 @@
+name: Virtual Environment end-to-end
+on:
+  push:
+    branches: [vm-e2e*]
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tiny test app (built here, signed with a throwaway key)
+        run: |
+          set -e
+          SDK=${ANDROID_HOME:-$ANDROID_SDK_ROOT}; BT=$(ls -d $SDK/build-tools/* | sort -V | tail -1); PLAT=$(ls -d $SDK/platforms/android-* | sort -V | tail -1)
+          mkdir -p /tmp/a/src/ck /tmp/a/obj /tmp/a/dex && cd /tmp/a
+          printf '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="ck.test"><application android:label="CK Test"><activity android:name=".Main" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>' > AndroidManifest.xml
+          printf 'package ck; public class Main extends android.app.Activity {}' > src/ck/Main.java
+          javac --release 8 -cp $PLAT/android.jar -d obj src/ck/Main.java
+          $BT/d8 --min-api 21 --lib $PLAT/android.jar --output dex obj/ck/Main.class
+          $BT/aapt2 link -o u.apk -I $PLAT/android.jar --manifest AndroidManifest.xml --min-sdk-version 21 --target-sdk-version 28
+          (cd dex && zip -q -u ../u.apk classes.dex)
+          $BT/zipalign -f 4 u.apk a.apk
+          keytool -genkeypair -keystore k.jks -storepass android -keypass android -alias k -dname CN=ck -keyalg RSA -validity 1 >/dev/null
+          $BT/apksigner sign --ks k.jks --ks-pass pass:android --out test.apk a.apk
+          ls -la test.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: testapk, path: /tmp/a/test.apk }
+  linux-kvm:
+    needs: apk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: testapk, path: /tmp/apk }
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24", cache: false }
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 && sudo chmod 666 /dev/kvm
+      - name: Engine against the real images (published release)
+        timeout-minutes: 60
+        run: |
+          go build -o /tmp/ck ./desktop
+          (CK_VMDIR=/tmp/vmd PCHI_URLFILE=/tmp/url /tmp/ck --serve vm --no-elevate > /tmp/ck.log 2>&1 &)
+          for i in $(seq 1 30); do [ -s /tmp/url ] && break; sleep 1; done
+          U=$(cat /tmp/url)
+          # keep the module open (it closes when the page stops pinging)
+          (while true; do curl -s "${U}api/ping" >/dev/null; sleep 1; done) &
+          APK=/tmp/apk/test.apk python3 -u tools/vm/e2e.py "${U}api/vm/"
+      - if: always()
+        run: tail -50 /tmp/ck.log; cat /tmp/vmd/machines/*/qemu.log 2>/dev/null | tail -20
+  android-arm:
+    needs: apk
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: testapk, path: /tmp/apk }
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24", cache: false }
+      - name: Android engine (libcorekit.so) + shipped emulator, in a bionic container
+        timeout-minutes: 90
+        run: |
+          set -e
+          GOOS=android GOARCH=arm64 CGO_ENABLED=0 go build -o /tmp/q/lib/libcorekit.so ./desktop
+          curl -fsSL -o /tmp/qa.tgz https://github.com/${{ github.repository }}/releases/download/vm-images/qemu-android-arm64.tar.gz
+          echo "$(cat tools/vm/qemu-android.sha256)  /tmp/qa.tgz" | sha256sum -c
+          tar -C /tmp/q -xzf /tmp/qa.tgz
+          mkdir -p /tmp/vmd && chmod 777 /tmp/vmd
+          docker run -d --name tx --network host -v /tmp/q:/q -v /tmp/vmd:/tmp/vmd -v /etc/ssl/certs:/etc/ssl/certs:ro termux/termux-docker:aarch64 sleep infinity
+          sleep 5
+          docker exec -d tx sh -c 'sleep 100000 | SSL_CERT_DIR=/etc/ssl/certs CK_TOKEN=0123456789abcdef0123456789abcdef CK_NAME=CI CK_VMDIR=/tmp/vmd CK_QEMU=/q/lib/libqemu.so CK_QEMU_LIB=/q/lib CK_QEMU_SHARE=/q/share /q/lib/libcorekit.so --remote > /tmp/vmd/engine.log 2>&1'
+          for i in $(seq 1 30); do grep -q READY /tmp/vmd/engine.log 2>/dev/null && break; sleep 1; done
+          P=$(sed -n 's/^READY //p' /tmp/vmd/engine.log)
+          cp /tmp/apk/test.apk /tmp/vmd/test.apk && chmod 644 /tmp/vmd/test.apk
+          APK=/tmp/vmd/test.apk python3 -u tools/vm/e2e.py "http://127.0.0.1:$P/vm/" 0123456789abcdef0123456789abcdef
+      - if: always()
+        run: tail -50 /tmp/vmd/engine.log; tail -20 /tmp/vmd/machines/*/qemu.log 2>/dev/null || true
+  windows:
+    needs: apk
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        accel: [default, tcg]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24", cache: false }
+      - uses: actions/download-artifact@v4
+        with: { name: testapk, path: apk }
+      - name: Engine on Windows (emulator downloaded on first use; software speed here)
+        shell: bash
+        timeout-minutes: 150
+        run: |
+          go build -o ck.exe ./desktop
+          export PCHI_URLFILE="$PWD/url.txt" CK_VMDIR="$PWD/vmd"
+          [ "${{ matrix.accel }}" = tcg ] && export CK_VM_ACCEL="tcg,thread=multi"
+          ./ck.exe --serve vm --no-elevate > ck.log 2>&1 &
+          for i in $(seq 1 60); do [ -s url.txt ] && break; sleep 1; done
+          U=$(cat url.txt); echo "$U"
+          (while true; do curl -s "${U}api/ping" >/dev/null; sleep 1; done) &
+          APK="$(cygpath -w "$PWD/apk/test.apk")" python -u tools/vm/e2e.py "${U}api/vm/"
+      - if: always()
+        shell: bash
+        run: tail -40 ck.log; cat vmd/machines/*/qemu.log || true; ls -la vmd/machines/* || true

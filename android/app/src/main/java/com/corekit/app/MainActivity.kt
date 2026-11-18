@@ -75,7 +75,7 @@ class MainActivity : Activity() {
         web.addJavascriptInterface(host.bridge, "CoreKitNative")
         WebView.setWebContentsDebuggingEnabled(false)
         if (savedInstanceState != null) web.restoreState(savedInstanceState)
-        else web.loadUrl(Host.BASE + if (intent?.action == ACTION_OPEN_REMOTE) "remote" else "home")
+        else web.loadUrl(Host.BASE + when (intent?.action) { ACTION_OPEN_REMOTE -> "remote"; ACTION_OPEN_VM -> "vm"; else -> "home" })
     }
 
     /** A Remote Access notification was tapped: show the Remote Access screen. */
@@ -83,6 +83,7 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.action == ACTION_OPEN_REMOTE && !(web.url ?: "").endsWith("/remote")) web.loadUrl(Host.BASE + "remote")
+        else if (intent.action == ACTION_OPEN_VM && !(web.url ?: "").endsWith("/vm")) web.loadUrl(Host.BASE + "vm")
         else web.evaluateJavascript("window.__ckStatus&&__ckStatus()", null)
     }
 
@@ -259,6 +260,7 @@ class MainActivity : Activity() {
         private const val REQ_NOTIF = 33
         private const val REQ_NOTIF_ONLY = 34
         const val ACTION_OPEN_REMOTE = "com.corekit.OPEN_REMOTE"
+        const val ACTION_OPEN_VM = "com.corekit.OPEN_VM"
         @Volatile var current: MainActivity? = null
     }
 }

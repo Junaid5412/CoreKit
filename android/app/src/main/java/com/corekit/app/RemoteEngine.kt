@@ -34,6 +34,18 @@ object RemoteEngine {
         val pb = ProcessBuilder(exe, "--remote").redirectErrorStream(true)
         pb.environment()["CK_TOKEN"] = token
         pb.environment()["CK_NAME"] = deviceName(ctx)
+        // Virtual Environment: the emulator shipped in the APK and where virtual devices live
+        val nl = ctx.applicationInfo.nativeLibraryDir
+        val qemu = File(nl, "libqemu.so")
+        if (qemu.exists()) {
+            pb.environment()["CK_QEMU"] = qemu.path
+            pb.environment()["CK_QEMU_LIB"] = nl
+            qemuShare(ctx)?.let { pb.environment()["CK_QEMU_SHARE"] = it }
+        }
+        pb.environment()["CK_VMDIR"] = File(ctx.filesDir, "vm").path
+        // root certificates for HTTPS downloads (Android 14 keeps the current ones in an APEX)
+        listOf("/apex/com.android.conscrypt/cacerts", "/system/etc/security/cacerts").filter { File(it).isDirectory }
+            .takeIf { it.isNotEmpty() }?.let { pb.environment()["SSL_CERT_DIR"] = it.joinToString(":") }
         val p = try { pb.start() } catch (e: Throwable) { lastError = "could not run the engine (${e.message})"; return false }
         val early = StringBuilder()
         proc = p
@@ -58,6 +70,42 @@ object RemoteEngine {
         // tell the engine whether tapping/typing is possible right now
         cmd(ctx, JSONObject().put("t", "glue").put("a11y", RemoteControlService.isOn(ctx)).toString())
         return true
+    }
+
+    /** QEMU's BIOS files ship as assets (assets/qemu); the emulator needs them as real files. */
+    private fun qemuShare(ctx: Context): String? = try {
+        val dir = File(ctx.filesDir, "qemu-share")
+        val stamp = File(dir, ".version")
+        val ver = ctx.packageManager.getPackageInfo(ctx.packageName, 0).lastUpdateTime.toString()
+        if (!stamp.exists() || stamp.readText() != ver) {
+            dir.deleteRecursively(); dir.mkdirs()
+            fun copy(path: String, to: File) {
+                val list = ctx.assets.list(path) ?: emptyArray()
+                if (list.isEmpty()) { ctx.assets.open(path).use { i -> to.outputStream().use { i.copyTo(it) } }; return }
+                to.mkdirs(); for (n in list) copy("$path/$n", File(to, n))
+            }
+            copy("qemu", dir)
+            stamp.writeText(ver)
+        }
+        dir.path
+    } catch (_: Throwable) { null }
+
+    /** Virtual Environment API: GET (body == null) or POST to the engine; returns the JSON text. Blocking. */
+    fun vm(ctx: Context, path: String, body: String?): String {
+        if (!ensure(ctx)) return JSONObject().put("error", "The engine could not start: $lastError").toString()
+        return try {
+            val c = open("vm/$path", if (body == null) "GET" else "POST")
+            c.readTimeout = 15000
+            if (body != null) {
+                c.doOutput = true
+                c.setRequestProperty("Content-Type", "application/json")
+                c.outputStream.use { it.write(body.toByteArray()) }
+            }
+            val code = c.responseCode
+            val s = (if (code < 400) c.inputStream else c.errorStream)?.bufferedReader()?.readText() ?: ""
+            c.disconnect()
+            if (code >= 400 && !s.trimStart().startsWith("{")) JSONObject().put("error", s.ifBlank { "error $code" }).toString() else s
+        } catch (e: Throwable) { JSONObject().put("error", "CoreKit's engine is not responding").toString() }
     }
 
     /** Stops the engine process (Exit). It starts again on the next command. */

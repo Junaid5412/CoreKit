@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#0a0e13">
+<head>
+<meta charset="utf-8">
+<title>CoreKit · Virtual Environment</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<style>
+:root{--bg:#0a0e13;--panel:#0f151d;--line:#1a2431;--line2:#243142;--text:#c9d1d9;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;--acc:#2dd4bf;--red:#f87171;--amber:#fbbf24;--green:#34d399;--blue:#60a5fa;--violet:#a78bfa;
+  --font:"Segoe UI Variable Text","Segoe UI",system-ui,Roboto,Arial,sans-serif;--fontd:"Segoe UI Variable Display","Segoe UI",system-ui,Roboto,Arial,sans-serif;--mono:"Cascadia Mono",Consolas,"Roboto Mono","DejaVu Sans Mono",monospace}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.5 var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.hidden{display:none!important}
+
+.top{display:flex;align-items:center;gap:12px;height:66px;padding:0 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0d131a,#0b1016)}
+.back{width:38px;height:38px;border:0;border-radius:11px;background:#141c26;color:var(--white);display:grid;place-items:center;cursor:pointer;flex:none}
+.back:hover{background:#1a2431}
+.logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#231a45,#132a3a);color:var(--violet);box-shadow:inset 0 0 0 1px #3a2f66;flex:none}
+.logo svg{width:21px;height:21px}
+.brand{flex:1;min-width:0;display:flex;flex-direction:column}
+.brand b{font:600 17px var(--fontd);color:var(--white);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand small{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+main{height:calc(100% - 66px);overflow-y:auto}
+.wrap{max-width:1060px;margin:0 auto;padding:22px 22px 60px}
+.hero{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+.hero h1{margin:0;font:600 23px var(--fontd);color:var(--white)}
+.hero p{margin:3px 0 0;color:var(--muted);font-size:13.5px}
+.card{border-radius:18px;background:linear-gradient(180deg,#111822,#0d131b);border:1px solid var(--line);padding:20px;min-width:0}
+.btn{height:40px;border-radius:11px;border:1px solid var(--line2);background:#151e29;color:var(--white);font-weight:600;font-size:13.5px;cursor:pointer;padding:0 16px;display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap;transition:transform .1s,filter .15s}
+.btn:active{transform:scale(.97)}.btn:disabled{opacity:.45;cursor:default}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#04201c}.btn.pri:hover{filter:brightness(1.08)}
+.btn.vio{background:#6d4fd8;border-color:#6d4fd8;color:#fff}
+.btn.dng{background:#2a1215;border-color:#5a1f26;color:#fecaca}
+.btn.sm{height:34px;padding:0 12px;font-size:12.5px;border-radius:9px}
+.btn svg{width:16px;height:16px}
+.pill{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:12px;font-size:11.5px;font-weight:600;white-space:nowrap}
+.pill i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.p-off{background:#151d27;color:var(--muted2)}
+.p-run{background:#0f2b25;color:var(--green)}
+.p-boot{background:#2a2412;color:var(--amber)}.p-boot i{animation:blink 1.1s infinite}
+.p-root{background:#231a45;color:#c4b5fd}
+@keyframes blink{50%{opacity:.25}}
+.muted{color:var(--muted)}
+.err{padding:11px 14px;border-radius:11px;background:#1f0e11;border:1px solid #5a1f26;color:#fecaca;font-size:13px}
+.note{padding:11px 14px;border-radius:11px;background:#141b10;border:1px solid #3a4a1c;color:#d9f99d;font-size:13px}
+.info{padding:11px 14px;border-radius:11px;background:#0f1a26;border:1px solid #1f3a55;color:#bfdbfe;font-size:13px}
+
+/* host strip */
+.host{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}
+.hs{padding:12px 14px;border-radius:14px;background:#0e141c;border:1px solid var(--line)}
+.hs small{display:block;color:var(--muted);font-size:10.5px;letter-spacing:1.1px;text-transform:uppercase;font-weight:700}
+.hs b{display:block;color:var(--white);font-size:15px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hs b.slow{color:var(--amber)}.hs b.fast{color:var(--green)}
+
+/* machines */
+.ml{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px}
+.mc{border-radius:18px;background:linear-gradient(180deg,#121a25,#0d131b);border:1px solid var(--line);padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.mc .h{display:flex;align-items:center;gap:12px}
+.mc .av{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:#16213a;color:#93c5fd;flex:none}
+.mc .av svg{width:24px;height:24px}
+.mc .t{flex:1;min-width:0}.mc .t b{display:block;color:var(--white);font-size:15.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mc .t small{color:var(--muted2);font-size:12.5px}
+.mc .specs{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.mc .specs div{padding:8px 10px;border-radius:10px;background:#0b1117;border:1px solid var(--line)}
+.mc .specs small{display:block;color:var(--muted);font-size:10px;letter-spacing:1px;text-transform:uppercase;font-weight:700}
+.mc .specs span{color:var(--white);font-size:13px;font-variant-numeric:tabular-nums}
+.mc .acts{display:flex;gap:8px;flex-wrap:wrap}.mc .acts .btn{flex:1 1 auto}
+.mc .det{font-size:12.5px;color:var(--amber);min-height:18px}
+.newc{border:1px dashed #2c3a4d;background:transparent;min-height:180px;display:grid;place-items:center;text-align:center;cursor:pointer;color:var(--muted2)}
+.newc:hover{border-color:var(--violet);color:var(--white)}
+.newc .pl{width:52px;height:52px;border-radius:16px;margin:0 auto 10px;display:grid;place-items:center;background:#1b1736;color:var(--violet)}
+.empty{text-align:center;padding:34px 20px}
+.empty .big{width:84px;height:84px;border-radius:26px;margin:0 auto 16px;display:grid;place-items:center;background:linear-gradient(135deg,#231a45,#132a3a);color:var(--violet)}
+.empty .big svg{width:40px;height:40px}
+.empty h2{margin:0 0 6px;font:600 21px var(--fontd);color:var(--white)}
+.empty p{margin:0 auto 18px;color:var(--muted2);max-width:520px}
+.feat{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:22px auto 0;max-width:760px;text-align:left}
+.feat div{padding:14px;border-radius:14px;background:#0e141c;border:1px solid var(--line)}
+.feat b{display:block;color:var(--white);font-size:13.5px;margin-bottom:2px}.feat small{color:var(--muted2);font-size:12.5px}
+
+/* sheet / dialog */
+.scrim{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.6);display:none}
+.scrim.show{display:block}
+.sheet{position:fixed;z-index:41;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,94vw);max-height:90vh;overflow:auto;border-radius:20px;background:#10161e;border:1px solid var(--line2);box-shadow:0 30px 80px rgba(0,0,0,.6);padding:22px;display:none}
+.sheet.show{display:block;animation:pop .18s ease both}
+@keyframes pop{from{opacity:0;transform:translate(-50%,-48%) scale(.98)}}
+.sheet h3{margin:0 0 4px;font:600 19px var(--fontd);color:var(--white)}
+.sheet .sub{color:var(--muted2);font-size:13px;margin-bottom:16px}
+.img{display:flex;align-items:center;gap:12px;padding:14px;border-radius:14px;border:1px solid var(--line2);background:#0c1218;margin-bottom:10px;cursor:pointer}
+.img.on{border-color:var(--violet);background:#151230}
+.img .ic{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:#16213a;color:#93c5fd;flex:none}
+.img .tx{flex:1;min-width:0}.img .tx b{display:block;color:var(--white)}.img .tx small{color:var(--muted2);font-size:12.5px}
+.bar{height:6px;border-radius:3px;background:#1a2431;overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--violet),var(--acc));width:0;transition:width .4s}
+label.f{display:block;font-size:12px;color:var(--muted2);margin:14px 0 6px;font-weight:600}
+.in{width:100%;height:42px;border-radius:11px;border:1px solid var(--line2);background:#0b1117;color:var(--white);padding:0 12px;outline:none}
+.in:focus{border-color:var(--violet)}
+.rng{display:flex;align-items:center;gap:12px}.rng input{flex:1;accent-color:var(--violet)}.rng b{min-width:74px;text-align:right;color:var(--white);font-variant-numeric:tabular-nums}
+.sheet .row{display:flex;gap:10px;margin-top:20px}.sheet .row .btn{flex:1}
+
+/* device view */
+#dev{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
+#dev.show{display:flex}
+.tabs{display:flex;gap:4px;padding:8px 14px 0;border-bottom:1px solid var(--line);background:#0b1016;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{height:40px;padding:0 16px;border:0;background:transparent;color:var(--muted2);font-weight:600;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.tab.on{color:var(--white);border-bottom-color:var(--violet)}
+.pane{flex:1;min-height:0;display:none;flex-direction:column}
+.pane.show{display:flex}
+.pane .scroll{flex:1;overflow:auto;padding:18px}
+
+/* terminal */
+#term{flex:1;min-height:0;overflow:auto;background:#05080b;padding:10px 12px;font:13px/1.35 var(--mono);color:#d1d9e0;white-space:pre;outline:none;cursor:text}
+#term .cur{background:#c4b5fd;color:#05080b}
+#term:not(:focus) .cur{background:transparent;outline:1px solid #6d5fb8}
+.keys{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--line);background:#0b1016;overflow-x:auto;scrollbar-width:none;align-items:center}
+.keys::-webkit-scrollbar{display:none}
+.kk{height:34px;min-width:44px;padding:0 10px;border-radius:9px;border:1px solid var(--line2);background:#141c26;color:var(--white);font:600 12.5px var(--mono);cursor:pointer;flex:none}
+.cmdl{display:flex;gap:8px;padding:8px 10px calc(8px + env(safe-area-inset-bottom));background:#0b1016}
+.cmdl input{flex:1;min-width:0;height:42px;border-radius:11px;border:1px solid var(--line2);background:#05080b;color:var(--white);padding:0 12px;font:14px var(--mono);outline:none}
+.cmdl input:focus{border-color:var(--violet)}
+.boot{padding:9px 14px;background:#1a1608;border-bottom:1px solid #3a3212;color:#fde68a;font-size:12.5px;display:flex;align-items:center;gap:10px}
+.boot .sp{width:14px;height:14px;border-radius:50%;border:2px solid #5a4a14;border-top-color:var(--amber);animation:spin 1s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* apps */
+.al{display:flex;flex-direction:column;gap:8px}
+.ap{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:13px;background:#0e141c;border:1px solid var(--line)}
+.ap .ai{width:40px;height:40px;border-radius:11px;flex:none;display:grid;place-items:center;background:#16213a;color:#93c5fd;font-weight:700;overflow:hidden}
+.ap .ai img{width:100%;height:100%}
+.ap .tx{flex:1;min-width:0}.ap .tx b{display:block;color:var(--white);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ap .tx small{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.sec{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:20px 2px 10px}
+.sec:first-child{margin-top:0}
+.sec h4{margin:0;font-size:11px;letter-spacing:1.4px;text-transform:uppercase;color:var(--muted)}
+.search{width:100%;height:40px;border-radius:11px;border:1px solid var(--line2);background:#0b1117;color:var(--white);padding:0 12px;outline:none;margin-bottom:10px}
+.drop{border:1.5px dashed #2c3a4d;border-radius:14px;padding:18px;text-align:center;color:var(--muted2);cursor:pointer}
+.drop.over{border-color:var(--violet);color:var(--white);background:#151230}
+.jobs{position:fixed;right:16px;bottom:16px;z-index:60;display:flex;flex-direction:column;gap:8px;width:min(340px,92vw)}
+.job{padding:12px 14px;border-radius:13px;background:#131b26;border:1px solid var(--line2);box-shadow:0 12px 40px rgba(0,0,0,.5);font-size:13px}
+.job b{display:block;color:var(--white)}.job small{color:var(--muted2)}
+.job.error{border-color:#5a1f26}.job.error small{color:#fecaca}
+.job.done{border-color:#1f4a3f}
+
+#toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#16212d;border:1px solid #243446;color:var(--white);padding:10px 16px;border-radius:11px;font-size:13px;transition:all .25s;z-index:80;max-width:90vw;text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}#toast.bad{border-color:#5a2a31;color:#fecaca}
+
+@media (max-width:700px){
+  .top{height:58px;padding:0 10px}.logo{display:none}main{height:calc(100% - 58px)}
+  .wrap{padding:14px 12px 60px}.hero h1{font-size:20px}
+  .host{grid-template-columns:1fr 1fr}
+  .ml{grid-template-columns:1fr}
+  .feat{grid-template-columns:1fr}
+  .sheet{left:0;right:0;top:auto;bottom:0;transform:none;width:auto;max-height:92vh;border-radius:20px 20px 0 0;padding:20px 16px calc(20px + env(safe-area-inset-bottom))}
+  .sheet.show{animation:up .22s ease both}
+  @keyframes up{from{transform:translateY(30px);opacity:0}}
+  #term{font-size:11.5px;padding:8px}
+  .jobs{right:10px;left:10px;width:auto;bottom:calc(120px + env(safe-area-inset-bottom))}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <button class="back" id="back" aria-label="Back"><svg class="i" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+  <span class="logo"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M9 7h6M9 11h6M9 15h3"/></svg></span>
+  <div class="brand"><b>Virtual Environment</b><small id="sub">A separate rooted Android, inside CoreKit</small></div>
+</header>
+
+<main id="home"><div class="wrap">
+  <div class="hero"><div><h1>Virtual devices</h1><p>Each one is a separate Android with root. Nothing you do inside touches this device.</p></div>
+    <button class="btn vio" id="newBtn"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New virtual device</button></div>
+  <div class="host" id="host"></div>
+  <div id="notices"></div>
+  <div id="list"></div>
+</div></main>
+
+<!-- create -->
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="create">
+  <h3>New virtual device</h3>
+  <div class="sub">Pick the Android version. It downloads once and every virtual device can use it.</div>
+  <div id="imgs"></div>
+  <label class="f" for="cName">Name</label>
+  <input class="in" id="cName" maxlength="40" placeholder="My virtual phone">
+  <label class="f">Memory (RAM)</label>
+  <div class="rng"><input type="range" id="cRam" min="1024" max="4096" step="256"><b id="cRamV"></b></div>
+  <label class="f">Processor cores</label>
+  <div class="rng"><input type="range" id="cCpu" min="1" max="4" step="1"><b id="cCpuV"></b></div>
+  <div id="cQuick" style="margin-top:14px"></div>
+  <div class="row"><button class="btn" data-a="closeSheet">Cancel</button><button class="btn vio" id="cGo">Create</button></div>
+</div>
+
+<!-- stop -->
+<div class="sheet" id="stopS">
+  <h3>Stop <span id="stName"></span>?</h3>
+  <div class="sub">Choose how it should stop.</div>
+  <div class="img on" data-a="suspend" id="stSave"><span class="ic" style="background:#151230;color:var(--violet)"><svg class="i" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></span><div class="tx"><b>Save and stop <span class="pill p-root" style="height:20px;margin-left:4px">Recommended</span></b><small>Next time it continues exactly where you left off, in seconds.</small></div></div>
+  <div class="img" data-a="shutdown"><span class="ic" style="background:#2a1215;color:#fca5a5"><svg class="i" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg></span><div class="tx"><b>Shut down</b><small>Android closes normally. The next start is a full start (slow without hardware speed-up).</small></div></div>
+  <div class="row"><button class="btn" data-a="closeSheet">Cancel</button></div>
+</div>
+
+<!-- confirm -->
+<div class="sheet" id="confirm">
+  <h3 id="cfT"></h3><div class="sub" id="cfP"></div>
+  <div class="row"><button class="btn" data-a="closeSheet">Cancel</button><button class="btn dng" id="cfGo"></button></div>
+</div>
+
+<!-- device view -->
+<div id="dev">
+  <header class="top">
+    <button class="back" id="devBack" aria-label="Back"><svg class="i" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <span class="logo"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M11 18h2"/></svg></span>
+    <div class="brand"><b id="dvName"></b><small id="dvSub"></small></div>
+    <span id="dvPill"></span>
+    <button class="btn sm" id="dvPower"></button>
+  </header>
+  <div class="tabs"><button class="tab on" data-tab="console">Root console</button><button class="tab" data-tab="apps">Apps</button><button class="tab" data-tab="settings">Settings</button></div>
+  <section class="pane show" id="pConsole">
+    <div class="boot hidden" id="bootBar"><span class="sp"></span><span id="bootT"></span></div>
+    <div id="term" tabindex="0"></div>
+    <div class="keys" id="keys"></div>
+    <form class="cmdl" id="cmdl"><input id="cmd" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type a command, e.g. id"><button class="btn vio" type="submit">Run</button></form>
+  </section>
+  <section class="pane" id="pApps"><div class="scroll" id="appsBody"></div></section>
+  <section class="pane" id="pSettings"><div class="scroll" id="setBody"></div></section>
+</div>
+
+<input type="file" id="apkFile" accept=".apk,application/vnd.android.package-archive" class="hidden">
+<div class="jobs" id="jobs"></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const TOKEN = location.pathname.split('/')[1];
+const API = '/' + TOKEN + '/api/vm/';
+const N = window.CoreKitNative;
+const ANDROID = !!(N && N.vmGet);
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const TOUCH = matchMedia('(pointer:coarse)').matches;
+if (!ANDROID) { const p = () => fetch('/' + TOKEN + '/api/ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); }
+const IC = {
+  phone:'<rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M11 18h2"/>',
+  play:'<path d="M7 4v16l13-8z"/>', stop:'<rect x="6" y="6" width="12" height="12" rx="2"/>',
+  term:'<path d="m4 17 6-6-6-6M12 19h8"/>', apps:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  dl:'<path d="M12 3v12M7 10l5 5 5-5M5 21h14"/>', plus:'<path d="M12 5v14M5 12h14"/>', trash:'<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>',
+  cog:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>',
+  bolt:'<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>', shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'
+};
+const svg = k => `<svg class="i" viewBox="0 0 24 24">${IC[k]}</svg>`;
+const fmtB = n => n >= 1e9 ? (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + ' GB' : n >= 1e6 ? Math.round(n / 1e6) + ' MB' : n >= 1e3 ? Math.round(n / 1e3) + ' KB' : (n || 0) + ' B';
+const ago = t => { const d = Math.max(0, Date.now() / 1000 - t); return d < 90 ? 'just now' : d < 5400 ? Math.round(d / 60) + ' min ago' : d < 129600 ? Math.round(d / 3600) + ' h ago' : Math.round(d / 86400) + ' days ago'; };
+const fmtT = s => s >= 3600 ? `${Math.floor(s / 3600)}h ${Math.floor(s % 3600 / 60)}m` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+let toastT;
+function toast(m, bad) { const t = $('#toast'); t.textContent = m; t.classList.toggle('bad', !!bad); t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3600); }
+
+/* ---------- engine link ---------- */
+async function api(path, body) {
+  let txt;
+  if (ANDROID) {
+    txt = body === undefined ? N.vmGet(path) : N.vmPost(path, JSON.stringify(body));
+  } else {
+    const r = await fetch(API + path, body === undefined ? {cache:'no-store'} : {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+    txt = await r.text();
+  }
+  let j = {}; try { j = JSON.parse(txt || '{}'); } catch (e) { j = {error: txt || 'CoreKit is not responding'}; }
+  if (j.error) throw new Error(j.error);
+  return j;
+}
+const cmd = (t, x) => api('cmd', Object.assign({t}, x || {}));
+
+/* ---------- state ---------- */
+let S = {images:[], machines:[], host:{}, jobs:[], defaults:{ram:2048, cpus:2}}, cur = null, tab = 'console';
+async function refresh() {
+  try { S = await api('state'); S.images = S.images || []; S.machines = S.machines || []; S.jobs = S.jobs || []; S.host = S.host || {}; render(); } catch (e) { $('#notices').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+function loop() { refresh().finally(() => setTimeout(loop, S.machines.some(m => m.state !== 'off') || S.images.some(i => i.dl && /down|verif/.test(i.dl.state)) || (S.host.emulatorDl && /down|verif/.test(S.host.emulatorDl.state)) ? 1000 : 2500)); }
+
+function pill(m) {
+  if (m.state === 'running') return `<span class="pill p-run"><i></i>Running</span>`;
+  if (m.state === 'off') return `<span class="pill p-off"><i></i>Off</span>`;
+  return `<span class="pill p-boot"><i></i>${m.state === 'stopping' ? 'Stopping' : 'Starting'}</span>`;
+}
+function render() {
+  const H = S.host || {};
+  const speed = H.fast ? `<b class="fast">Fast (hardware)</b>` : `<b class="slow">Software (slower)</b>`;
+  $('#host').innerHTML = `<div class="hs"><small>This ${ANDROID ? 'phone' : 'PC'}</small><b>${H.ram ? (H.ram / 1024).toFixed(1) + ' GB RAM' : '-'}</b></div>
+    <div class="hs"><small>Cores</small><b>${H.cpus || '-'}</b></div><div class="hs"><small>Free storage</small><b>${H.free ? fmtB(H.free) : '-'}</b></div>
+    <div class="hs"><small>Speed</small>${speed}</div>`;
+  let nt = '';
+  if (H.needsEmulator && !H.emulator) {
+    const d = H.emulatorDl || {};
+    const busy = /down|verif/.test(d.state || '');
+    nt += `<div class="card" style="margin-bottom:14px"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b style="color:var(--white)">Emulator needed</b><div class="muted" style="font-size:13px">A one-time download of the engine that runs virtual devices (QEMU, about 60 MB).</div>
+      ${busy ? `<div class="bar"><i style="width:${d.total ? Math.round(d.got * 100 / d.total) : 3}%"></i></div><small class="muted">${d.state === 'verifying' ? 'Checking…' : fmtB(d.got) + (d.total ? ' of ' + fmtB(d.total) : '')}</small>` : ''}
+      ${d.state === 'error' ? `<div class="err" style="margin-top:8px">${esc(d.err)}</div>` : ''}</div>
+      ${busy ? '' : `<button class="btn pri" data-a="getEmu" ${H.emulatorPublished ? '' : 'disabled'}>${svg('dl')}Download</button>`}</div></div>`;
+  }
+  if (H.needsEmulator && !H.fast) nt += `<div class="info" style="margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:220px"><b>Make it up to 10× faster:</b> switch on Windows Hypervisor Platform (one restart).</span><button class="btn sm" data-a="fast">${svg('bolt')}Turn on</button></div>`;
+  if (!H.needsEmulator && !H.emulator) nt += `<div class="err" style="margin-bottom:14px">The emulator is missing from this build (${esc(H.emulatorErr || '')}).</div>`;
+  if (ANDROID && !H.fast && S.machines.length) nt += `<div class="note" style="margin-bottom:14px">Phones don't allow hardware virtualization, so virtual devices run in software and feel slow. Use <b>Save and stop</b> so the next start takes seconds; a full start takes about half an hour. It keeps running while CoreKit is in the background.</div>`;
+  $('#notices').innerHTML = nt;
+  if (!S.machines.length) {
+    $('#list').innerHTML = `<div class="card empty"><div class="big"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M9 7h6M9 11h6M9 15h3"/></svg></div>
+      <h2>Your own rooted Android, inside CoreKit</h2><p>Create a virtual device: a separate Android with full root access. Install apps from this ${ANDROID ? 'phone' : 'PC'} into it and test them safely.</p>
+      <button class="btn vio" data-a="new">${svg('plus')}Create a virtual device</button>
+      <div class="feat"><div><b>Root built in</b><small>Root shell as soon as it starts. No Magisk on your real device.</small></div><div><b>Separate &amp; safe</b><small>Its own storage and apps. Wipe it any time in one tap.</small></div><div><b>Add your apps</b><small>Copy apps from this ${ANDROID ? 'phone' : 'PC'} in one tap, with ARM app support.</small></div></div></div>`;
+  } else {
+    $('#list').innerHTML = `<div class="ml">${S.machines.map(m => `<div class="mc">
+      <div class="h"><span class="av">${svg('phone')}</span><div class="t"><b>${esc(m.name)}</b><small>Android ${esc(m.android || '?')} · x86_64</small></div>${pill(m)}</div>
+      <div class="specs"><div><small>Memory</small><span>${(m.ram / 1024).toFixed(1)} GB</span></div><div><small>Cores</small><span>${m.cpus}</span></div><div><small>Storage</small><span>${fmtB(m.used || 0)}</span></div></div>
+      <div class="det">${m.state === 'off' ? (m.saved ? `<span style="color:#c4b5fd">Saved ${ago(m.saved)} · resumes in seconds</span>` : m.lastExit && /unexpected|could not/.test(m.lastExit) ? '<span style="color:var(--red)">' + esc(m.lastExit) + '</span>' : '') : m.state === 'running' ? `<span style="color:var(--green)">Ready · up ${fmtT(m.uptime || 0)}${m.bootSec ? ' · started in ' + fmtT(m.bootSec) : ''}</span>` : esc(m.detail || '')}</div>
+      <div class="acts">${m.state === 'off' ? `<button class="btn pri" data-a="start" data-id="${m.id}">${svg('play')}${m.saved ? 'Resume' : 'Start'}</button>` : `<button class="btn" data-a="stop" data-id="${m.id}" ${m.state === 'stopping' ? 'disabled' : ''}>${svg('stop')}Stop</button>`}
+        <button class="btn" data-a="open" data-id="${m.id}">${svg('term')}Open</button></div></div>`).join('')}
+      <button class="mc newc" data-a="new"><div><div class="pl">${svg('plus')}</div><b style="color:inherit">New virtual device</b></div></button></div>`;
+  }
+  renderJobs();
+  if (cur) renderDev();
+  if ($('#create').classList.contains('show')) renderImgs();
+}
+function renderJobs() {
+  const recent = (S.jobs || []).filter(j => j.state === 'running' || Date.now() / 1000 - j.when < 25 && !hiddenJobs.has(j.id));
+  $('#jobs').innerHTML = recent.map(j => `<div class="job ${j.state}"><b>${esc(j.title)}</b><small>${esc(j.detail || '')}</small>${j.state === 'running' ? `<div class="bar"><i style="width:${Math.max(4, j.pct)}%"></i></div>` : ''}</div>`).join('');
+}
+const hiddenJobs = new Set();
+
+/* ---------- create ---------- */
+let pickImg = '';
+function openSheet(id) { $('#scrim').classList.add('show'); document.querySelectorAll('.sheet').forEach(s => s.classList.toggle('show', s.id === id)); }
+function closeSheet() { $('#scrim').classList.remove('show'); document.querySelectorAll('.sheet').forEach(s => s.classList.remove('show')); }
+function openCreate() {
+  pickImg = pickImg || (S.images[0] && S.images[0].id) || '';
+  const d = S.defaults || {}, max = Math.max(2048, Math.min(8192, Math.floor((S.host.ram || 4096) * 0.6 / 256) * 256));
+  $('#cRam').max = max; $('#cRam').value = d.ram || 2048;
+  $('#cCpu').max = Math.max(1, Math.min(8, S.host.cpus || 4)); $('#cCpu').value = d.cpus || 2;
+  $('#cName').value = '';
+  updRng(); renderImgs(); openSheet('create');
+}
+function updRng() {
+  $('#cRamV').textContent = (+$('#cRam').value / 1024).toFixed(2).replace(/0$/, '') + ' GB'; $('#cCpuV').textContent = $('#cCpu').value + ($('#cCpu').value == 1 ? ' core' : ' cores');
+  const im = S.images.find(i => i.id === pickImg), q = im && im.quick;
+  if (!q) { $('#cQuick').innerHTML = ''; return; }
+  const ok = +$('#cRam').value === q.ram && +$('#cCpu').value === q.cpus;
+  $('#cQuick').innerHTML = ok ? `<div class="note">${svg('bolt')} <b>Quick start:</b> this device comes already started, so it is ready in about a minute.</div>`
+    : `<div class="err">Quick start only works with ${q.ram / 1024} GB and ${q.cpus} cores. With other settings the first start is a full start, which takes about 30 minutes on a phone. <a href="#" data-a="quickProfile" style="color:#fff">Use ${q.ram / 1024} GB · ${q.cpus} cores</a></div>`;
+}
+$('#cRam').oninput = updRng; $('#cCpu').oninput = updRng;
+function renderImgs() {
+  setTimeout(updRng, 0);
+  $('#imgs').innerHTML = S.images.map(im => {
+    const d = im.dl || {}, busy = /down|verif/.test(d.state || '');
+    let right = im.have ? '<span class="pill p-run"><i></i>Ready</span>' : busy ? `<button class="btn sm" data-a="cancelDl" data-img="${im.id}">Cancel</button>` : !im.published ? '<span class="pill p-off">Coming soon</span>' : `<button class="btn sm" data-a="dl" data-img="${im.id}">${svg('dl')}${fmtB(im.size)}</button>`;
+    return `<div class="img ${pickImg === im.id ? 'on' : ''}" data-pick="${im.id}"><span class="ic">${svg('phone')}</span><div class="tx"><b>${esc(im.name)}</b><small>${esc(im.note)}</small>
+      ${busy ? `<div class="bar"><i style="width:${d.total ? Math.round(d.got * 100 / d.total) : 2}%"></i></div><small>${d.state === 'verifying' ? 'Checking the download…' : `${fmtB(d.got)} of ${fmtB(d.total)}${d.speed ? ' · ' + fmtB(d.speed) + '/s' : ''}`}</small>` : ''}
+      ${d.state === 'error' ? `<div class="err" style="margin-top:6px;padding:7px 10px">${esc(d.err)}</div>` : ''}</div>${right}</div>`;
+  }).join('');
+  const im = S.images.find(i => i.id === pickImg);
+  $('#cGo').disabled = !im || !im.have;
+  $('#cGo').textContent = im && !im.have ? 'Download the system first' : 'Create';
+}
+$('#cGo').onclick = async () => {
+  try {
+    const r = await cmd('create', {image: pickImg, name: $('#cName').value.trim(), ram: +$('#cRam').value, cpus: +$('#cCpu').value});
+    closeSheet(); await refresh(); toast('Virtual device created'); openDev(r.id);
+  } catch (e) { toast(e.message, true); }
+};
+
+/* ---------- confirm ---------- */
+let cfFn = null, stopId = '';
+function confirmBox(title, text, label, fn) { $('#cfT').textContent = title; $('#cfP').textContent = text; $('#cfGo').textContent = label; cfFn = fn; openSheet('confirm'); }
+$('#cfGo').onclick = () => { closeSheet(); cfFn && cfFn(); };
+
+/* ---------- device view ---------- */
+function curM() { return S.machines.find(m => m.id === cur); }
+function openDev(id) {
+  cur = id; tab = 'console'; termReset(); appsLoaded = false; devApps = null;
+  $('#dev').classList.add('show'); setTab('console'); renderDev(); pollTerm();
+  if (ANDROID && N.vmView) try { N.vmView(true); } catch (e) {}
+}
+function closeDev() { cur = null; $('#dev').classList.remove('show'); if (ANDROID && N.vmView) try { N.vmView(false); } catch (e) {} }
+$('#devBack').onclick = closeDev;
+function setTab(t) {
+  tab = t;
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $('#pConsole').classList.toggle('show', t === 'console'); $('#pApps').classList.toggle('show', t === 'apps'); $('#pSettings').classList.toggle('show', t === 'settings');
+  if (t === 'apps') renderApps(true);
+  if (t === 'settings') renderSettings();
+  if (t === 'console' && !TOUCH) setTimeout(() => $('#term').focus(), 30);
+}
+document.querySelectorAll('.tab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+function renderDev() {
+  const m = curM(); if (!m) { closeDev(); return; }
+  $('#dvName').textContent = m.name;
+  $('#dvSub').textContent = `Android ${m.android || '?'} · ${(m.ram / 1024).toFixed(1)} GB · ${m.cpus} cores · root`;
+  $('#dvPill').innerHTML = pill(m);
+  const pw = $('#dvPower');
+  pw.innerHTML = m.state === 'off' ? svg('play') + (m.saved ? 'Resume' : 'Start') : svg('stop') + 'Stop';
+  pw.className = 'btn sm ' + (m.state === 'off' ? 'pri' : '');
+  pw.dataset.a = m.state === 'off' ? 'start' : 'stop'; pw.dataset.id = m.id;
+  pw.disabled = m.state === 'stopping';
+  const bb = $('#bootBar');
+  bb.classList.toggle('hidden', !(m.state === 'starting' || m.state === 'booting' || m.state === 'stopping'));
+  $('#bootT').textContent = (m.detail || 'Starting') + (m.state === 'booting' && !S.host.fast && !/saved|Loading/i.test(m.detail || '') ? (ANDROID ? ' · a full start takes about 30 minutes on a phone' : ' · a full start can take 20+ minutes without fast mode') : '');
+  if (tab === 'apps' && m.state === 'running' && !appsLoaded) renderApps(true);
+  if (tab === 'apps' && m.state !== 'running') renderApps(false);
+}
+
+/* ---------- terminal (small VT100) ---------- */
+const T = {lines:[[]], row:0, col:0, attr:'', cols:120, rows:30, since:0, esc:'', dirty:true};
+const MAXL = 3000;
+function termReset() { T.lines = [[]]; T.row = 0; T.col = 0; T.attr = ''; T.since = 0; T.esc = ''; T.dirty = true; $('#term').innerHTML = ''; }
+const PAL = ['#3b4252', '#f87171', '#34d399', '#fbbf24', '#60a5fa', '#c084fc', '#22d3ee', '#d1d9e0'];
+function sgr(params) {
+  let fg = null, bold = false;
+  const st = T.attr ? JSON.parse(T.attr) : {};
+  for (const p of (params.length ? params : [0])) {
+    if (p === 0) { delete st.fg; delete st.b; delete st.bg; }
+    else if (p === 1) st.b = 1; else if (p === 22) delete st.b;
+    else if (p >= 30 && p <= 37) st.fg = p - 30; else if (p === 39) delete st.fg;
+    else if (p >= 90 && p <= 97) st.fg = p - 90 + 8; else if (p >= 40 && p <= 47) st.bg = p - 40; else if (p === 49) delete st.bg;
+  }
+  T.attr = Object.keys(st).length ? JSON.stringify(st) : '';
+}
+function line(r) { while (T.lines.length <= r) T.lines.push([]); return T.lines[r]; }
+function put(ch) {
+  if (T.col >= T.cols) { T.row++; T.col = 0; }
+  const l = line(T.row);
+  while (l.length < T.col) l.push([' ', '']);
+  l[T.col] = [ch, T.attr]; T.col++;
+}
+function feed(s) {
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (T.esc) {
+      T.esc += c;
+      if (T.esc === '\x1b[' || T.esc === '\x1b]' || (T.esc[1] === '[' && /[0-9;?]/.test(c) && T.esc.length < 24)) continue;
+      if (T.esc[1] === ']') { if (c === '\x07' || T.esc.length > 200) T.esc = ''; continue; }
+      if (T.esc[1] === '[') {
+        const body = T.esc.slice(2, -1), ps = body.replace('?', '').split(';').filter(x => x !== '').map(Number), n = ps[0] || 1;
+        switch (c) {
+          case 'm': sgr(ps); break;
+          case 'K': { const l = line(T.row); if (!ps[0]) l.length = Math.min(l.length, T.col); else if (ps[0] === 2) l.length = 0; break; }
+          case 'J': if (ps[0] === 2 || ps[0] === 3) { T.lines = [[]]; T.row = 0; T.col = 0; } else if (!ps[0]) { T.lines.length = T.row + 1; line(T.row).length = T.col; } break;
+          case 'H': case 'f': { const top = Math.max(0, T.lines.length - T.rows); T.row = top + Math.max(0, (ps[0] || 1) - 1); line(T.row); T.col = Math.max(0, (ps[1] || 1) - 1); break; }
+          case 'A': T.row = Math.max(0, T.row - n); break;
+          case 'B': T.row += n; line(T.row); break;
+          case 'C': T.col = Math.min(T.cols - 1, T.col + n); break;
+          case 'D': T.col = Math.max(0, T.col - n); break;
+          case 'G': T.col = Math.max(0, n - 1); break;
+          case 'P': line(T.row).splice(T.col, n); break;
+          case '@': { const l = line(T.row); for (let k = 0; k < n; k++) l.splice(T.col, 0, [' ', '']); break; }
+        }
+      }
+      T.esc = ''; continue;
+    }
+    if (c === '\x1b') { T.esc = c; continue; }
+    if (c === '\r') { T.col = 0; continue; }
+    if (c === '\n') { T.row++; line(T.row); continue; }
+    if (c === '\b') { T.col = Math.max(0, T.col - 1); continue; }
+    if (c === '\x07') continue;
+    if (c === '\t') { do put(' '); while (T.col % 8); continue; }
+    if (c < ' ') continue;
+    put(c);
+  }
+  if (T.lines.length > MAXL) { const cut = T.lines.length - MAXL; T.lines.splice(0, cut); T.row = Math.max(0, T.row - cut); }
+  T.dirty = true;
+}
+function style(a) {
+  if (!a) return '';
+  const st = JSON.parse(a); let s = '';
+  if (st.fg != null) s += 'color:' + (st.fg >= 8 ? ['#6b7785', '#fca5a5', '#6ee7b7', '#fde68a', '#93c5fd', '#d8b4fe', '#67e8f9', '#fff'][st.fg - 8] : PAL[st.fg]) + ';';
+  if (st.bg != null) s += 'background:' + PAL[st.bg] + ';';
+  if (st.b) s += 'font-weight:700;';
+  return s;
+}
+function draw() {
+  if (!T.dirty || !cur || tab !== 'console') return;
+  T.dirty = false;
+  const el = $('#term'), atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
+  let h = '';
+  for (let r = 0; r < T.lines.length; r++) {
+    const l = T.lines[r]; let run = '', ra = null;
+    const flush = () => { if (run) h += ra ? `<span style="${style(ra)}">${esc(run)}</span>` : esc(run); run = ''; };
+    const len = Math.max(l.length, r === T.row ? T.col + 1 : 0);
+    for (let c = 0; c < len; c++) {
+      const cell = l[c] || [' ', ''];
+      if (r === T.row && c === T.col) { flush(); h += `<span class="cur">${esc(cell[0])}</span>`; ra = null; continue; }
+      if (cell[1] !== ra) { flush(); ra = cell[1]; }
+      run += cell[0];
+    }
+    flush(); h += '\n';
+  }
+  el.innerHTML = h;
+  if (atBottom) el.scrollTop = el.scrollHeight;
+}
+function measure() {
+  const el = $('#term'), probe = document.createElement('span');
+  probe.textContent = 'MMMMMMMMMM'; probe.style.visibility = 'hidden'; el.appendChild(probe);
+  const w = probe.getBoundingClientRect().width / 10; probe.remove();
+  if (w > 0) T.cols = Math.max(40, Math.floor((el.clientWidth - 24) / w));
+  const lh = parseFloat(getComputedStyle(el).lineHeight) || 17; T.rows = Math.max(10, Math.floor((el.clientHeight - 16) / lh));
+}
+addEventListener('resize', () => { measure(); T.dirty = true; });
+let termBusy = false;
+async function pollTerm() {
+  if (!cur) return;
+  if (!termBusy && tab === 'console') {
+    termBusy = true;
+    try { const r = await api('term?id=' + cur + '&since=' + T.since); if (r.t) feed(r.t); T.since = r.n; } catch (e) {}
+    termBusy = false; draw();
+  }
+  setTimeout(pollTerm, document.hidden ? 1500 : 180);
+}
+const sendKeys = s => { if (cur) cmd('input', {id: cur, s}).catch(e => toast(e.message, true)); };
+$('#term').addEventListener('keydown', e => {
+  const m = curM(); if (!m || m.state === 'off') return;
+  let s = null;
+  if (e.ctrlKey && e.key.length === 1 && /[a-z]/i.test(e.key)) s = String.fromCharCode(e.key.toUpperCase().charCodeAt(0) - 64);
+  else if (e.key.length === 1 && !e.metaKey && !e.altKey) s = e.key;
+  else s = ({Enter:'\r', Backspace:'\x7f', Tab:'\t', Escape:'\x1b', ArrowUp:'\x1b[A', ArrowDown:'\x1b[B', ArrowRight:'\x1b[C', ArrowLeft:'\x1b[D', Home:'\x1b[H', End:'\x1b[F', Delete:'\x1b[3~'})[e.key] || null;
+  if (s != null) { e.preventDefault(); sendKeys(s); }
+});
+$('#term').addEventListener('paste', e => { e.preventDefault(); const t = (e.clipboardData || window.clipboardData).getData('text'); if (t) sendKeys(t.replace(/\r?\n/g, '\r')); });
+const KEYS = [['Tab', '\t'], ['Ctrl+C', '\x03'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['←', '\x1b[D'], ['→', '\x1b[C'], ['Esc', '\x1b'], ['Ctrl+D', '\x04'], ['clear', 'clear\r'], ['su', 'su\r'], ['ls', 'ls -la\r'], ['top', 'top -n 1\r']];
+$('#keys').innerHTML = KEYS.map(([l], i) => `<button class="kk" type="button" data-k="${i}">${esc(l)}</button>`).join('');
+$('#keys').addEventListener('pointerdown', e => { if (e.target.closest('.kk')) e.preventDefault(); });
+$('#keys').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b) sendKeys(KEYS[+b.dataset.k][1]); });
+const hist = []; let hi = 0;
+$('#cmdl').addEventListener('submit', e => {
+  e.preventDefault(); const v = $('#cmd').value;
+  sendKeys(v + '\r'); if (v.trim()) { hist.push(v); hi = hist.length; } $('#cmd').value = '';
+});
+$('#cmd').addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp' && hist.length) { hi = Math.max(0, hi - 1); $('#cmd').value = hist[hi]; e.preventDefault(); }
+  else if (e.key === 'ArrowDown' && hist.length) { hi = Math.min(hist.length, hi + 1); $('#cmd').value = hist[hi] || ''; e.preventDefault(); }
+  else if (e.key === 'Tab') { e.preventDefault(); sendKeys($('#cmd').value + '\t'); $('#cmd').value = ''; }
+});
+setInterval(draw, 120);
+
+/* ---------- apps ---------- */
+let appsLoaded = false, vmApps = [], devApps = null, appQ = '';
+async function renderApps(load) {
+  const m = curM(), el = $('#appsBody'); if (!m) return;
+  if (m.state !== 'running') {
+    el.innerHTML = `<div class="info">${m.state === 'off' ? 'Start the virtual device to add or manage apps.' : 'Apps are available once Android has finished starting.'}</div>` + addSection();
+    bindDrop(); return;
+  }
+  if (load && !appsLoaded) {
+    appsLoaded = true;
+    try { vmApps = (await cmd('apps', {id: m.id})).apps || []; } catch (e) { vmApps = []; }
+    if (ANDROID && !devApps) { try { devApps = JSON.parse(N.vmDeviceApps() || '[]'); } catch (e) { devApps = []; } }
+  }
+  const inst = new Set(vmApps.map(a => a.pkg));
+  let h = `<div class="sec"><h4>In the virtual device (${vmApps.length})</h4><button class="btn sm" data-a="arm" data-id="${m.id}">${svg('cog')}ARM app support</button></div>`;
+  h += vmApps.length ? `<div class="al">${vmApps.map(a => `<div class="ap"><span class="ai">${appIcon(a.pkg)}</span><div class="tx"><b>${esc(labelOf(a.pkg))}</b><small>${esc(a.pkg)}</small></div>
+      <button class="btn sm" data-a="freeze" data-pkg="${esc(a.pkg)}">Freeze</button><button class="btn sm dng" data-a="uninstall" data-pkg="${esc(a.pkg)}">${svg('trash')}</button></div>`).join('')}</div>`
+    : `<div class="muted" style="padding:6px 2px 4px">No apps added yet.</div>`;
+  h += addSection(inst);
+  el.innerHTML = h; bindDrop();
+}
+function labelOf(pkg) { const d = (devApps || []).find(x => x.pkg === pkg); return d ? d.label : pkg.split('.').slice(-1)[0]; }
+function appIcon(pkg) {
+  if (ANDROID && N.vmAppIcon) { const k = 'ic:' + pkg; if (!(k in iconCache)) { try { iconCache[k] = N.vmAppIcon(pkg) || ''; } catch (e) { iconCache[k] = ''; } } if (iconCache[k]) return `<img src="data:image/png;base64,${iconCache[k]}" alt="">`; }
+  return esc((labelOf(pkg)[0] || '?').toUpperCase());
+}
+const iconCache = {};
+function addSection(inst) {
+  if (!ANDROID) return `<div class="sec"><h4>Add an app</h4></div><div class="drop" id="drop" data-a="pickApk">${svg('dl')}<div style="margin-top:6px"><b style="color:var(--white)">Drop an .apk file here</b> or click to choose one</div><small class="muted">Split apps (.apks/.xapk) aren't supported yet.</small></div>`;
+  const m = curM(); if (!m || m.state !== 'running') return '';
+  const list = (devApps || []).filter(a => !appQ || (a.label + ' ' + a.pkg).toLowerCase().includes(appQ.toLowerCase()));
+  return `<div class="sec"><h4>Add from this phone</h4></div><input class="search" id="appQ" placeholder="Search your apps" value="${esc(appQ)}">
+    <div class="al">${list.slice(0, 150).map(a => `<div class="ap"><span class="ai">${appIcon(a.pkg)}</span><div class="tx"><b>${esc(a.label)}</b><small>${esc(a.pkg)} · ${fmtB(a.size)}${a.files.length > 1 ? ' · ' + a.files.length + ' parts' : ''}</small></div>
+      ${inst && inst.has(a.pkg) ? '<span class="pill p-run"><i></i>Added</span>' : `<button class="btn sm vio" data-a="add" data-pkg="${esc(a.pkg)}">${svg('plus')}Add</button>`}</div>`).join('')}</div>`;
+}
+function bindDrop() {
+  const q = $('#appQ'); if (q) q.oninput = () => { appQ = q.value; const pos = q.selectionStart; renderApps(false).then(() => { const n = $('#appQ'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }); };
+  const d = $('#drop'); if (!d) return;
+  d.ondragover = e => { e.preventDefault(); d.classList.add('over'); };
+  d.ondragleave = () => d.classList.remove('over');
+  d.ondrop = e => { e.preventDefault(); d.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) uploadApk(f); };
+}
+$('#apkFile').onchange = () => { const f = $('#apkFile').files[0]; if (f) uploadApk(f); $('#apkFile').value = ''; };
+async function uploadApk(f) {
+  if (!/\.apk$/i.test(f.name)) { toast('Pick an .apk file', true); return; }
+  toast('Uploading ' + f.name + '…');
+  try {
+    const r = await fetch(API + 'upload?name=' + encodeURIComponent(f.name), {method:'POST', body: f}); const j = await r.json();
+    if (j.error) throw new Error(j.error);
+    await cmd('install', {id: cur, files: [j.path], label: f.name.replace(/\.apk$/i, '')});
+    watchJobs();
+  } catch (e) { toast(e.message, true); }
+}
+function watchJobs() { appsLoaded = false; setTimeout(async () => { await refresh(); if ((S.jobs || []).some(j => j.state === 'running')) watchJobs(); else if (tab === 'apps') renderApps(true); }, 1500); }
+
+/* ---------- settings ---------- */
+function renderSettings() {
+  const m = curM(); if (!m) return;
+  const off = m.state === 'off';
+  $('#setBody').innerHTML = `<div class="card" style="max-width:620px">
+    <label class="f" for="sName" style="margin-top:0">Name</label><input class="in" id="sName" maxlength="40" value="${esc(m.name)}">
+    <label class="f">Memory (RAM)</label><div class="rng"><input type="range" id="sRam" min="1024" max="${Math.max(2048, Math.min(8192, Math.floor((S.host.ram || 4096) * 0.6 / 256) * 256))}" step="256" value="${m.ram}" ${off ? '' : 'disabled'}><b id="sRamV">${(m.ram / 1024).toFixed(2).replace(/0$/, '')} GB</b></div>
+    <label class="f">Processor cores</label><div class="rng"><input type="range" id="sCpu" min="1" max="${Math.max(1, Math.min(8, S.host.cpus || 4))}" step="1" value="${m.cpus}" ${off ? '' : 'disabled'}><b id="sCpuV">${m.cpus}</b></div>
+    ${off ? '' : '<div class="muted" style="font-size:12.5px;margin-top:8px">Stop the device to change memory or cores.</div>'}
+    <div class="row" style="margin-top:16px"><button class="btn vio" data-a="saveSet">Save</button></div></div>
+    <div class="card" style="max-width:620px;margin-top:14px"><b style="color:var(--white)">Storage</b><div class="muted" style="font-size:13px;margin:2px 0 12px">Uses ${fmtB(m.used || 0)} of up to 8 GB. Reset wipes all apps and files inside, like a factory reset.</div>
+    ${m.saved ? `<div class="info" style="margin-bottom:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:200px">Saved state from ${ago(m.saved)} (${fmtB(m.savedSize || 0)}). Starting continues from it.</span><button class="btn sm" data-a="discardSave">Discard</button></div>` : ''}
+    <div class="row"><button class="btn" data-a="reset" data-id="${m.id}" ${off ? '' : 'disabled'}>Factory reset</button><button class="btn dng" data-a="delete" data-id="${m.id}" ${off ? '' : 'disabled'}>${svg('trash')}Delete device</button></div></div>`;
+  $('#sRam').oninput = () => $('#sRamV').textContent = (+$('#sRam').value / 1024).toFixed(2).replace(/0$/, '') + ' GB';
+  $('#sCpu').oninput = () => $('#sCpuV').textContent = $('#sCpu').value;
+}
+
+/* ---------- actions ---------- */
+document.addEventListener('click', async e => {
+  const pk = e.target.closest('[data-pick]'); if (pk && !e.target.closest('[data-a]')) { pickImg = pk.dataset.pick; renderImgs(); return; }
+  const a = e.target.closest('[data-a]'); if (!a) return;
+  const id = a.dataset.id, act = a.dataset.a;
+  try {
+    switch (act) {
+      case 'new': openCreate(); break;
+      case 'closeSheet': closeSheet(); break;
+      case 'quickProfile': { e.preventDefault(); const im = S.images.find(i => i.id === pickImg); if (im && im.quick) { $('#cRam').value = im.quick.ram; $('#cCpu').value = im.quick.cpus; updRng(); } break; }
+      case 'dl': pickImg = a.dataset.img; await cmd('download', {image: a.dataset.img}); await refresh(); break;
+      case 'cancelDl': await cmd('cancelDownload', {image: a.dataset.img}); await refresh(); break;
+      case 'getEmu': await cmd('getEmulator'); await refresh(); break;
+      case 'fast': await cmd('enableFast'); toast('Done. Restart Windows to use the faster mode.'); break;
+      case 'start': a.disabled = true; await cmd('start', {id}); if (ANDROID && N.vmKeep) N.vmKeep(true); await refresh(); if (!cur) openDev(id); break;
+      case 'stop': {
+        const m = S.machines.find(x => x.id === id); stopId = id;
+        $('#stName').textContent = m ? m.name : 'virtual device';
+        $('#stSave').classList.toggle('hidden', !(m && m.state === 'running'));
+        openSheet('stopS'); break;
+      }
+      case 'suspend': closeSheet(); await cmd('suspend', {id: stopId}); toast('Saving… it will resume in seconds next time'); await refresh(); break;
+      case 'shutdown': closeSheet(); await cmd('stop', {id: stopId}); await refresh(); break;
+      case 'discardSave': await cmd('discardSave', {id: cur}); await refresh(); renderSettings(); toast('Saved state discarded'); break;
+      case 'open': openDev(id); break;
+      case 'arm': await cmd('arm', {id}); watchJobs(); toast('Turning on ARM app support…'); break;
+      case 'add': {
+        const app = (devApps || []).find(x => x.pkg === a.dataset.pkg); if (!app) break;
+        a.disabled = true; await cmd('install', {id: cur, files: app.files, label: app.label}); watchJobs(); break;
+      }
+      case 'pickApk': $('#apkFile').click(); break;
+      case 'uninstall': confirmBox('Remove app?', `${labelOf(a.dataset.pkg)} and its data will be removed from the virtual device.`, 'Remove', async () => { try { await cmd('uninstall', {id: cur, pkg: a.dataset.pkg}); appsLoaded = false; renderApps(true); toast('Removed'); } catch (x) { toast(x.message, true); } }); break;
+      case 'freeze': { const r = await cmd('freeze', {id: cur, pkg: a.dataset.pkg}); toast(/disabled|new state/i.test(r.out || '') ? 'Frozen: it can\'t run until you remove it' : 'Done'); break; }
+      case 'saveSet': await cmd('update', {id: cur, name: $('#sName').value, ram: +$('#sRam').value, cpus: +$('#sCpu').value}); await refresh(); toast('Saved'); break;
+      case 'reset': confirmBox('Factory reset?', 'All apps and files inside this virtual device will be erased.', 'Reset', async () => { try { await cmd('reset', {id}); await refresh(); toast('Reset done'); } catch (x) { toast(x.message, true); } }); break;
+      case 'delete': confirmBox('Delete virtual device?', 'It will be removed with all its apps and files. The downloaded system stays for other devices.', 'Delete', async () => { try { await cmd('delete', {id}); closeDev(); await refresh(); toast('Deleted'); } catch (x) { toast(x.message, true); } }); break;
+    }
+  } catch (x) { toast(x.message, true); await refresh(); }
+});
+$('#scrim').onclick = closeSheet;
+$('#newBtn').onclick = openCreate;
+$('#back').onclick = () => { if (N && N.go) N.go('home'); else history.back(); };
+window.__ckBack = () => {
+  if ($('.sheet.show')) { closeSheet(); return true; }
+  if (cur) { closeDev(); return true; }
+  return false;
+};
+measure(); loop();
+</script>
+</body>
+</html>
