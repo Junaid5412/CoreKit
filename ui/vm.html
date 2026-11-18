@@ -68,7 +68,8 @@ main{height:calc(100% - 66px);overflow-y:auto}
 .mc .specs small{display:block;color:var(--muted);font-size:10px;letter-spacing:1px;text-transform:uppercase;font-weight:700}
 .mc .specs span{color:var(--white);font-size:13px;font-variant-numeric:tabular-nums}
 .mc .acts{display:flex;gap:8px;flex-wrap:wrap}.mc .acts .btn{flex:1 1 auto}
-.mc .det{font-size:12.5px;color:var(--amber);min-height:18px}
+.mc .det{font-size:12.5px;color:var(--amber)}
+.mc .det:empty{display:none}
 .newc{border:1px dashed #2c3a4d;background:transparent;min-height:180px;display:grid;place-items:center;text-align:center;cursor:pointer;color:var(--muted2)}
 .newc:hover{border-color:var(--violet);color:var(--white)}
 .newc .pl{width:52px;height:52px;border-radius:16px;margin:0 auto 10px;display:grid;place-items:center;background:#1b1736;color:var(--violet)}
@@ -166,13 +167,12 @@ label.f{display:block;font-size:12px;color:var(--muted2);margin:14px 0 6px;font-
 <header class="top">
   <button class="back" id="back" aria-label="Back"><svg class="i" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
   <span class="logo"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M9 7h6M9 11h6M9 15h3"/></svg></span>
-  <div class="brand"><b>Virtual Environment</b><small id="sub">A separate rooted Android, inside CoreKit</small></div>
+  <div class="brand"><b>Virtual Environment</b><small id="sub">Rooted Android inside CoreKit</small></div>
 </header>
 
 <main id="home"><div class="wrap">
-  <div class="hero"><div><h1>Virtual devices</h1><p>Each one is a separate Android with root. Nothing you do inside touches this device.</p></div>
-    <button class="btn vio" id="newBtn"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New virtual device</button></div>
-  <div class="host" id="host"></div>
+  <div class="hero"><div><h1>Virtual phones</h1></div>
+    <button class="btn vio" id="newBtn"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New</button></div>
   <div id="notices"></div>
   <div id="list"></div>
 </div></main>
@@ -181,14 +181,15 @@ label.f{display:block;font-size:12px;color:var(--muted2);margin:14px 0 6px;font-
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="create">
   <h3>New virtual device</h3>
-  <div class="sub">Pick the Android version. It downloads once and every virtual device can use it.</div>
+  <div class="sub">Download once, then create as many as you like.</div>
   <div id="imgs"></div>
   <label class="f" for="cName">Name</label>
   <input class="in" id="cName" maxlength="40" placeholder="My virtual phone">
+  <details id="cMore" style="margin-top:12px"><summary style="cursor:pointer;color:var(--muted2);font-size:13px">More options</summary>
   <label class="f">Memory (RAM)</label>
   <div class="rng"><input type="range" id="cRam" min="1024" max="4096" step="256"><b id="cRamV"></b></div>
   <label class="f">Processor cores</label>
-  <div class="rng"><input type="range" id="cCpu" min="1" max="4" step="1"><b id="cCpuV"></b></div>
+  <div class="rng"><input type="range" id="cCpu" min="1" max="4" step="1"><b id="cCpuV"></b></div></details>
   <div id="cQuick" style="margin-top:14px"></div>
   <div class="row"><button class="btn" data-a="closeSheet">Cancel</button><button class="btn vio" id="cGo">Create</button></div>
 </div>
@@ -217,7 +218,7 @@ label.f{display:block;font-size:12px;color:var(--muted2);margin:14px 0 6px;font-
     <span id="dvPill"></span>
     <button class="btn sm" id="dvPower"></button>
   </header>
-  <div class="tabs"><button class="tab on" data-tab="console">Root console</button><button class="tab" data-tab="apps">Apps</button><button class="tab" data-tab="settings">Settings</button></div>
+  <div class="tabs"><button class="tab on" data-tab="console">Console</button><button class="tab" data-tab="apps">Apps</button><button class="tab" data-tab="settings">Settings</button></div>
   <section class="pane show" id="pConsole">
     <div class="boot hidden" id="bootBar"><span class="sp"></span><span id="bootT"></span></div>
     <div id="term" tabindex="0"></div>
@@ -286,10 +287,6 @@ function pill(m) {
 }
 function render() {
   const H = S.host || {};
-  const speed = H.fast ? `<b class="fast">Fast (hardware)</b>` : `<b class="slow">Software (slower)</b>`;
-  $('#host').innerHTML = `<div class="hs"><small>This ${ANDROID ? 'phone' : 'PC'}</small><b>${H.ram ? (H.ram / 1024).toFixed(1) + ' GB RAM' : '-'}</b></div>
-    <div class="hs"><small>Cores</small><b>${H.cpus || '-'}</b></div><div class="hs"><small>Free storage</small><b>${H.free ? fmtB(H.free) : '-'}</b></div>
-    <div class="hs"><small>Speed</small>${speed}</div>`;
   let nt = '';
   if (H.needsEmulator && !H.emulator) {
     const d = H.emulatorDl || {};
@@ -299,23 +296,20 @@ function render() {
       ${d.state === 'error' ? `<div class="err" style="margin-top:8px">${esc(d.err)}</div>` : ''}</div>
       ${busy ? '' : `<button class="btn pri" data-a="getEmu" ${H.emulatorPublished ? '' : 'disabled'}>${svg('dl')}Download</button>`}</div></div>`;
   }
-  if (H.needsEmulator && !H.fast) nt += `<div class="info" style="margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:220px"><b>Make it up to 10× faster:</b> switch on Windows Hypervisor Platform (one restart).</span><button class="btn sm" data-a="fast">${svg('bolt')}Turn on</button></div>`;
+  if (H.needsEmulator && !H.fast) nt += `<div class="info" style="margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap"><span style="flex:1;min-width:180px">Faster with Hyper-V (one restart)</span><button class="btn sm" data-a="fast">${svg('bolt')}Turn on</button></div>`;
   if (!H.needsEmulator && !H.emulator) nt += `<div class="err" style="margin-bottom:14px">The emulator is missing from this build (${esc(H.emulatorErr || '')}).</div>`;
-  if (ANDROID && !H.fast && S.machines.length) nt += `<div class="note" style="margin-bottom:14px">Phones don't allow hardware virtualization, so virtual devices run in software and feel slow. Use <b>Save and stop</b> so the next start takes seconds; a full start takes about half an hour. It keeps running while CoreKit is in the background.</div>`;
   $('#notices').innerHTML = nt;
   if (!S.machines.length) {
     $('#list').innerHTML = `<div class="card empty"><div class="big"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M9 7h6M9 11h6M9 15h3"/></svg></div>
-      <h2>Your own rooted Android, inside CoreKit</h2><p>Create a virtual device: a separate Android with full root access. Install apps from this ${ANDROID ? 'phone' : 'PC'} into it and test them safely.</p>
-      <button class="btn vio" data-a="new">${svg('plus')}Create a virtual device</button>
-      <div class="feat"><div><b>Root built in</b><small>Root shell as soon as it starts. No Magisk on your real device.</small></div><div><b>Separate &amp; safe</b><small>Its own storage and apps. Wipe it any time in one tap.</small></div><div><b>Add your apps</b><small>Copy apps from this ${ANDROID ? 'phone' : 'PC'} in one tap, with ARM app support.</small></div></div></div>`;
+      <h2>Your own rooted Android</h2><p>Separate from this ${ANDROID ? 'phone' : 'PC'}. Add apps, use root, wipe any time.</p>
+      <button class="btn vio" data-a="new">${svg('plus')}Create one</button></div>`;
   } else {
     $('#list').innerHTML = `<div class="ml">${S.machines.map(m => `<div class="mc">
-      <div class="h"><span class="av">${svg('phone')}</span><div class="t"><b>${esc(m.name)}</b><small>Android ${esc(m.android || '?')} · x86_64</small></div>${pill(m)}</div>
-      <div class="specs"><div><small>Memory</small><span>${(m.ram / 1024).toFixed(1)} GB</span></div><div><small>Cores</small><span>${m.cpus}</span></div><div><small>Storage</small><span>${fmtB(m.used || 0)}</span></div></div>
-      <div class="det">${m.state === 'off' ? (m.saved ? `<span style="color:#c4b5fd">Saved ${ago(m.saved)} · resumes in seconds</span>` : m.lastExit && /unexpected|could not/.test(m.lastExit) ? '<span style="color:var(--red)">' + esc(m.lastExit) + '</span>' : '') : m.state === 'running' ? `<span style="color:var(--green)">Ready · up ${fmtT(m.uptime || 0)}${m.bootSec ? ' · started in ' + fmtT(m.bootSec) : ''}</span>` : esc(m.detail || '')}</div>
+      <div class="h"><span class="av">${svg('phone')}</span><div class="t"><b>${esc(m.name)}</b><small>Android ${esc(m.android || '?')}</small></div>${pill(m)}</div>
+      <div class="det">${m.state === 'off' ? (m.saved ? `<span style="color:#c4b5fd">Saved · opens in seconds</span>` : m.lastExit && /unexpected|could not/.test(m.lastExit) ? '<span style="color:var(--red)">' + esc(m.lastExit) + '</span>' : '') : m.state === 'running' ? '' : esc(m.detail || '')}</div>
       <div class="acts">${m.state === 'off' ? `<button class="btn pri" data-a="start" data-id="${m.id}">${svg('play')}${m.saved ? 'Resume' : 'Start'}</button>` : `<button class="btn" data-a="stop" data-id="${m.id}" ${m.state === 'stopping' ? 'disabled' : ''}>${svg('stop')}Stop</button>`}
         <button class="btn" data-a="open" data-id="${m.id}">${svg('term')}Open</button></div></div>`).join('')}
-      <button class="mc newc" data-a="new"><div><div class="pl">${svg('plus')}</div><b style="color:inherit">New virtual device</b></div></button></div>`;
+</div>`;
   }
   renderJobs();
   if (cur) renderDev();
@@ -344,8 +338,8 @@ function updRng() {
   const im = S.images.find(i => i.id === pickImg), q = im && im.quick;
   if (!q) { $('#cQuick').innerHTML = ''; return; }
   const ok = +$('#cRam').value === q.ram && +$('#cCpu').value === q.cpus;
-  $('#cQuick').innerHTML = ok ? `<div class="note">${svg('bolt')} <b>Quick start:</b> this device comes already started, so it is ready in about a minute.</div>`
-    : `<div class="err">Quick start only works with ${q.ram / 1024} GB and ${q.cpus} cores. With other settings the first start is a full start, which takes about 30 minutes on a phone. <a href="#" data-a="quickProfile" style="color:#fff">Use ${q.ram / 1024} GB · ${q.cpus} cores</a></div>`;
+  $('#cQuick').innerHTML = ok ? ''
+    : `<div class="err">These settings make the first start slow (about 30 minutes). <a href="#" data-a="quickProfile" style="color:#fff">Use the quick settings</a></div>`;
 }
 $('#cRam').oninput = updRng; $('#cCpu').oninput = updRng;
 function renderImgs() {
@@ -394,7 +388,7 @@ document.querySelectorAll('.tab').forEach(b => b.onclick = () => setTab(b.datase
 function renderDev() {
   const m = curM(); if (!m) { closeDev(); return; }
   $('#dvName').textContent = m.name;
-  $('#dvSub').textContent = `Android ${m.android || '?'} · ${(m.ram / 1024).toFixed(1)} GB · ${m.cpus} cores · root`;
+  $('#dvSub').textContent = `Android ${m.android || '?'} · root`;
   $('#dvPill').innerHTML = pill(m);
   const pw = $('#dvPower');
   pw.innerHTML = m.state === 'off' ? svg('play') + (m.saved ? 'Resume' : 'Start') : svg('stop') + 'Stop';
@@ -403,7 +397,7 @@ function renderDev() {
   pw.disabled = m.state === 'stopping';
   const bb = $('#bootBar');
   bb.classList.toggle('hidden', !(m.state === 'starting' || m.state === 'booting' || m.state === 'stopping'));
-  $('#bootT').textContent = (m.detail || 'Starting') + (m.state === 'booting' && !S.host.fast && !/saved|Loading/i.test(m.detail || '') ? (ANDROID ? ' · a full start takes about 30 minutes on a phone' : ' · a full start can take 20+ minutes without fast mode') : '');
+  $('#bootT').textContent = (m.detail || 'Starting') + (m.state === 'booting' && !S.host.fast && !/saved|Loading/i.test(m.detail || '') ? ' · this can take a while' : '');
   if (tab === 'apps' && m.state === 'running' && !appsLoaded) renderApps(true);
   if (tab === 'apps' && m.state !== 'running') renderApps(false);
 }
@@ -524,7 +518,7 @@ $('#term').addEventListener('keydown', e => {
   if (s != null) { e.preventDefault(); sendKeys(s); }
 });
 $('#term').addEventListener('paste', e => { e.preventDefault(); const t = (e.clipboardData || window.clipboardData).getData('text'); if (t) sendKeys(t.replace(/\r?\n/g, '\r')); });
-const KEYS = [['Tab', '\t'], ['Ctrl+C', '\x03'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['←', '\x1b[D'], ['→', '\x1b[C'], ['Esc', '\x1b'], ['Ctrl+D', '\x04'], ['clear', 'clear\r'], ['su', 'su\r'], ['ls', 'ls -la\r'], ['top', 'top -n 1\r']];
+const KEYS = [['Tab', '\t'], ['Ctrl+C', '\x03'], ['↑', '\x1b[A'], ['↓', '\x1b[B'], ['Clear', 'clear\r']];
 $('#keys').innerHTML = KEYS.map(([l], i) => `<button class="kk" type="button" data-k="${i}">${esc(l)}</button>`).join('');
 $('#keys').addEventListener('pointerdown', e => { if (e.target.closest('.kk')) e.preventDefault(); });
 $('#keys').addEventListener('click', e => { const b = e.target.closest('[data-k]'); if (b) sendKeys(KEYS[+b.dataset.k][1]); });
