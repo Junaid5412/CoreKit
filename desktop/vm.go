@@ -160,6 +160,7 @@ type vmQemu struct {
 	env   []string
 	pre   []string // arguments before ours (e.g. -L share)
 	accel string
+	cpu   string // CPU model; "max" when empty
 }
 
 // vmFindQemu says how to run the emulator here, or why it can't.
@@ -825,6 +826,9 @@ func (e *vmEngine) start(id string) error {
 	}
 	snap, _ := vmSnapFor(m)
 	cpu := "max"
+	if q.cpu != "" {
+		cpu = q.cpu
+	}
 	accel := q.accel
 	if a := os.Getenv("CK_VM_ACCEL"); a != "" {
 		accel = a
@@ -838,9 +842,6 @@ func (e *vmEngine) start(id string) error {
 		for _, a := range strings.Split(accel, ";")[1:] {
 			args = append(args, "-accel", a)
 		}
-	}
-	if strings.HasPrefix(accel, "kvm") || strings.HasPrefix(accel, "whpx") {
-		cpu = "max"
 	}
 	args = append(args,
 		"-cpu", cpu,

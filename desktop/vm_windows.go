@@ -30,7 +30,9 @@ func vmPlatformQemu() (*vmQemu, error) {
 		return nil, errors.New("the emulator is not downloaded yet")
 	}
 	// Hyper-V acceleration (Windows Hypervisor Platform) when switched on, else software
-	return &vmQemu{exe: exe, pre: []string{"-L", filepath.Join(vmQemuDir(), "share")}, accel: "whpx,kernel-irqchip=off;tcg,thread=multi"}, nil
+	// Nehalem: everything Android x86_64 needs (SSE4.2, POPCNT) and no AVX/XSAVE state,
+	// which Hyper-V's platform API can fail to hand over ("failed to get xsave state")
+	return &vmQemu{exe: exe, pre: []string{"-L", filepath.Join(vmQemuDir(), "share")}, accel: "whpx,kernel-irqchip=off;tcg,thread=multi", cpu: "Nehalem"}, nil
 }
 
 func vmPlatformHost(h map[string]any) {
