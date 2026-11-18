@@ -17,12 +17,12 @@ val copyUi by tasks.registering(Sync::class) {
 
 android {
     namespace = "com.corekit.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.corekit.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionName = ckVersion
         versionCode = ckParts[0] * 10000 + ckParts[1] * 100 + ckParts[2]
         // libcorekit.so (shared Go code) and libxray.so (proxy engine) are 64-bit ARM builds

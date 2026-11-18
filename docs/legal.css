@@ -1,0 +1,29 @@
+:root{--bg:#f7f8fa;--card:#fff;--ink:#14181f;--muted:#5b6575;--line:#e3e7ee;--acc:#0f9f8f;--acc2:#7c5cff}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+header{background:#0b1016;color:#fff}
+header .in{max-width:860px;margin:0 auto;padding:22px 20px;display:flex;align-items:center;gap:14px}
+.logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--acc),var(--acc2));display:grid;place-items:center;font-weight:800;font-size:18px;color:#04201c;flex:none}
+header b{display:block;font-size:18px;letter-spacing:.2px}
+header small{color:#9aa6b6;font-size:13px}
+nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+nav a{color:#cfd8e3;text-decoration:none;font-size:14px;padding:6px 10px;border-radius:8px}
+nav a:hover,nav a.on{background:#1b2430;color:#fff}
+main{max-width:860px;margin:0 auto;padding:28px 20px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:28px 30px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+h1{font-size:28px;line-height:1.25;margin:0 0 6px}
+.meta{color:var(--muted);font-size:14px;margin:0 0 22px}
+h2{font-size:19px;margin:30px 0 8px;padding-top:4px}
+h3{font-size:16px;margin:20px 0 4px}
+p,li{color:#232a35}
+ul{padding-left:22px;margin:8px 0}
+li{margin:4px 0}
+a{color:#0b7d71}
+.note{background:#eef8f6;border:1px solid #cfeae5;border-radius:12px;padding:14px 16px;margin:16px 0}
+table{width:100%;border-collapse:collapse;margin:10px 0;font-size:15px}
+th,td{text-align:left;vertical-align:top;border-bottom:1px solid var(--line);padding:9px 8px}
+th{font-size:13px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+.wrap{overflow-x:auto}
+footer{max-width:860px;margin:0 auto;padding:0 20px 40px;color:var(--muted);font-size:13px}
+@media (max-width:600px){.card{padding:20px 18px;border-radius:12px}h1{font-size:24px}header .in{flex-wrap:wrap}nav{margin-left:0;width:100%}}

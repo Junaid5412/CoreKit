@@ -93,6 +93,12 @@ jobs:
           unzip -o -j /tmp/xray.zip xray -d /tmp/xr
           cp /tmp/xr/xray "$J/libxray.so"
           ls -la "$J"
+          # Google Play: native code must work on 16 KB memory pages (LOAD segments aligned to >= 16 KB)
+          for f in "$J"/*.so; do
+            a=$(readelf -lW "$f" | awk '$1=="LOAD"{print $NF}' | sort -u)
+            echo "$(basename "$f") LOAD align: $a"
+            for x in $a; do [ $((x)) -ge 16384 ] || { echo "::error::$(basename "$f") is not 16 KB aligned ($x)"; exit 1; }; done
+          done
       - uses: gradle/actions/setup-gradle@v4
       - name: Build APK
         working-directory: android
@@ -101,10 +107,12 @@ jobs:
           CK_KEYSTORE_PASS: ${{ secrets.CK_KEYSTORE_PASS }}
         run: |
           if [ -n "$CK_KEYSTORE_B64" ]; then echo "$CK_KEYSTORE_B64" | base64 -d > release.jks; fi
-          gradle --no-daemon assembleRelease
+          gradle --no-daemon assembleRelease bundleRelease
           mkdir -p ../dist && cp app/build/outputs/apk/release/*.apk ../dist/CoreKit.apk
+          # Google Play takes the App Bundle (.aab); the .apk is for direct installs
+          cp app/build/outputs/bundle/release/*.aab ../dist/CoreKit.aab
       - uses: actions/upload-artifact@v4
-        with: { name: android, path: dist/CoreKit.apk }
+        with: { name: android, path: "dist/CoreKit.*" }
 
   release:
     name: Publish release v<VERSION>
@@ -121,7 +129,7 @@ jobs:
         run: |
           V=$(cat VERSION)
           ls -la dist
-          NOTES="CoreKit v$V — built from ${GITHUB_SHA::7}. Windows: CoreKit.exe · Android: CoreKit.apk"
+          NOTES="CoreKit v$V — built from ${GITHUB_SHA::7}. Windows: CoreKit.exe · Android: CoreKit.apk (direct install) · CoreKit.aab (Google Play upload)"
           if gh release view "v$V" >/dev/null 2>&1; then
             gh release upload "v$V" dist/* --clobber
             gh release edit "v$V" --notes "$NOTES"

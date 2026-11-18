@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy · CoreKit</title>
+<meta name="description" content="Privacy Policy for the CoreKit app (Android and Windows).">
+<link rel="stylesheet" href="legal.css">
+</head>
+<body>
+<header><div class="in">
+  <span class="logo">CK</span>
+  <div><b>CoreKit</b><small>Device health, internet, privacy and remote tools</small></div>
+  <nav><a href="./">Home</a><a class="on" href="privacy.html">Privacy Policy</a><a href="terms.html">Terms &amp; Conditions</a></nav>
+</div></header>
+<main><div class="card">
+<h1>Privacy Policy</h1>
+<p class="meta">Effective date: 18 November 2026 · Applies to CoreKit for Android (package <code>com.corekit.app</code>) and CoreKit for Windows</p>
+
+<p>This Privacy Policy explains what information CoreKit accesses, why, where it goes and the choices you have. CoreKit is developed and published by <b>Junaid Shaheen</b> ("we", "us"). If you have any question, write to <a href="mailto:hostzelon@gmail.com">hostzelon@gmail.com</a>.</p>
+
+<div class="note"><b>In short:</b> CoreKit has no account, no ads, no analytics and no tracking. We do not run servers that receive your data, and we never sell or share your data. What CoreKit reads on your device stays on your device, except where you use a feature that needs to contact the internet or another device, as explained below.</div>
+
+<h2>1. Information CoreKit accesses, by feature</h2>
+<p>Each feature only works when you open it. CoreKit asks for a permission only when you start the feature that needs it, and explains why first.</p>
+<div class="wrap"><table>
+<tr><th>Feature</th><th>What it accesses</th><th>Why</th><th>Leaves your device?</th></tr>
+<tr><td>Health Inspector</td><td>Battery, storage, memory, processor, sensors, display and system details</td><td>To show the health of your device and a score</td><td>No</td></tr>
+<tr><td>Internet Troubleshooter</td><td>Network type and status, Wi-Fi details (name, signal, speed), DNS settings. On Android the Wi-Fi name needs the <b>Location</b> permission</td><td>To find and fix internet problems and to run a speed test</td><td>Only the network tests described in section 3</td></tr>
+<tr><td>Safe Browser</td><td>Websites you open, browser profiles, bookmarks and proxy settings you add</td><td>To browse with private profiles and your own proxy or VPN server</td><td>Only to the websites and proxy servers you choose (section 3)</td></tr>
+<tr><td>Activity Log</td><td>On Android: which apps were opened and when, and screen unlocks (with the <b>Usage access</b> permission). On Windows: sign-ins, started programs and file changes from Windows logs</td><td>To show you how your own device was used while you were away</td><td>No. It is read on demand and shown only to you</td></tr>
+<tr><td>Remote Access</td><td>Your screen (screen capture), remote taps and typing (Accessibility service), microphone and camera (only during a call you start), notifications</td><td>To let you view and control another of your devices, or let a person you trust control yours, and to make calls between them</td><td>Only directly to the other device you connect to, on the same Wi-Fi (section 4)</td></tr>
+<tr><td>Session recording</td><td>The remote screen you are viewing</td><td>To save a video only when you press Record</td><td>No. Saved to your Downloads folder</td></tr>
+<tr><td>Camera test</td><td>Camera</td><td>To check that your cameras work</td><td>No</td></tr>
+</table></div>
+
+<h2>2. Accessibility service (Android)</h2>
+<p>CoreKit includes an optional Accessibility service called <b>CoreKit Remote Control</b>. It is used <b>only</b> for Remote Access, so that a device you have connected to and allowed can tap, swipe and type on this phone. CoreKit shows a separate explanation and asks for your agreement before it sends you to Android's settings, and the service stays off until you turn it on yourself.</p>
+<ul>
+<li>It performs taps, swipes, typing and navigation (Back, Home, Recents) only during a Remote Access session that you have allowed.</li>
+<li>To type, it finds the text box that currently has focus and puts the typed text into it. It does not collect, store or send the content of your screen, your messages, passwords or other app data. The screen picture is sent only through the screen-sharing session you started, never through the Accessibility service.</li>
+<li>It does not act on its own. Every action comes from the person you allowed to control the device, while the session is running and a notification is shown.</li>
+<li>You can turn it off at any time in <i>Settings › Accessibility › CoreKit Remote Control</i>. Remote Access then works as view-only.</li>
+</ul>
+
+<h2>3. Internet services CoreKit contacts</h2>
+<p>Some features need to contact services on the internet. These services receive your <b>IP address</b> and the technical request, as with any internet connection. We do not send them any other personal information, and we do not receive any data from them about you.</p>
+<ul>
+<li><b>Speed test:</b> Cloudflare (<code>speed.cloudflare.com</code>).</li>
+<li><b>Connection checks:</b> Google (<code>connectivitycheck.gstatic.com</code>, <code>www.google.com</code>), Microsoft (<code>www.msftconnecttest.com</code>) and Cloudflare, to see whether the internet works and whether a login page is blocking it.</li>
+<li><b>DNS tests and secure DNS:</b> Cloudflare, Google, Quad9 and OpenDNS, only when you test DNS or choose one of them.</li>
+<li><b>Your public IP and its approximate location (country and city):</b> ipinfo.io, ipapi.co, ipwho.is and ip-api.com. This shows you which network and country your traffic appears to come from, for example to check that a VPN works. CoreKit does not use your device's GPS location for this.</li>
+<li><b>Leak check (Safe Browser):</b> public STUN servers of Google and Cloudflare, to check whether your real IP address leaks through a VPN or proxy.</li>
+<li><b>Translation (Safe Browser):</b> if you translate a page, its text is sent to Google Translate or Microsoft Translator. Pages are translated automatically only if you turn that on. When a page does not state its language, a short sample of its text (not your personal data) may be sent to the same service to detect the language, so CoreKit can offer a translation.</li>
+<li><b>Websites and proxy servers you choose:</b> the sites you visit and any proxy or VPN server you add receive your traffic, as in any browser. Their own privacy policies apply.</li>
+<li><b>Windows only:</b> CoreKit for Windows may download the open-source Xray proxy engine from GitHub the first time you use a proxy in Safe Browser.</li>
+</ul>
+
+<h2>4. Remote Access between your devices</h2>
+<ul>
+<li>Devices find each other on your local Wi-Fi network and connect directly. The connection is end-to-end encrypted and protected by a one-time 6-digit code. It does not pass through our servers; we have none.</li>
+<li>A device can only be viewed or controlled after the person on that device taps <b>Allow</b>. A notification stays visible for the whole session, and it can be stopped at any time from the device being controlled.</li>
+<li>Calls (voice or video) are only made when you start or accept them, and go directly between the two devices.</li>
+<li>Recordings are made only when you press Record, are saved on your own device, and are never uploaded by CoreKit.</li>
+<li>Use Remote Access only with your own devices or with the clear permission of the device's owner and user.</li>
+</ul>
+
+<h2>5. Permissions</h2>
+<p>CoreKit asks for each permission only when you start the feature that needs it. You can refuse or remove any permission in your device settings; only the related feature stops working.</p>
+<ul>
+<li><b>Location:</b> Android shows the Wi-Fi network name only to apps with this permission. CoreKit uses it only to show your Wi-Fi details. It does not track your location and does not use it in the background.</li>
+<li><b>Usage access:</b> for the Activity Log on Android.</li>
+<li><b>Accessibility:</b> for remote control in Remote Access (section 2).</li>
+<li><b>Screen capture:</b> for sharing your screen in Remote Access. Android asks you each time.</li>
+<li><b>Microphone and camera:</b> for calls in Remote Access, the camera test, and websites in Safe Browser that you allow.</li>
+<li><b>Notifications:</b> to show that sharing or a session is running, and connection requests.</li>
+<li><b>Network and Wi-Fi state, local network discovery:</b> to test your connection and find your other devices on the same Wi-Fi.</li>
+</ul>
+
+<h2>6. What we do not do</h2>
+<ul>
+<li>We do not create accounts or ask for your name, email or phone number.</li>
+<li>We do not show ads and do not use advertising IDs.</li>
+<li>We do not use analytics, crash-reporting or tracking tools.</li>
+<li>We do not sell, rent or share your personal information with anyone.</li>
+<li>We do not collect your contacts, messages, call logs, photos or files.</li>
+</ul>
+
+<h2>7. Storage, security and deletion</h2>
+<ul>
+<li>Your settings, browser profiles and proxy links are stored only on your device. Proxy links are encrypted on the device.</li>
+<li>Because we do not collect your data, there is nothing for us to delete on our side. To delete everything CoreKit stored, uninstall the app or clear its storage (Android: <i>Settings › Apps › CoreKit › Storage › Clear storage</i>). Recordings in your Downloads folder can be deleted like any file.</li>
+<li>Data sent to the internet services in section 3 is handled under their own privacy policies.</li>
+</ul>
+
+<h2>8. Children</h2>
+<p>CoreKit is a technical tool meant for adults (18 and over). It is not directed at children, and we do not knowingly collect information from children.</p>
+
+<h2>9. Changes to this policy</h2>
+<p>If we change this policy, we will update this page and the effective date above. Important changes will also be mentioned in the app's release notes.</p>
+
+<h2>10. Contact</h2>
+<p>Junaid Shaheen, Qatar · <a href="mailto:hostzelon@gmail.com">hostzelon@gmail.com</a></p>
+</div></main>
+<footer>© 2026 Junaid Shaheen · <a href="terms.html">Terms &amp; Conditions</a></footer>
+</body>
+</html>
