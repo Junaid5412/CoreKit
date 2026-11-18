@@ -38,6 +38,7 @@ class Prefs(ctx: Context) {
  */
 class Host(private val act: MainActivity, private val web: WebView) {
     private val pool = Executors.newCachedThreadPool()
+    private val iconPool = Executors.newFixedThreadPool(2)
     private val busy = AtomicBoolean(false)
     @Volatile private var job: FixJob? = null
 
@@ -323,6 +324,24 @@ class Host(private val act: MainActivity, private val web: WebView) {
         @JavascriptInterface fun vmGet(path: String): String = RemoteEngine.vm(act, path, null)
         @JavascriptInterface fun vmPost(path: String, body: String): String = RemoteEngine.vm(act, path, body)
 
+        /** Same calls without blocking the page: the answer comes back through window.__vmcb(id, text).
+         *  kind: get, post (engine), apps (this phone's apps), icon (one app icon). */
+        @JavascriptInterface fun vmAsync(id: Int, kind: String, a: String, b: String) {
+            (if (kind == "icon") iconPool else pool).execute {
+                val res = try {
+                    when (kind) {
+                        "get" -> RemoteEngine.vm(act, a, null)
+                        "post" -> RemoteEngine.vm(act, a, b)
+                        "apps" -> vmDeviceApps()
+                        "icon" -> vmAppIcon(a)
+                        else -> ""
+                    }
+                } catch (t: Throwable) { JSONObject().put("error", t.message ?: "failed").toString() }
+                val js = "window.__vmcb&&window.__vmcb($id," + JSONObject.quote(res) + ")"
+                act.runOnUiThread { web.evaluateJavascript(js, null) }
+            }
+        }
+
         /** Keep virtual devices running while CoreKit is in the background. */
         @JavascriptInterface fun vmKeep(on: Boolean) { if (on) VmService.start(act) }
         @JavascriptInterface fun vmRunning(): Boolean = VmService.running
@@ -353,8 +372,8 @@ class Host(private val act: MainActivity, private val web: WebView) {
 
         @JavascriptInterface fun vmAppIcon(pkg: String): String = try {
             val d = act.packageManager.getApplicationIcon(pkg)
-            val b = android.graphics.Bitmap.createBitmap(96, 96, android.graphics.Bitmap.Config.ARGB_8888)
-            val c = android.graphics.Canvas(b); d.setBounds(0, 0, 96, 96); d.draw(c)
+            val b = android.graphics.Bitmap.createBitmap(72, 72, android.graphics.Bitmap.Config.ARGB_8888)
+            val c = android.graphics.Canvas(b); d.setBounds(0, 0, 72, 72); d.draw(c)
             val o = java.io.ByteArrayOutputStream(); b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, o); b.recycle()
             android.util.Base64.encodeToString(o.toByteArray(), android.util.Base64.NO_WRAP)
         } catch (_: Throwable) { "" }

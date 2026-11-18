@@ -3,19 +3,19 @@ package main
 // Checksums and sizes of the files on the vm-images release (.github/workflows/vm-images.yml).
 // A download that doesn't match is refused. Empty means "not published yet".
 var vmPin = map[string]string{
-	"android9-lite.iso":         "6174c1af281bd26efe8cbcd6a521310da6a71dff4c92abe90ee712030768a0f0",
+	"android9-mini.iso":         "7d99f4d5c920b319050ea44a2fcce21ccaa017cc32dfa86c117f12d0ae155748",
 	"data8g.ckt":                "25532cb1a0da25694f3628cd6b9056254e20545fded5d1add45df0e437205c5b",
 	"qemu-win64.zip":            "3afb6aed77c43c8aee5b0600a896819f465d843908222371fa71010d88c2f47d",
-	"android9-lite.state.gz":    "0bc1243b40d2ad6dc4954c4b37ef70c6c0c4eb15c5d471ef582dcd33b585da1a",
-	"android9-lite-started.ckt": "f094dc90c157f13d5af1226a65c122e6c7c8fce4243d909258037a68286ca91b",
+	"android9-mini.state.gz":    "e3cb8c264e74cc5265f2fb12b8789e4f310481383bcc4bfa214bc6c812526641",
+	"android9-mini-started.ckt": "52b200f75bb09232d4faba48e026fdca34da8934456685918c6968d5bfc9a9c4",
 	// the Android emulator build the pre-started save was made with (size-hash of libqemu.so)
 	"prestart.qemu": "27162625-b40096de9e0e97e1",
 }
 
 var vmSize = map[string]int64{
-	"android9-lite.iso":         629710848,
+	"android9-mini.iso":         498143232,
 	"data8g.ckt":                28084,
 	"qemu-win64.zip":            61475989,
-	"android9-lite.state.gz":    838693758,
-	"android9-lite-started.ckt": 31421740,
+	"android9-mini.state.gz":    306256636,
+	"android9-mini-started.ckt": 12631550,
 }

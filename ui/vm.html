@@ -105,6 +105,15 @@ label.f{display:block;font-size:12px;color:var(--muted2);margin:14px 0 6px;font-
 /* device view */
 #dev{position:fixed;inset:0;z-index:20;background:var(--bg);display:none;flex-direction:column}
 #dev.show{display:flex}
+.hb{width:40px;height:40px;border-radius:11px;border:1px solid var(--line2);background:#141c26;color:var(--muted2);display:grid;place-items:center;cursor:pointer;flex:none;transition:background .15s,color .15s}
+.hb svg{width:19px;height:19px}.hb:hover{color:var(--white)}.hb.on{background:#231a45;border-color:#4b3a8f;color:#c4b5fd}
+.hb.go{background:var(--acc);border-color:var(--acc);color:#04201c}.hb.halt{background:#2a1215;border-color:#5a1f26;color:#fca5a5}.hb:disabled{opacity:.45;cursor:default}
+.btn .sp{width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin 1s linear infinite}
+@media (max-width:700px){#dev .logo{display:none}#dev .top{gap:8px;padding:0 12px}}
+.qk{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12.5px;color:var(--muted2);cursor:pointer;user-select:none;width:max-content}
+.qk i{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--line2);display:grid;place-items:center;font-style:normal;font-size:12px;color:#04201c}
+.qk.on{color:var(--white)}.qk.on i{background:var(--acc);border-color:var(--acc)}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px;background:#64748b}.dot.run{background:#34d399}.dot.boot{background:#fbbf24}
 .tabs{display:flex;gap:4px;padding:8px 14px 0;border-bottom:1px solid var(--line);background:#0b1016;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tab{height:40px;padding:0 16px;border:0;background:transparent;color:var(--muted2);font-weight:600;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
@@ -215,17 +224,17 @@ label.f{display:block;font-size:12px;color:var(--muted2);margin:14px 0 6px;font-
     <button class="back" id="devBack" aria-label="Back"><svg class="i" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
     <span class="logo"><svg class="i" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2.5"/><path d="M11 18h2"/></svg></span>
     <div class="brand"><b id="dvName"></b><small id="dvSub"></small></div>
-    <span id="dvPill"></span>
-    <button class="btn sm" id="dvPower"></button>
+    <button class="hb" id="hbTerm" data-v="term" title="Terminal" aria-label="Terminal"><svg class="i" viewBox="0 0 24 24"><path d="m4 17 6-6-6-6M12 19h8"/></svg></button>
+    <button class="hb" id="hbSet" data-v="settings" title="Settings" aria-label="Settings"></button>
+    <button class="hb" id="dvPower"></button>
   </header>
-  <div class="tabs"><button class="tab on" data-tab="console">Console</button><button class="tab" data-tab="apps">Apps</button><button class="tab" data-tab="settings">Settings</button></div>
-  <section class="pane show" id="pConsole">
-    <div class="boot hidden" id="bootBar"><span class="sp"></span><span id="bootT"></span></div>
+  <div class="boot hidden" id="bootBar"><span class="sp"></span><span id="bootT"></span></div>
+  <section class="pane" id="pConsole">
     <div id="term" tabindex="0"></div>
     <div class="keys" id="keys"></div>
     <form class="cmdl" id="cmdl"><input id="cmd" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type a command, e.g. id"><button class="btn vio" type="submit">Run</button></form>
   </section>
-  <section class="pane" id="pApps"><div class="scroll" id="appsBody"></div></section>
+  <section class="pane show" id="pApps"><div class="scroll" id="appsBody"></div></section>
   <section class="pane" id="pSettings"><div class="scroll" id="setBody"></div></section>
 </div>
 
@@ -259,10 +268,20 @@ let toastT;
 function toast(m, bad) { const t = $('#toast'); t.textContent = m; t.classList.toggle('bad', !!bad); t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3600); }
 
 /* ---------- engine link ---------- */
+/* Android: calls run in the background (window.__vmcb) so the page never waits */
+const CB = {}; let cbN = 0;
+window.__vmcb = (id, t) => { const f = CB[id]; delete CB[id]; if (f) f(t); };
+function nat(kind, a, b) {
+  if (!N.vmAsync) {
+    try { return Promise.resolve(kind === 'get' ? N.vmGet(a) : kind === 'post' ? N.vmPost(a, b) : kind === 'apps' ? N.vmDeviceApps() : N.vmAppIcon(a)); }
+    catch (e) { return Promise.resolve(''); }
+  }
+  return new Promise(res => { const id = ++cbN; CB[id] = res; N.vmAsync(id, kind, a || '', b || ''); });
+}
 async function api(path, body) {
   let txt;
   if (ANDROID) {
-    txt = body === undefined ? N.vmGet(path) : N.vmPost(path, JSON.stringify(body));
+    txt = body === undefined ? await nat('get', path) : await nat('post', path, JSON.stringify(body));
   } else {
     const r = await fetch(API + path, body === undefined ? {cache:'no-store'} : {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     txt = await r.text();
@@ -274,7 +293,7 @@ async function api(path, body) {
 const cmd = (t, x) => api('cmd', Object.assign({t}, x || {}));
 
 /* ---------- state ---------- */
-let S = {images:[], machines:[], host:{}, jobs:[], defaults:{ram:2048, cpus:2}}, cur = null, tab = 'console';
+let S = {images:[], machines:[], host:{}, jobs:[], defaults:{ram:2048, cpus:2}}, cur = null, tab = 'apps';
 async function refresh() {
   try { S = await api('state'); S.images = S.images || []; S.machines = S.machines || []; S.jobs = S.jobs || []; S.host = S.host || {}; render(); } catch (e) { $('#notices').innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 }
@@ -335,19 +354,24 @@ function openCreate() {
 }
 function updRng() {
   $('#cRamV').textContent = (+$('#cRam').value / 1024).toFixed(2).replace(/0$/, '') + ' GB'; $('#cCpuV').textContent = $('#cCpu').value + ($('#cCpu').value == 1 ? ' core' : ' cores');
-  const im = S.images.find(i => i.id === pickImg), q = im && im.quick;
+  const im = S.images.find(i => i.id === pickImg), q = im && im.haveQuick && im.quick;
   if (!q) { $('#cQuick').innerHTML = ''; return; }
   const ok = +$('#cRam').value === q.ram && +$('#cCpu').value === q.cpus;
   $('#cQuick').innerHTML = ok ? ''
-    : `<div class="err">These settings make the first start slow (about 30 minutes). <a href="#" data-a="quickProfile" style="color:#fff">Use the quick settings</a></div>`;
+    : `<div class="err">These settings make the first start slower (several minutes). <a href="#" data-a="quickProfile" style="color:#fff">Use the quick settings</a></div>`;
 }
 $('#cRam').oninput = updRng; $('#cCpu').oninput = updRng;
+let wantQuick = true;
 function renderImgs() {
   setTimeout(updRng, 0);
   $('#imgs').innerHTML = S.images.map(im => {
     const d = im.dl || {}, busy = /down|verif/.test(d.state || '');
-    let right = im.have ? '<span class="pill p-run"><i></i>Ready</span>' : busy ? `<button class="btn sm" data-a="cancelDl" data-img="${im.id}">Cancel</button>` : !im.published ? '<span class="pill p-off">Coming soon</span>' : `<button class="btn sm" data-a="dl" data-img="${im.id}">${svg('dl')}${fmtB(im.size)}</button>`;
-    return `<div class="img ${pickImg === im.id ? 'on' : ''}" data-pick="${im.id}"><span class="ic">${svg('phone')}</span><div class="tx"><b>${esc(im.name)}</b><small>${esc(im.note)}</small>
+    const qs = im.quickSize || 0, total = im.size + (wantQuick ? qs : 0);
+    let right = im.have ? '<span class="pill p-run"><i></i>Ready</span>' : busy ? `<button class="btn sm" data-a="cancelDl" data-img="${im.id}">Cancel</button>` : !im.published ? '<span class="pill p-off">Coming soon</span>' : `<button class="btn sm" data-a="dl" data-img="${im.id}">${svg('dl')}${fmtB(total)}</button>`;
+    let qk = '';
+    if (qs && !busy && im.published && !im.have) qk = `<span class="qk ${wantQuick ? 'on' : ''}" data-a="tq"><i>${wantQuick ? '✓' : ''}</i>Ready in seconds (+${fmtB(qs)})</span>`;
+    if (qs && !busy && im.have && !im.haveQuick) qk = `<button class="btn sm" style="margin-top:8px" data-a="dlq" data-img="${im.id}">${svg('bolt')}Add quick start (${fmtB(qs)})</button>`;
+    return `<div class="img ${pickImg === im.id ? 'on' : ''}" data-pick="${im.id}"><span class="ic">${svg('phone')}</span><div class="tx"><b>${esc(im.name)}</b><small>${esc(im.note)}</small>${qk}
       ${busy ? `<div class="bar"><i style="width:${d.total ? Math.round(d.got * 100 / d.total) : 2}%"></i></div><small>${d.state === 'verifying' ? 'Checking the download…' : `${fmtB(d.got)} of ${fmtB(d.total)}${d.speed ? ' · ' + fmtB(d.speed) + '/s' : ''}`}</small>` : ''}
       ${d.state === 'error' ? `<div class="err" style="margin-top:6px;padding:7px 10px">${esc(d.err)}</div>` : ''}</div>${right}</div>`;
   }).join('');
@@ -370,36 +394,44 @@ $('#cfGo').onclick = () => { closeSheet(); cfFn && cfFn(); };
 /* ---------- device view ---------- */
 function curM() { return S.machines.find(m => m.id === cur); }
 function openDev(id) {
-  cur = id; tab = 'console'; termReset(); appsLoaded = false; devApps = null;
-  $('#dev').classList.add('show'); setTab('console'); renderDev(); pollTerm();
+  cur = id; termReset(); lastSt = '';
+  $('#dev').classList.add('show'); setTab('apps'); renderDev(); pollTerm();
   if (ANDROID && N.vmView) try { N.vmView(true); } catch (e) {}
 }
 function closeDev() { cur = null; $('#dev').classList.remove('show'); if (ANDROID && N.vmView) try { N.vmView(false); } catch (e) {} }
-$('#devBack').onclick = closeDev;
+$('#devBack').onclick = () => { if (tab !== 'apps') setTab('apps'); else closeDev(); };
+$('#hbSet').innerHTML = svg('cog');
 function setTab(t) {
   tab = t;
-  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  $('#hbTerm').classList.toggle('on', t === 'console'); $('#hbSet').classList.toggle('on', t === 'settings');
   $('#pConsole').classList.toggle('show', t === 'console'); $('#pApps').classList.toggle('show', t === 'apps'); $('#pSettings').classList.toggle('show', t === 'settings');
-  if (t === 'apps') renderApps(true);
+  if (t === 'apps') renderApps();
   if (t === 'settings') renderSettings();
-  if (t === 'console' && !TOUCH) setTimeout(() => $('#term').focus(), 30);
+  if (t === 'console') { measure(); T.dirty = true; draw(); if (!TOUCH) setTimeout(() => $('#term').focus(), 30); }
 }
-document.querySelectorAll('.tab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
+$('#hbTerm').onclick = () => setTab(tab === 'console' ? 'apps' : 'console');
+$('#hbSet').onclick = () => setTab(tab === 'settings' ? 'apps' : 'settings');
+let lastSt = '';
 function renderDev() {
   const m = curM(); if (!m) { closeDev(); return; }
   $('#dvName').textContent = m.name;
-  $('#dvSub').textContent = `Android ${m.android || '?'} · root`;
-  $('#dvPill').innerHTML = pill(m);
-  const pw = $('#dvPower');
-  pw.innerHTML = m.state === 'off' ? svg('play') + (m.saved ? 'Resume' : 'Start') : svg('stop') + 'Stop';
-  pw.className = 'btn sm ' + (m.state === 'off' ? 'pri' : '');
-  pw.dataset.a = m.state === 'off' ? 'start' : 'stop'; pw.dataset.id = m.id;
+  const st = m.state === 'running' ? 'Running' : m.state === 'off' ? 'Off' : m.state === 'stopping' ? 'Stopping' : 'Starting';
+  $('#dvSub').innerHTML = `<i class="dot ${m.state === 'running' ? 'run' : m.state === 'off' ? '' : 'boot'}"></i>${st} · Android ${esc(m.android || '?')} · root`;
+  const pw = $('#dvPower'), off = m.state === 'off';
+  pw.innerHTML = svg(off ? 'play' : 'stop');
+  pw.title = off ? (m.saved ? 'Resume' : 'Start') : 'Stop'; pw.setAttribute('aria-label', pw.title);
+  pw.className = 'hb ' + (off ? 'go' : 'halt');
+  pw.dataset.a = off ? 'start' : 'stop'; pw.dataset.id = m.id;
   pw.disabled = m.state === 'stopping';
   const bb = $('#bootBar');
   bb.classList.toggle('hidden', !(m.state === 'starting' || m.state === 'booting' || m.state === 'stopping'));
   $('#bootT').textContent = (m.detail || 'Starting') + (m.state === 'booting' && !S.host.fast && !/saved|Loading/i.test(m.detail || '') ? ' · this can take a while' : '');
-  if (tab === 'apps' && m.state === 'running' && !appsLoaded) renderApps(true);
-  if (tab === 'apps' && m.state !== 'running') renderApps(false);
+  if (m.state !== lastSt) { // only redraw lists when the state changes
+    const was = lastSt; lastSt = m.state;
+    if (m.state === 'running' && was !== '') loadApps(true);
+    if (tab === 'apps') renderApps();
+    if (tab === 'settings') renderSettings();
+  }
 }
 
 /* ---------- terminal (small VT100) ---------- */
@@ -501,7 +533,7 @@ addEventListener('resize', () => { measure(); T.dirty = true; });
 let termBusy = false;
 async function pollTerm() {
   if (!cur) return;
-  if (!termBusy && tab === 'console') {
+  if (!termBusy && tab === 'console' && !document.hidden) {
     termBusy = true;
     try { const r = await api('term?id=' + cur + '&since=' + T.since); if (r.t) feed(r.t); T.since = r.n; } catch (e) {}
     termBusy = false; draw();
@@ -535,42 +567,73 @@ $('#cmd').addEventListener('keydown', e => {
 setInterval(draw, 120);
 
 /* ---------- apps ---------- */
-let appsLoaded = false, vmApps = [], devApps = null, appQ = '';
-async function renderApps(load) {
+// lists are kept: switching views shows them at once and refreshes them in the background
+const vmAppsBy = {}, appsAt = {}; let devApps = null, devLoading = false, appQ = '';
+async function loadApps(force) {
+  const m = curM(); if (!m || m.state !== 'running') return;
+  const id = m.id;
+  if (!force && appsAt[id] && Date.now() - appsAt[id] < 30000) return;
+  appsAt[id] = Date.now();
+  try { vmAppsBy[id] = (await cmd('apps', {id})).apps || []; } catch (e) { if (!vmAppsBy[id]) vmAppsBy[id] = []; }
+  if (cur === id && tab === 'apps') renderApps();
+}
+async function loadDevApps() {
+  if (!ANDROID || devApps || devLoading) return;
+  devLoading = true;
+  try { devApps = JSON.parse(await nat('apps') || '[]'); } catch (e) { devApps = []; }
+  devLoading = false;
+  if (cur && tab === 'apps') renderApps();
+}
+function renderApps() {
   const m = curM(), el = $('#appsBody'); if (!m) return;
+  loadDevApps();
   if (m.state !== 'running') {
-    el.innerHTML = `<div class="info">${m.state === 'off' ? 'Start the virtual device to add or manage apps.' : 'Apps are available once Android has finished starting.'}</div>` + addSection();
+    el.innerHTML = `<div class="info">${m.state === 'off' ? 'Start the virtual device to add or manage apps.' : 'Apps are ready once Android has started.'}</div>` + addSection();
     bindDrop(); return;
   }
-  if (load && !appsLoaded) {
-    appsLoaded = true;
-    try { vmApps = (await cmd('apps', {id: m.id})).apps || []; } catch (e) { vmApps = []; }
-    if (ANDROID && !devApps) { try { devApps = JSON.parse(N.vmDeviceApps() || '[]'); } catch (e) { devApps = []; } }
-  }
-  const inst = new Set(vmApps.map(a => a.pkg));
-  let h = `<div class="sec"><h4>In the virtual device (${vmApps.length})</h4><button class="btn sm" data-a="arm" data-id="${m.id}">${svg('cog')}ARM app support</button></div>`;
-  h += vmApps.length ? `<div class="al">${vmApps.map(a => `<div class="ap"><span class="ai">${appIcon(a.pkg)}</span><div class="tx"><b>${esc(labelOf(a.pkg))}</b><small>${esc(a.pkg)}</small></div>
+  const vmApps = vmAppsBy[m.id];
+  loadApps(false);
+  const inst = new Set((vmApps || []).map(a => a.pkg));
+  let h = `<div class="sec"><h4>Installed${vmApps ? ' (' + vmApps.length + ')' : ''}</h4><button class="btn sm" data-a="arm" data-id="${m.id}">${svg('cog')}ARM apps</button></div>`;
+  h += !vmApps ? `<div class="muted" style="padding:6px 2px 4px">Loading…</div>`
+    : vmApps.length ? `<div class="al">${vmApps.map(a => `<div class="ap"><span class="ai" data-ic="${esc(a.pkg)}">${appIcon(a.pkg)}</span><div class="tx"><b>${esc(labelOf(a.pkg))}</b><small>${esc(a.pkg)}</small></div>
       <button class="btn sm" data-a="freeze" data-pkg="${esc(a.pkg)}">Freeze</button><button class="btn sm dng" data-a="uninstall" data-pkg="${esc(a.pkg)}">${svg('trash')}</button></div>`).join('')}</div>`
     : `<div class="muted" style="padding:6px 2px 4px">No apps added yet.</div>`;
   h += addSection(inst);
-  el.innerHTML = h; bindDrop();
+  const top = el.scrollTop; el.innerHTML = h; el.scrollTop = top; bindDrop(); lazyIcons();
 }
 function labelOf(pkg) { const d = (devApps || []).find(x => x.pkg === pkg); return d ? d.label : pkg.split('.').slice(-1)[0]; }
+const iconCache = {}, iconWant = new Set(), adding = new Set();
 function appIcon(pkg) {
-  if (ANDROID && N.vmAppIcon) { const k = 'ic:' + pkg; if (!(k in iconCache)) { try { iconCache[k] = N.vmAppIcon(pkg) || ''; } catch (e) { iconCache[k] = ''; } } if (iconCache[k]) return `<img src="data:image/png;base64,${iconCache[k]}" alt="">`; }
+  if (iconCache[pkg]) return `<img src="data:image/png;base64,${iconCache[pkg]}" alt="">`;
   return esc((labelOf(pkg)[0] || '?').toUpperCase());
 }
-const iconCache = {};
+// icons load only when they scroll into view, two at a time, off the page's thread
+const iconObs = 'IntersectionObserver' in window ? new IntersectionObserver(es => es.forEach(e => { if (e.isIntersecting) { iconObs.unobserve(e.target); wantIcon(e.target.dataset.ic); } }), {rootMargin: '200px'}) : null;
+function lazyIcons() {
+  if (!ANDROID) return;
+  document.querySelectorAll('#appsBody [data-ic]').forEach(sp => { const p = sp.dataset.ic; if (p in iconCache) return; if (iconObs) iconObs.observe(sp); else wantIcon(p); });
+}
+async function wantIcon(pkg) {
+  if (!pkg || pkg in iconCache || iconWant.has(pkg)) return;
+  iconWant.add(pkg);
+  const b = await nat('icon', pkg); iconCache[pkg] = b || ''; iconWant.delete(pkg);
+  if (b) document.querySelectorAll('#appsBody [data-ic]').forEach(sp => { if (sp.dataset.ic === pkg) sp.innerHTML = `<img src="data:image/png;base64,${b}" alt="">`; });
+}
 function addSection(inst) {
   if (!ANDROID) return `<div class="sec"><h4>Add an app</h4></div><div class="drop" id="drop" data-a="pickApk">${svg('dl')}<div style="margin-top:6px"><b style="color:var(--white)">Drop an .apk file here</b> or click to choose one</div><small class="muted">Split apps (.apks/.xapk) aren't supported yet.</small></div>`;
   const m = curM(); if (!m || m.state !== 'running') return '';
-  const list = (devApps || []).filter(a => !appQ || (a.label + ' ' + a.pkg).toLowerCase().includes(appQ.toLowerCase()));
+  if (!devApps) return `<div class="sec"><h4>Add from this phone</h4></div><div class="muted" style="padding:6px 2px">Loading your apps…</div>`;
   return `<div class="sec"><h4>Add from this phone</h4></div><input class="search" id="appQ" placeholder="Search your apps" value="${esc(appQ)}">
-    <div class="al">${list.slice(0, 150).map(a => `<div class="ap"><span class="ai">${appIcon(a.pkg)}</span><div class="tx"><b>${esc(a.label)}</b><small>${esc(a.pkg)} · ${fmtB(a.size)}${a.files.length > 1 ? ' · ' + a.files.length + ' parts' : ''}</small></div>
-      ${inst && inst.has(a.pkg) ? '<span class="pill p-run"><i></i>Added</span>' : `<button class="btn sm vio" data-a="add" data-pkg="${esc(a.pkg)}">${svg('plus')}Add</button>`}</div>`).join('')}</div>`;
+    <div class="al" id="devList">${devApps.map(a => `<div class="ap" data-q="${esc((a.label + ' ' + a.pkg).toLowerCase())}"><span class="ai" data-ic="${esc(a.pkg)}">${appIcon(a.pkg)}</span><div class="tx"><b>${esc(a.label)}</b><small>${fmtB(a.size)}${a.files.length > 1 ? ' · ' + a.files.length + ' parts' : ''}</small></div>
+      ${inst && inst.has(a.pkg) ? '<span class="pill p-run"><i></i>Added</span>' : adding.has(a.pkg) ? '<button class="btn sm vio" disabled><span class="sp"></span>Adding</button>' : `<button class="btn sm vio" data-a="add" data-pkg="${esc(a.pkg)}">${svg('plus')}Add</button>`}</div>`).join('')}</div>`;
+}
+function filterDev() {
+  const q = appQ.trim().toLowerCase();
+  document.querySelectorAll('#devList [data-q]').forEach(r => { r.style.display = !q || r.dataset.q.includes(q) ? '' : 'none'; });
 }
 function bindDrop() {
-  const q = $('#appQ'); if (q) q.oninput = () => { appQ = q.value; const pos = q.selectionStart; renderApps(false).then(() => { const n = $('#appQ'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }); };
+  const q = $('#appQ'); if (q) { q.oninput = () => { appQ = q.value; filterDev(); }; filterDev(); }
   const d = $('#drop'); if (!d) return;
   d.ondragover = e => { e.preventDefault(); d.classList.add('over'); };
   d.ondragleave = () => d.classList.remove('over');
@@ -587,7 +650,7 @@ async function uploadApk(f) {
     watchJobs();
   } catch (e) { toast(e.message, true); }
 }
-function watchJobs() { appsLoaded = false; setTimeout(async () => { await refresh(); if ((S.jobs || []).some(j => j.state === 'running')) watchJobs(); else if (tab === 'apps') renderApps(true); }, 1500); }
+function watchJobs() { setTimeout(async () => { await refresh(); if ((S.jobs || []).some(j => j.state === 'running')) watchJobs(); else { adding.clear(); loadApps(true); } }, 1500); }
 
 /* ---------- settings ---------- */
 function renderSettings() {
@@ -616,7 +679,9 @@ document.addEventListener('click', async e => {
       case 'new': openCreate(); break;
       case 'closeSheet': closeSheet(); break;
       case 'quickProfile': { e.preventDefault(); const im = S.images.find(i => i.id === pickImg); if (im && im.quick) { $('#cRam').value = im.quick.ram; $('#cCpu').value = im.quick.cpus; updRng(); } break; }
-      case 'dl': pickImg = a.dataset.img; await cmd('download', {image: a.dataset.img}); await refresh(); break;
+      case 'dl': pickImg = a.dataset.img; await cmd('download', {image: a.dataset.img, quick: wantQuick}); await refresh(); break;
+      case 'dlq': pickImg = a.dataset.img; await cmd('download', {image: a.dataset.img, quick: true}); await refresh(); break;
+      case 'tq': wantQuick = !wantQuick; renderImgs(); break;
       case 'cancelDl': await cmd('cancelDownload', {image: a.dataset.img}); await refresh(); break;
       case 'getEmu': await cmd('getEmulator'); await refresh(); break;
       case 'fast': await cmd('enableFast'); toast('Done. Restart Windows to use the faster mode.'); break;
@@ -634,10 +699,12 @@ document.addEventListener('click', async e => {
       case 'arm': await cmd('arm', {id}); watchJobs(); toast('Turning on ARM app support…'); break;
       case 'add': {
         const app = (devApps || []).find(x => x.pkg === a.dataset.pkg); if (!app) break;
-        a.disabled = true; await cmd('install', {id: cur, files: app.files, label: app.label}); watchJobs(); break;
+        a.disabled = true; a.innerHTML = '<span class="sp"></span>Adding'; adding.add(app.pkg);
+        try { await cmd('install', {id: cur, files: app.files, label: app.label}); } catch (x) { adding.delete(app.pkg); throw x; }
+        watchJobs(); break;
       }
       case 'pickApk': $('#apkFile').click(); break;
-      case 'uninstall': confirmBox('Remove app?', `${labelOf(a.dataset.pkg)} and its data will be removed from the virtual device.`, 'Remove', async () => { try { await cmd('uninstall', {id: cur, pkg: a.dataset.pkg}); appsLoaded = false; renderApps(true); toast('Removed'); } catch (x) { toast(x.message, true); } }); break;
+      case 'uninstall': confirmBox('Remove app?', `${labelOf(a.dataset.pkg)} and its data will be removed from the virtual device.`, 'Remove', async () => { try { await cmd('uninstall', {id: cur, pkg: a.dataset.pkg}); await loadApps(true); toast('Removed'); } catch (x) { toast(x.message, true); } }); break;
       case 'freeze': { const r = await cmd('freeze', {id: cur, pkg: a.dataset.pkg}); toast(/disabled|new state/i.test(r.out || '') ? 'Frozen: it can\'t run until you remove it' : 'Done'); break; }
       case 'saveSet': await cmd('update', {id: cur, name: $('#sName').value, ram: +$('#sRam').value, cpus: +$('#sCpu').value}); await refresh(); toast('Saved'); break;
       case 'reset': confirmBox('Factory reset?', 'All apps and files inside this virtual device will be erased.', 'Reset', async () => { try { await cmd('reset', {id}); await refresh(); toast('Reset done'); } catch (x) { toast(x.message, true); } }); break;
@@ -650,7 +717,7 @@ $('#newBtn').onclick = openCreate;
 $('#back').onclick = () => { if (N && N.go) N.go('home'); else history.back(); };
 window.__ckBack = () => {
   if ($('.sheet.show')) { closeSheet(); return true; }
-  if (cur) { closeDev(); return true; }
+  if (cur) { if (tab !== 'apps') setTab('apps'); else closeDev(); return true; }
   return false;
 };
 measure(); loop();

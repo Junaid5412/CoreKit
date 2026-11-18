@@ -114,7 +114,7 @@ func vmUsePre(m *vmMachine, img *vmImage) error {
 	if err := os.Rename(part, vmSnapPath(m.ID)); err != nil {
 		return err
 	}
-	meta, _ := json.Marshal(vmSnapMeta{Image: m.Image, RAM: m.RAM, CPUs: m.CPUs, Version: vmQemuID(), Saved: time.Now().Unix(), Size: n})
+	meta, _ := json.Marshal(vmSnapMeta{Image: m.Image, RAM: m.RAM, CPUs: m.CPUs, Version: vmSnapVersion(m.Image), Saved: time.Now().Unix(), Size: n})
 	return os.WriteFile(vmSnapMetaPath(m.ID), meta, 0600)
 }
 
@@ -124,11 +124,11 @@ const vmRelease = "https://github.com/Junaid5412/CoreKit/releases/download/vm-im
 // corrupted download is refused.
 var vmCatalogue = []vmImage{
 	{ID: "android9-lite", Name: "Android 9 Lite", Android: "9", Note: "64-bit · root · recommended",
-		URL: vmRelease + "android9-lite.iso", SHA256: vmPin["android9-lite.iso"], Size: vmSize["android9-lite.iso"],
+		URL: vmRelease + "android9-mini.iso", SHA256: vmPin["android9-mini.iso"], Size: vmSize["android9-mini.iso"],
 		TplURL: vmRelease + "data8g.ckt", TplSHA: vmPin["data8g.ckt"], MinRAM: 1536,
-		Pre: &vmPre{RAM: 2048, CPUs: 4, QemuID: vmPin["prestart.qemu"],
-			StateURL: vmRelease + "android9-lite.state.gz", StateSHA: vmPin["android9-lite.state.gz"], StateSize: vmSize["android9-lite.state.gz"],
-			DiskURL: vmRelease + "android9-lite-started.ckt", DiskSHA: vmPin["android9-lite-started.ckt"], DiskSize: vmSize["android9-lite-started.ckt"]}},
+		Pre: &vmPre{RAM: 1536, CPUs: 4, QemuID: vmPin["prestart.qemu"],
+			StateURL: vmRelease + "android9-mini.state.gz", StateSHA: vmPin["android9-mini.state.gz"], StateSize: vmSize["android9-mini.state.gz"],
+			DiskURL: vmRelease + "android9-mini-started.ckt", DiskSHA: vmPin["android9-mini-started.ckt"], DiskSize: vmSize["android9-mini-started.ckt"]}},
 }
 
 func vmImageByID(id string) *vmImage {
@@ -284,12 +284,35 @@ func vmSave(m *vmMachine) error {
 
 func vmImagePath(id string) string { return filepath.Join(vmImagesDir(), id+".iso") }
 func vmTplPath(id string) string   { return filepath.Join(vmImagesDir(), id+".ckt") }
+
+// vmPinPath records which published build of an image was downloaded: a newer build
+// replaces it, and saves made with the old one are not loaded.
+func vmPinPath(id string) string { return filepath.Join(vmImagesDir(), id+".pin") }
+
+func vmImageCurrent(id string) bool {
+	img := vmImageByID(id)
+	b, _ := os.ReadFile(vmPinPath(id))
+	return img != nil && strings.TrimSpace(string(b)) == img.SHA256
+}
+
+// vmDropOldImage removes the files of an older build of an image.
+func vmDropOldImage(id string) {
+	if vmImageCurrent(id) {
+		return
+	}
+	st, dk := vmPrePaths(id)
+	for _, f := range []string{vmImagePath(id), vmTplPath(id), st, dk, vmPinPath(id)} {
+		os.Remove(f)
+		os.Remove(f + ".part")
+	}
+}
+
 func vmHaveImage(id string) bool {
+	if !vmImageCurrent(id) {
+		return false
+	}
 	st, err := os.Stat(vmImagePath(id))
 	_, err2 := os.Stat(vmTplPath(id))
-	if img := vmImageByID(id); img != nil && img.Pre.usable() && !vmHavePre(img) {
-		return false // the quick-start files belong to the download on phones
-	}
 	return err == nil && err2 == nil && st.Size() > 0
 }
 
@@ -412,7 +435,9 @@ func vmWriteDisk(tpl, dst string) error {
 
 // ------------------------------------------------------------------ downloads
 
-func (e *vmEngine) download(imgID string) error {
+// download fetches an image; quick also fetches the pre-started save (phones: first start in
+// seconds instead of minutes). It can be added later by downloading again with quick.
+func (e *vmEngine) download(imgID string, quick bool) error {
 	img := vmImageByID(imgID)
 	if img == nil {
 		return errors.New("unknown image")
@@ -426,17 +451,23 @@ func (e *vmEngine) download(imgID string) error {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	d := &vmDL{State: "downloading", Total: img.Size, stop: cancel}
-	if img.Pre.usable() {
+	quick = quick && img.Pre.usable()
+	isoSize := img.Size
+	if vmHaveImage(imgID) {
+		isoSize = 0 // only the quick-start files are missing
+	}
+	d := &vmDL{State: "downloading", Total: isoSize, stop: cancel}
+	if quick {
 		d.Total += img.Pre.StateSize
 	}
 	e.dls[imgID] = d
 	e.mu.Unlock()
 	go func() {
+		vmDropOldImage(imgID)
 		err := vmFetch(ctx, img.TplURL, img.TplSHA, vmTplPath(imgID), nil)
-		if err == nil && img.Pre.usable() {
+		if err == nil && quick {
 			st, dk := vmPrePaths(imgID)
-			base := img.Size
+			base := isoSize
 			if err = vmFetch(ctx, img.Pre.DiskURL, img.Pre.DiskSHA, dk, nil); err == nil {
 				err = vmFetch(ctx, img.Pre.StateURL, img.Pre.StateSHA, st, func(got, total int64, verifying bool, speed int64) {
 					e.mu.Lock()
@@ -447,7 +478,7 @@ func (e *vmEngine) download(imgID string) error {
 		}
 		if err == nil {
 			pre := int64(0)
-			if img.Pre.usable() {
+			if quick {
 				pre = img.Pre.StateSize
 			}
 			err = vmFetch(ctx, img.URL, img.SHA256, vmImagePath(imgID), func(got, total int64, verifying bool, speed int64) {
@@ -472,6 +503,7 @@ func (e *vmEngine) download(imgID string) error {
 		} else {
 			d.State = "done"
 			d.Got = d.Total
+			os.WriteFile(vmPinPath(imgID), []byte(img.SHA256), 0600)
 		}
 		e.mu.Unlock()
 		if err == nil {
@@ -852,6 +884,7 @@ func (e *vmEngine) start(id string) error {
 		"-drive", "file="+disk+",format=raw,if=virtio,cache=writeback,discard=unmap,detect-zeroes=unmap",
 		"-display", "none", "-vga", "std",
 		"-netdev", "user,id=n0", "-device", "virtio-net-pci,netdev=n0",
+		"-device", "virtio-balloon-pci,id=bl0",
 		"-serial", fmt.Sprintf("tcp:127.0.0.1:%d,server=on,wait=off", p0),
 		"-serial", fmt.Sprintf("tcp:127.0.0.1:%d,server=on,wait=off", p1),
 		"-qmp", fmt.Sprintf("tcp:127.0.0.1:%d,server=on,wait=off", p2),
@@ -942,6 +975,9 @@ func (r *vmRun) set(state, detail string) {
 	r.state, r.detail = state, detail
 	vmEng.mu.Unlock()
 }
+
+const vmSetupCmd = "settings put global device_provisioned 1; settings put secure user_setup_complete 1;" +
+	" settings put global package_verifier_enable 0; settings put global verifier_verify_adb_installs 0"
 
 var vmPrompt = regexp.MustCompile(`console:/ [#$] ?$`)
 
@@ -1043,8 +1079,8 @@ wait:
 		time.Sleep(3 * time.Second)
 	}
 	r.bootSec = int(time.Since(r.started).Seconds())
-	// no setup wizard in the slim image: mark the device as set up
-	a.run("settings put global device_provisioned 1; settings put secure user_setup_complete 1", 60*time.Second)
+	// no setup wizard in the slim image: mark the device as set up; no install checks
+	a.run(vmSetupCmd, 60*time.Second)
 	r.set("booting", "Connecting the network")
 	r.ip = vmNetUp(a)
 	r.set("running", "")
@@ -1440,7 +1476,8 @@ func vmState() map[string]any {
 		x := map[string]any{"id": im.ID, "name": im.Name, "android": im.Android, "note": im.Note, "size": im.Size,
 			"have": vmHaveImage(im.ID), "published": im.SHA256 != ""}
 		if im.Pre.usable() {
-			x["size"] = im.Size + im.Pre.StateSize + im.Pre.DiskSize
+			x["quickSize"] = im.Pre.StateSize + im.Pre.DiskSize
+			x["haveQuick"] = vmHavePre(&im)
 			x["quick"] = map[string]int{"ram": im.Pre.RAM, "cpus": im.Pre.CPUs}
 		}
 		vmEng.mu.Lock()
@@ -1529,7 +1566,7 @@ func mountVM(mux *http.ServeMux, prefix string, auth func(*http.Request) bool) {
 		res := map[string]any{"ok": true}
 		switch str(m, "t") {
 		case "download":
-			err = vmEng.download(str(m, "image"))
+			err = vmEng.download(str(m, "image"), m["quick"] != false)
 		case "stopAll":
 			go vmEng.shutdownAll()
 		case "getEmulator":
