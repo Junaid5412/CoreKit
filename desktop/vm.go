@@ -838,7 +838,13 @@ func (e *vmEngine) start(id string) error {
 	}
 	disk := filepath.Join(vmMachinesDir(), id, "data.img")
 	if _, err := os.Stat(disk); err != nil {
-		if img := vmImageByID(m.Image); img != nil && vmHavePre(img) && m.RAM == img.Pre.RAM && m.CPUs == img.Pre.CPUs {
+		if img := vmImageByID(m.Image); img != nil && vmHavePre(img) {
+			// phones: a full first start takes very long, so a new device always uses the
+			// pre-started save, with the memory and cores it was made with
+			if m.RAM != img.Pre.RAM || m.CPUs != img.Pre.CPUs {
+				m.RAM, m.CPUs = img.Pre.RAM, img.Pre.CPUs
+				vmSave(m)
+			}
 			if err := vmUsePre(m, img); err == nil {
 				logLine("*", "Virtual Environment: "+m.Name+" starts from the pre-started save")
 			} else {
@@ -1504,6 +1510,12 @@ func vmState() map[string]any {
 	jobs := append([]*vmJob{}, vmEng.jobs...)
 	vmEng.mu.Unlock()
 	r, c := vmDefaults(nil)
+	for _, im := range vmCatalogue {
+		if im.Pre.usable() { // phones: the quick-start settings
+			r, c = im.Pre.RAM, im.Pre.CPUs
+			break
+		}
+	}
 	return map[string]any{"images": imgs, "machines": ms, "host": host, "jobs": jobs, "defaults": map[string]int{"ram": r, "cpus": c}}
 }
 

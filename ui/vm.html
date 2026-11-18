@@ -228,7 +228,7 @@ label.f{display:block;font-size:12px;color:var(--muted2);margin:14px 0 6px;font-
     <button class="hb" id="hbSet" data-v="settings" title="Settings" aria-label="Settings"></button>
     <button class="hb" id="dvPower"></button>
   </header>
-  <div class="boot hidden" id="bootBar"><span class="sp"></span><span id="bootT"></span></div>
+  <div class="boot hidden" id="bootBar"><span class="sp"></span><span id="bootT"></span><button class="btn sm vio hidden" id="bootFresh" data-a="fresh" style="margin-left:auto">Start in seconds</button></div>
   <section class="pane" id="pConsole">
     <div id="term" tabindex="0"></div>
     <div class="keys" id="keys"></div>
@@ -425,6 +425,9 @@ function renderDev() {
   pw.disabled = m.state === 'stopping';
   const bb = $('#bootBar');
   bb.classList.toggle('hidden', !(m.state === 'starting' || m.state === 'booting' || m.state === 'stopping'));
+  // phones: a slow full start can be swapped for the quick start (only for a device not used yet)
+  const im = S.images.find(i => i.id === m.image), mm = /\((\d+):\d\d\)/.exec(m.detail || '');
+  $('#bootFresh').classList.toggle('hidden', !(ANDROID && m.state === 'booting' && im && im.haveQuick && mm && +mm[1] >= 2));
   $('#bootT').textContent = (m.detail || 'Starting') + (m.state === 'booting' && !S.host.fast && !/saved|Loading/i.test(m.detail || '') ? ' · this can take a while' : '');
   if (m.state !== lastSt) { // only redraw lists when the state changes
     const was = lastSt; lastSt = m.state;
@@ -707,6 +710,14 @@ document.addEventListener('click', async e => {
       case 'uninstall': confirmBox('Remove app?', `${labelOf(a.dataset.pkg)} and its data will be removed from the virtual device.`, 'Remove', async () => { try { await cmd('uninstall', {id: cur, pkg: a.dataset.pkg}); await loadApps(true); toast('Removed'); } catch (x) { toast(x.message, true); } }); break;
       case 'freeze': { const r = await cmd('freeze', {id: cur, pkg: a.dataset.pkg}); toast(/disabled|new state/i.test(r.out || '') ? 'Frozen: it can\'t run until you remove it' : 'Done'); break; }
       case 'saveSet': await cmd('update', {id: cur, name: $('#sName').value, ram: +$('#sRam').value, cpus: +$('#sCpu').value}); await refresh(); toast('Saved'); break;
+      case 'fresh': confirmBox('Start in seconds?', 'This restarts the virtual device from the quick-start copy. Anything already inside it is erased.', 'Restart', async () => {
+        const id = cur;
+        try {
+          await cmd('kill', {id});
+          for (let i = 0; i < 40; i++) { await refresh(); const x = S.machines.find(y => y.id === id); if (!x || x.state === 'off') break; await new Promise(r => setTimeout(r, 500)); }
+          await cmd('reset', {id}); await cmd('start', {id}); await refresh();
+        } catch (x) { toast(x.message, true); }
+      }); break;
       case 'reset': confirmBox('Factory reset?', 'All apps and files inside this virtual device will be erased.', 'Reset', async () => { try { await cmd('reset', {id}); await refresh(); toast('Reset done'); } catch (x) { toast(x.message, true); } }); break;
       case 'delete': confirmBox('Delete virtual device?', 'It will be removed with all its apps and files. The downloaded system stays for other devices.', 'Delete', async () => { try { await cmd('delete', {id}); closeDev(); await refresh(); toast('Deleted'); } catch (x) { toast(x.message, true); } }); break;
     }

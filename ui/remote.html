@@ -501,15 +501,25 @@ function checksHTML(live) {
 
 function renderConn() {
   const b = $('#connBody');
-  if (S.session) { b.innerHTML = `<p class="d" style="margin:0">Finish the current session to connect to another device.</p>`; return; }
+  if (S.session) { b.dataset.sig = ''; b.innerHTML = `<p class="d" style="margin:0">Finish the current session to connect to another device.</p>`; return; }
   if (connBusy || S.stage) {
     const st = S.stage === 'wait' || waitPeer ? `Waiting for ${esc((waitPeer && waitPeer.name) || 'the other device')} to allow…` : S.stage === 'pair' ? 'Securing the connection…' : 'Searching your Wi-Fi…';
-    b.innerHTML = `<div class="stage"><span class="sp"></span><span>${st}</span></div><div class="row"><button class="btn" data-a="cancel">Cancel</button></div>`;
+    b.dataset.sig = ''; b.innerHTML = `<div class="stage"><span class="sp"></span><span>${st}</span></div><div class="row"><button class="btn" data-a="cancel">Cancel</button></div>`;
     return;
   }
   waitPeer = null;
-  const keep = [...document.querySelectorAll('.otp input')].map(i => i.value).join('');
   const ipMode = connMode === 'ip';
+  // state updates arrive often: rebuilding the boxes would drop the focus and close the phone keyboard
+  const sig = 'form|' + connMode;
+  if (b.dataset.sig === sig && b.querySelector('.otp')) {
+    let er = b.querySelector('.err');
+    if (!connErr) { if (er) er.remove(); }
+    else { if (!er) { er = document.createElement('div'); er.className = 'err'; b.querySelector('.seg2').after(er); } er.textContent = connErr; }
+    return;
+  }
+  const keep = [...document.querySelectorAll('.otp input')].map(i => i.value).join('');
+  const fi = document.activeElement && b.contains(document.activeElement) ? (document.activeElement.id === 'ip' ? 'ip' : document.activeElement.dataset.i) : null;
+  b.dataset.sig = sig;
   b.innerHTML = `<div class="seg2"><button class="${ipMode ? '' : 'on'}" data-mode="code">${svg('lock')}Code</button><button class="${ipMode ? 'on' : ''}" data-mode="ip">${svg('wifi')}IP address</button></div>
     ${connErr ? `<div class="err">${esc(connErr)}</div>` : ''}
     ${ipMode ? `<label class="flabel" for="ip">IP ADDRESS OF THE OTHER DEVICE</label><input class="ipin" id="ip" placeholder="e.g. 192.168.1.20" inputmode="decimal" spellcheck="false" autocomplete="off" value="${esc(ipVal)}">` : ''}
@@ -517,6 +527,7 @@ function renderConn() {
     <div class="otp" id="otp">${[0,1,2,3,4,5].map(i => (i === 3 ? '<span class="gap"></span>' : '') + `<input inputmode="numeric" maxlength="1" autocomplete="one-time-code" data-i="${i}" value="${esc(keep[i] || '')}">`).join('')}</div>
     <div class="row"><button class="btn pri" data-a="connect" id="connBtn">${svg('link')}Connect</button></div>
     <p class="hint">${ipMode ? 'The code is still needed: it keeps the connection private.' : 'CoreKit finds the device on your Wi-Fi by itself.'}</p>`;
+  if (fi != null) { const f = fi === 'ip' ? $('#ip') : b.querySelector(`.otp input[data-i="${fi}"]`); if (f) f.focus({preventScroll:true}); }
 }
 
 function otpValue() { return [...document.querySelectorAll('.otp input')].map(i => i.value).join(''); }
