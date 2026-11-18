@@ -110,6 +110,9 @@ label.f{display:block;font-size:12px;color:var(--muted2);margin:14px 0 6px;font-
 .hb.go{background:var(--acc);border-color:var(--acc);color:#04201c}.hb.halt{background:#2a1215;border-color:#5a1f26;color:#fca5a5}.hb:disabled{opacity:.45;cursor:default}
 .btn .sp{width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin 1s linear infinite}
 @media (max-width:700px){#dev .logo{display:none}#dev .top{gap:8px;padding:0 12px}}
+.qk{display:flex;align-items:center;gap:8px;margin-top:8px;font-size:12.5px;color:var(--muted2);cursor:pointer;user-select:none;width:max-content}
+.qk i{width:18px;height:18px;border-radius:6px;border:1.5px solid var(--line2);display:grid;place-items:center;font-style:normal;font-size:12px;color:#04201c}
+.qk.on{color:var(--white)}.qk.on i{background:var(--acc);border-color:var(--acc)}
 .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:1px;background:#64748b}.dot.run{background:#34d399}.dot.boot{background:#fbbf24}
 .tabs{display:flex;gap:4px;padding:8px 14px 0;border-bottom:1px solid var(--line);background:#0b1016;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
@@ -351,19 +354,24 @@ function openCreate() {
 }
 function updRng() {
   $('#cRamV').textContent = (+$('#cRam').value / 1024).toFixed(2).replace(/0$/, '') + ' GB'; $('#cCpuV').textContent = $('#cCpu').value + ($('#cCpu').value == 1 ? ' core' : ' cores');
-  const im = S.images.find(i => i.id === pickImg), q = im && im.quick;
+  const im = S.images.find(i => i.id === pickImg), q = im && im.haveQuick && im.quick;
   if (!q) { $('#cQuick').innerHTML = ''; return; }
   const ok = +$('#cRam').value === q.ram && +$('#cCpu').value === q.cpus;
   $('#cQuick').innerHTML = ok ? ''
-    : `<div class="err">These settings make the first start slow (about 30 minutes). <a href="#" data-a="quickProfile" style="color:#fff">Use the quick settings</a></div>`;
+    : `<div class="err">These settings make the first start slower (several minutes). <a href="#" data-a="quickProfile" style="color:#fff">Use the quick settings</a></div>`;
 }
 $('#cRam').oninput = updRng; $('#cCpu').oninput = updRng;
+let wantQuick = true;
 function renderImgs() {
   setTimeout(updRng, 0);
   $('#imgs').innerHTML = S.images.map(im => {
     const d = im.dl || {}, busy = /down|verif/.test(d.state || '');
-    let right = im.have ? '<span class="pill p-run"><i></i>Ready</span>' : busy ? `<button class="btn sm" data-a="cancelDl" data-img="${im.id}">Cancel</button>` : !im.published ? '<span class="pill p-off">Coming soon</span>' : `<button class="btn sm" data-a="dl" data-img="${im.id}">${svg('dl')}${fmtB(im.size)}</button>`;
-    return `<div class="img ${pickImg === im.id ? 'on' : ''}" data-pick="${im.id}"><span class="ic">${svg('phone')}</span><div class="tx"><b>${esc(im.name)}</b><small>${esc(im.note)}</small>
+    const qs = im.quickSize || 0, total = im.size + (wantQuick ? qs : 0);
+    let right = im.have ? '<span class="pill p-run"><i></i>Ready</span>' : busy ? `<button class="btn sm" data-a="cancelDl" data-img="${im.id}">Cancel</button>` : !im.published ? '<span class="pill p-off">Coming soon</span>' : `<button class="btn sm" data-a="dl" data-img="${im.id}">${svg('dl')}${fmtB(total)}</button>`;
+    let qk = '';
+    if (qs && !busy && im.published && !im.have) qk = `<span class="qk ${wantQuick ? 'on' : ''}" data-a="tq"><i>${wantQuick ? '✓' : ''}</i>Ready in seconds (+${fmtB(qs)})</span>`;
+    if (qs && !busy && im.have && !im.haveQuick) qk = `<button class="btn sm" style="margin-top:8px" data-a="dlq" data-img="${im.id}">${svg('bolt')}Add quick start (${fmtB(qs)})</button>`;
+    return `<div class="img ${pickImg === im.id ? 'on' : ''}" data-pick="${im.id}"><span class="ic">${svg('phone')}</span><div class="tx"><b>${esc(im.name)}</b><small>${esc(im.note)}</small>${qk}
       ${busy ? `<div class="bar"><i style="width:${d.total ? Math.round(d.got * 100 / d.total) : 2}%"></i></div><small>${d.state === 'verifying' ? 'Checking the download…' : `${fmtB(d.got)} of ${fmtB(d.total)}${d.speed ? ' · ' + fmtB(d.speed) + '/s' : ''}`}</small>` : ''}
       ${d.state === 'error' ? `<div class="err" style="margin-top:6px;padding:7px 10px">${esc(d.err)}</div>` : ''}</div>${right}</div>`;
   }).join('');
@@ -671,7 +679,9 @@ document.addEventListener('click', async e => {
       case 'new': openCreate(); break;
       case 'closeSheet': closeSheet(); break;
       case 'quickProfile': { e.preventDefault(); const im = S.images.find(i => i.id === pickImg); if (im && im.quick) { $('#cRam').value = im.quick.ram; $('#cCpu').value = im.quick.cpus; updRng(); } break; }
-      case 'dl': pickImg = a.dataset.img; await cmd('download', {image: a.dataset.img}); await refresh(); break;
+      case 'dl': pickImg = a.dataset.img; await cmd('download', {image: a.dataset.img, quick: wantQuick}); await refresh(); break;
+      case 'dlq': pickImg = a.dataset.img; await cmd('download', {image: a.dataset.img, quick: true}); await refresh(); break;
+      case 'tq': wantQuick = !wantQuick; renderImgs(); break;
       case 'cancelDl': await cmd('cancelDownload', {image: a.dataset.img}); await refresh(); break;
       case 'getEmu': await cmd('getEmulator'); await refresh(); break;
       case 'fast': await cmd('enableFast'); toast('Done. Restart Windows to use the faster mode.'); break;

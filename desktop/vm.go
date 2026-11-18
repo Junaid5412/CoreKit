@@ -124,11 +124,11 @@ const vmRelease = "https://github.com/Junaid5412/CoreKit/releases/download/vm-im
 // corrupted download is refused.
 var vmCatalogue = []vmImage{
 	{ID: "android9-lite", Name: "Android 9 Lite", Android: "9", Note: "64-bit · root · recommended",
-		URL: vmRelease + "android9-lite.iso", SHA256: vmPin["android9-lite.iso"], Size: vmSize["android9-lite.iso"],
+		URL: vmRelease + "android9-mini.iso", SHA256: vmPin["android9-mini.iso"], Size: vmSize["android9-mini.iso"],
 		TplURL: vmRelease + "data8g.ckt", TplSHA: vmPin["data8g.ckt"], MinRAM: 1536,
 		Pre: &vmPre{RAM: 1536, CPUs: 4, QemuID: vmPin["prestart.qemu"],
-			StateURL: vmRelease + "android9-lite.state.gz", StateSHA: vmPin["android9-lite.state.gz"], StateSize: vmSize["android9-lite.state.gz"],
-			DiskURL: vmRelease + "android9-lite-started.ckt", DiskSHA: vmPin["android9-lite-started.ckt"], DiskSize: vmSize["android9-lite-started.ckt"]}},
+			StateURL: vmRelease + "android9-mini.state.gz", StateSHA: vmPin["android9-mini.state.gz"], StateSize: vmSize["android9-mini.state.gz"],
+			DiskURL: vmRelease + "android9-mini-started.ckt", DiskSHA: vmPin["android9-mini-started.ckt"], DiskSize: vmSize["android9-mini-started.ckt"]}},
 }
 
 func vmImageByID(id string) *vmImage {
@@ -313,9 +313,6 @@ func vmHaveImage(id string) bool {
 	}
 	st, err := os.Stat(vmImagePath(id))
 	_, err2 := os.Stat(vmTplPath(id))
-	if img := vmImageByID(id); img != nil && img.Pre.usable() && !vmHavePre(img) {
-		return false // the quick-start files belong to the download on phones
-	}
 	return err == nil && err2 == nil && st.Size() > 0
 }
 
@@ -438,7 +435,9 @@ func vmWriteDisk(tpl, dst string) error {
 
 // ------------------------------------------------------------------ downloads
 
-func (e *vmEngine) download(imgID string) error {
+// download fetches an image; quick also fetches the pre-started save (phones: first start in
+// seconds instead of minutes). It can be added later by downloading again with quick.
+func (e *vmEngine) download(imgID string, quick bool) error {
 	img := vmImageByID(imgID)
 	if img == nil {
 		return errors.New("unknown image")
@@ -452,8 +451,13 @@ func (e *vmEngine) download(imgID string) error {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	d := &vmDL{State: "downloading", Total: img.Size, stop: cancel}
-	if img.Pre.usable() {
+	quick = quick && img.Pre.usable()
+	isoSize := img.Size
+	if vmHaveImage(imgID) {
+		isoSize = 0 // only the quick-start files are missing
+	}
+	d := &vmDL{State: "downloading", Total: isoSize, stop: cancel}
+	if quick {
 		d.Total += img.Pre.StateSize
 	}
 	e.dls[imgID] = d
@@ -461,9 +465,9 @@ func (e *vmEngine) download(imgID string) error {
 	go func() {
 		vmDropOldImage(imgID)
 		err := vmFetch(ctx, img.TplURL, img.TplSHA, vmTplPath(imgID), nil)
-		if err == nil && img.Pre.usable() {
+		if err == nil && quick {
 			st, dk := vmPrePaths(imgID)
-			base := img.Size
+			base := isoSize
 			if err = vmFetch(ctx, img.Pre.DiskURL, img.Pre.DiskSHA, dk, nil); err == nil {
 				err = vmFetch(ctx, img.Pre.StateURL, img.Pre.StateSHA, st, func(got, total int64, verifying bool, speed int64) {
 					e.mu.Lock()
@@ -474,7 +478,7 @@ func (e *vmEngine) download(imgID string) error {
 		}
 		if err == nil {
 			pre := int64(0)
-			if img.Pre.usable() {
+			if quick {
 				pre = img.Pre.StateSize
 			}
 			err = vmFetch(ctx, img.URL, img.SHA256, vmImagePath(imgID), func(got, total int64, verifying bool, speed int64) {
@@ -1472,7 +1476,8 @@ func vmState() map[string]any {
 		x := map[string]any{"id": im.ID, "name": im.Name, "android": im.Android, "note": im.Note, "size": im.Size,
 			"have": vmHaveImage(im.ID), "published": im.SHA256 != ""}
 		if im.Pre.usable() {
-			x["size"] = im.Size + im.Pre.StateSize + im.Pre.DiskSize
+			x["quickSize"] = im.Pre.StateSize + im.Pre.DiskSize
+			x["haveQuick"] = vmHavePre(&im)
 			x["quick"] = map[string]int{"ram": im.Pre.RAM, "cpus": im.Pre.CPUs}
 		}
 		vmEng.mu.Lock()
@@ -1561,7 +1566,7 @@ func mountVM(mux *http.ServeMux, prefix string, auth func(*http.Request) bool) {
 		res := map[string]any{"ok": true}
 		switch str(m, "t") {
 		case "download":
-			err = vmEng.download(str(m, "image"))
+			err = vmEng.download(str(m, "image"), m["quick"] != false)
 		case "stopAll":
 			go vmEng.shutdownAll()
 		case "getEmulator":
