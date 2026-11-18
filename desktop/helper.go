@@ -57,7 +57,7 @@ func helperResolver() {
 			servers = append(servers, net.JoinHostPort(s, "53"))
 		}
 	}
-	if b, err := os.ReadFile("/etc/resolv.conf"); err == nil { // present outside Android (and in tests)
+	if b, err := os.ReadFile("/etc/resolv.conf"); err == nil && os.Getenv("CK_NO_RESOLV") == "" { // outside Android
 		for _, l := range strings.Split(string(b), "\n") {
 			if f := strings.Fields(l); len(f) >= 2 && f[0] == "nameserver" && net.ParseIP(strings.Split(f[1], "%")[0]) != nil {
 				servers = append(servers, net.JoinHostPort(strings.Split(f[1], "%")[0], "53"))
