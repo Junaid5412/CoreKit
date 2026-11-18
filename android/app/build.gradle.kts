@@ -20,7 +20,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.corekit.app"
+        applicationId = "com.hostzelon.corekit"
         minSdk = 26
         targetSdk = 36
         versionName = ckVersion
