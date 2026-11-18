@@ -38,6 +38,13 @@ def term_has(text, mins=5):
     print(buf[-1500:]); return False
 cmd("input", id=mid, s="id\r"); print("root console:", term_has("uid=0(root)"), flush=True)
 print("apps:", cmd("apps", id=mid), flush=True)
+import os
+if os.environ.get("APK"):
+    j = cmd("install", id=mid, files=[os.environ["APK"]], label="CK Test")["job"]
+    wait("install job", lambda s: any(x["id"] == j and x["state"] != "running" for x in s["jobs"]), 20)
+    print("install job:", [x for x in call("state")["jobs"] if x["id"] == j], flush=True)
+    print("apps after install:", cmd("apps", id=mid), flush=True)
+    print("launch:", cmd("launch", id=mid, pkg="ck.test"), flush=True)
 j = cmd("arm", id=mid)["job"]
 wait("ARM support job", lambda s: any(x["id"] == j and x["state"] != "running" for x in s["jobs"]), 20)
 print("arm job:", [x for x in call("state")["jobs"] if x["id"] == j], flush=True)

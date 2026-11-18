@@ -3,9 +3,32 @@ on:
   push:
     branches: [vm-e2e*]
 jobs:
-  linux-kvm:
+  apk:
     runs-on: ubuntu-latest
     steps:
+      - name: Tiny test app (built here, signed with a throwaway key)
+        run: |
+          set -e
+          SDK=${ANDROID_HOME:-$ANDROID_SDK_ROOT}; BT=$(ls -d $SDK/build-tools/* | sort -V | tail -1); PLAT=$(ls -d $SDK/platforms/android-* | sort -V | tail -1)
+          mkdir -p /tmp/a/src/ck /tmp/a/obj /tmp/a/dex && cd /tmp/a
+          printf '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="ck.test"><application android:label="CK Test"><activity android:name=".Main" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>' > AndroidManifest.xml
+          printf 'package ck; public class Main extends android.app.Activity {}' > src/ck/Main.java
+          javac --release 8 -cp $PLAT/android.jar -d obj src/ck/Main.java
+          $BT/d8 --min-api 21 --lib $PLAT/android.jar --output dex obj/ck/Main.class
+          $BT/aapt2 link -o u.apk -I $PLAT/android.jar --manifest AndroidManifest.xml --min-sdk-version 21 --target-sdk-version 28
+          (cd dex && zip -q -u ../u.apk classes.dex)
+          $BT/zipalign -f 4 u.apk a.apk
+          keytool -genkeypair -keystore k.jks -storepass android -keypass android -alias k -dname CN=ck -keyalg RSA -validity 1 >/dev/null
+          $BT/apksigner sign --ks k.jks --ks-pass pass:android --out test.apk a.apk
+          ls -la test.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: testapk, path: /tmp/a/test.apk }
+  linux-kvm:
+    needs: apk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: testapk, path: /tmp/apk }
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.24", cache: false }
@@ -19,12 +42,15 @@ jobs:
           U=$(cat /tmp/url)
           # keep the module open (it closes when the page stops pinging)
           (while true; do curl -s "${U}api/ping" >/dev/null; sleep 1; done) &
-          python3 -u tools/vm/e2e.py "${U}api/vm/"
+          APK=/tmp/apk/test.apk python3 -u tools/vm/e2e.py "${U}api/vm/"
       - if: always()
         run: tail -50 /tmp/ck.log; cat /tmp/vmd/machines/*/qemu.log 2>/dev/null | tail -20
   android-arm:
+    needs: apk
     runs-on: ubuntu-24.04-arm
     steps:
+      - uses: actions/download-artifact@v4
+        with: { name: testapk, path: /tmp/apk }
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with: { go-version: "1.24", cache: false }
@@ -42,6 +68,7 @@ jobs:
           docker exec -d tx sh -c 'sleep 100000 | SSL_CERT_DIR=/etc/ssl/certs CK_TOKEN=0123456789abcdef0123456789abcdef CK_NAME=CI CK_VMDIR=/tmp/vmd CK_QEMU=/q/lib/libqemu.so CK_QEMU_LIB=/q/lib CK_QEMU_SHARE=/q/share /q/lib/libcorekit.so --remote > /tmp/vmd/engine.log 2>&1'
           for i in $(seq 1 30); do grep -q READY /tmp/vmd/engine.log 2>/dev/null && break; sleep 1; done
           P=$(sed -n 's/^READY //p' /tmp/vmd/engine.log)
-          python3 -u tools/vm/e2e.py "http://127.0.0.1:$P/vm/" 0123456789abcdef0123456789abcdef
+          cp /tmp/apk/test.apk /tmp/vmd/test.apk && chmod 644 /tmp/vmd/test.apk
+          APK=/tmp/vmd/test.apk python3 -u tools/vm/e2e.py "http://127.0.0.1:$P/vm/" 0123456789abcdef0123456789abcdef
       - if: always()
         run: tail -50 /tmp/vmd/engine.log; tail -20 /tmp/vmd/machines/*/qemu.log 2>/dev/null || true
