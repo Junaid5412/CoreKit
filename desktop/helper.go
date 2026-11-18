@@ -74,22 +74,10 @@ func helperResolver() {
 				last = err
 				continue
 			}
-			if strings.HasPrefix(network, "udp") { // UDP "connects" even to a dead server: check it answers
-				return &dnsProbeConn{Conn: c}, nil
-			}
-			return c, nil
+			return c, nil // (a plain *net.UDPConn: Go only speaks UDP DNS over a PacketConn)
 		}
 		return nil, last
 	}}
-}
-
-// dnsProbeConn gives each DNS query a short deadline so a silent server fails fast and the
-// resolver retries (Go tries every query attempt on a fresh Dial).
-type dnsProbeConn struct{ net.Conn }
-
-func (c *dnsProbeConn) Read(b []byte) (int, error) {
-	c.Conn.SetReadDeadline(time.Now().Add(3 * time.Second))
-	return c.Conn.Read(b)
 }
 
 func runHelper(cmd string) int {
