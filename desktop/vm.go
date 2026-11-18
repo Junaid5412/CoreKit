@@ -35,6 +35,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -524,6 +525,26 @@ func vmFetch(ctx context.Context, url, sum, dst string, prog func(got, total int
 	if st, err := os.Stat(part); err == nil {
 		have = st.Size()
 	}
+	// give up when nothing arrives for a minute (a stuck mirror must not hang the download)
+	ctx, stop := context.WithCancel(ctx)
+	defer stop()
+	var lastRead atomic.Int64
+	lastRead.Store(time.Now().UnixNano())
+	go func() {
+		t := time.NewTicker(5 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if time.Since(time.Unix(0, lastRead.Load())) > time.Minute {
+					stop()
+					return
+				}
+			}
+		}
+	}()
 	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
 	req.Header.Set("User-Agent", "CoreKit/"+appVersion)
 	if have > 0 {
@@ -563,6 +584,7 @@ func vmFetch(ctx context.Context, url, sum, dst string, prog func(got, total int
 	for {
 		n, rerr := resp.Body.Read(buf)
 		if n > 0 {
+			lastRead.Store(time.Now().UnixNano())
 			if _, werr := f.Write(buf[:n]); werr != nil {
 				f.Close()
 				return fmt.Errorf("could not save (%v) – is storage full?", shortErr(werr))
@@ -1038,11 +1060,12 @@ func vmGuestIP(a *vmAuto) string {
 // vmNetUp waits for Android to bring up its network (QEMU's built-in NAT: guest
 // 10.0.2.15, host 10.0.2.2, DNS 10.0.2.3) and sets it up by hand if it doesn't.
 func vmNetUp(a *vmAuto) string {
-	if ip := vmGuestIP(a); ip != "" {
-		return ip
+	if vmNetOK(a) {
+		return vmGuestIP(a)
 	}
 	// Android-x86 shows QEMU's network card as "wifi_eth" (under a virtual Wi-Fi that
-	// needs a saved network); give it the NAT address directly and make it the default
+	// needs a saved network); give it the NAT address directly and make it the default.
+	// Android may reset the default network later, so this runs again whenever needed.
 	if_, _, _ := a.run("for i in wifi_eth eth0; do [ -e /sys/class/net/$i ] && echo $i && break; done", 5*time.Second)
 	nic := strings.TrimSpace(if_)
 	if nic == "" {
@@ -1051,8 +1074,36 @@ func vmNetUp(a *vmAuto) string {
 	a.run(strings.ReplaceAll("ip link set NIC up; ip addr add 10.0.2.15/24 dev NIC 2>/dev/null; ndc network create 100 >/dev/null 2>&1;"+
 		" ndc network interface add 100 NIC >/dev/null 2>&1; ndc network route add 100 NIC 10.0.2.0/24 >/dev/null 2>&1;"+
 		" ndc network route add 100 NIC 0.0.0.0/0 10.0.2.2 >/dev/null 2>&1; ndc resolver setnetdns 100 '' 10.0.2.3 >/dev/null 2>&1;"+
-		" ndc network default set 100 >/dev/null 2>&1; setprop net.dns1 10.0.2.3", "NIC", nic), 20*time.Second)
+		" ndc network default set 100 >/dev/null 2>&1; setprop net.dns1 10.0.2.3", "NIC", nic), 30*time.Second)
+	if !vmNetOK(a) {
+		logLine("!", "Virtual Environment: the virtual device can't reach CoreKit over its network")
+	}
 	return vmGuestIP(a)
+}
+
+// vmNetOK checks the guest really reaches us (10.0.2.2) by connecting to a test port.
+func vmNetOK(a *vmAuto) bool {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return false
+	}
+	defer l.Close()
+	got := make(chan bool, 1)
+	go func() {
+		l.(*net.TCPListener).SetDeadline(time.Now().Add(25 * time.Second))
+		c, err := l.Accept()
+		if err == nil {
+			c.Close()
+		}
+		got <- err == nil
+	}()
+	a.run(fmt.Sprintf("toybox nc -w 8 10.0.2.2 %d </dev/null >/dev/null 2>&1", l.Addr().(*net.TCPAddr).Port), 30*time.Second)
+	select {
+	case ok := <-got:
+		return ok
+	case <-time.After(2 * time.Second):
+		return false
+	}
 }
 
 func (e *vmEngine) stop(id string, force bool) error {
@@ -1181,6 +1232,8 @@ func (e *vmEngine) install(id, label string, files []string) (*vmJob, error) {
 	j := e.addJob(id, "Installing "+label)
 	go func() {
 		a := r.auto
+		e.jobSet(j, "running", "Checking the network", 2)
+		vmNetUp(a)
 		a.run("rm -rf /data/local/tmp/ck && mkdir -p /data/local/tmp/ck", 10*time.Second)
 		var sent int64
 		var names []string
@@ -1298,6 +1351,7 @@ func (e *vmEngine) enableARM(r *vmRun, j *vmJob) {
 		return
 	}
 	e.jobSet(j, "running", "Copying into the virtual device", 65)
+	vmNetUp(a)
 	port, done, err := vmServeFile(dst)
 	if err != nil {
 		e.jobSet(j, "error", "Could not share the file", 0)
