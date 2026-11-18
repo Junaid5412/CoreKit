@@ -236,7 +236,7 @@ func (e *vmEngine) afterResume(r *vmRun) bool {
 		json.Unmarshal(raw, &st)
 		if st.Status == "running" {
 			vmDropSnap(r.m.ID)
-			q.do("balloon", map[string]any{"value": int64(r.m.RAM) << 20}) // give back the memory taken before the save
+			go vmGrow(r) // give back the memory taken before the save
 			return true
 		}
 		if st.Status == "paused" || st.Status == "postmigrate" { // saved while paused: continue it
@@ -335,4 +335,39 @@ func vmShrink(a *vmAuto, q *vmQMP, ramMB, keepMB int) {
 		}
 		last = b.Actual
 	}
+}
+
+// vmGrow returns the memory the balloon took before a save (see vmShrink).
+func vmGrow(r *vmRun) {
+	q, err := vmQMPDial(r.qmpPort)
+	if err != nil {
+		return
+	}
+	defer q.close()
+	want := int64(r.m.RAM) << 20
+	for i := 0; i < 60; i++ {
+		raw, err := q.do("query-balloon", nil)
+		if err != nil {
+			return // no balloon in this machine
+		}
+		var b struct {
+			Actual int64 `json:"actual"`
+		}
+		json.Unmarshal(raw, &b)
+		if b.Actual >= want {
+			if i > 0 {
+				logLine("*", fmt.Sprintf("Virtual Environment: %s has its full memory again (%d MB)", r.m.Name, b.Actual>>20))
+			}
+			return
+		}
+		if i%10 == 0 {
+			q.do("balloon", map[string]any{"value": want})
+		}
+		select {
+		case <-r.exited:
+			return
+		case <-time.After(time.Second):
+		}
+	}
+	logLine("!", "Virtual Environment: "+r.m.Name+" did not get its full memory back")
 }

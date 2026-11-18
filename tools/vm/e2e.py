@@ -54,13 +54,17 @@ if os.environ.get("APK"):
     print("install job:", [x for x in call("state")["jobs"] if x["id"] == j], flush=True)
     print("apps after install:", cmd("apps", id=mid), flush=True)
     print("launch:", cmd("launch", id=mid, pkg="ck.test"), flush=True)
+    def diag(tag):
+        cmd("input", id=mid, s=f"free -m; cat /proc/loadavg; top -b -n 1 -m 12; lsmod | grep -i balloon; df -h /data; echo DIAG-{tag}-END\r")
+        term_has(f"DIAG-{tag}-END\n", 3); r = call(f"term?id={mid}&since=0"); print(f"---- {tag} ----\n" + r.get("t", "")[-3500:], flush=True)
+    diag("before")
     big = os.path.join(os.path.dirname(os.environ["APK"]), "big.apk")
     with open(big, "wb") as f: f.write(os.urandom(45 << 20))
     os.chmod(big, 0o644)
     t = time.time(); j = cmd("install", id=mid, files=[big], label="big")["job"]
     wait("45 MB copy", lambda s: any(x["id"] == j and x["state"] != "running" for x in s["jobs"]), 15)
     d = [x for x in call("state")["jobs"] if x["id"] == j][0]["detail"]; print(f"big copy result ({time.time()-t:.0f}s):", d, flush=True)
-    if "Copying" in d: sys.exit("large copy failed")
+    if "Copying" in d: diag("after"); sys.exit("large copy failed")
 j = cmd("arm", id=mid)["job"]
 time.sleep(90)  # the mirror is slow: just check that it is moving
 print("arm job:", [x for x in call("state")["jobs"] if x["id"] == j], flush=True)
