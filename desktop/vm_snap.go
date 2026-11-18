@@ -236,6 +236,9 @@ func (e *vmEngine) afterResume(r *vmRun) bool {
 			vmDropSnap(r.m.ID)
 			return true
 		}
+		if st.Status == "paused" || st.Status == "postmigrate" { // saved while paused: continue it
+			q.do("cont", nil)
+		}
 		if strings.Contains(st.Status, "fail") || st.Status == "internal-error" {
 			return false
 		}

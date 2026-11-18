@@ -169,11 +169,14 @@ q = subprocess.Popen(targs, stdout=open(f"{log}/prestart-resume.log", "ab"), std
 ok = False
 for _ in range(900):
     try:
-        if qmp([{"execute": "query-status"}])[-1].get("return", {}).get("status") == "running": ok = True; break
+        stt = qmp([{"execute": "query-status"}])[-1].get("return", {}).get("status")
+        if stt == "running": ok = True; break
+        if stt in ("paused", "postmigrate"): qmp([{"execute": "cont"}])  # it was saved paused
     except Exception: pass
     time.sleep(1)
 print(f"RESUME: running={ok} after {time.time()-tr:.0f}s", flush=True)
-if not ok: q.kill(); sys.exit("resume failed")
+if not ok:
+    q.kill(); print(open(f"{log}/prestart-resume.log", errors="replace").read()[-3000:]); sys.exit("resume failed")
 a = Ser(P1, f"{log}/prestart-resume1.log")
 for c in ["id", "getprop sys.boot_completed; uptime", "pm list packages | wc -l", "ip -4 -o addr show | grep -v ' lo '"]:
     t = time.time(); o, rc = a.run(c, 600); print(f"$ {c} -> {rc} in {time.time()-t:.1f}s: {o.strip()[-300:]}", flush=True)
