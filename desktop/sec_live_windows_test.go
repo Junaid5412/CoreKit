@@ -233,6 +233,10 @@ func TestSecLiveInspectAndDelete(t *testing.T) {
 	if err := json.Unmarshal(raw, &plat); err != nil {
 		t.Fatal(err)
 	}
+	if plat.Owner == "" {
+		out, err := exec.Command(filepath.Join(os.Getenv("SystemRoot"), `System32\cmd.exe`), "/c", "dir", "/q", "/a", exe).CombinedOutput()
+		t.Logf("dir /q said (%v): %q", err, string(out))
+	}
 	if plat.Sig == nil || plat.Ver == nil || !strings.Contains(plat.Ver.Company, "Microsoft") || plat.Created == 0 || plat.Owner == "" {
 		t.Fatalf("file info: %s", raw)
 	}
