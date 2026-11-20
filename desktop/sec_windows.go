@@ -167,7 +167,7 @@ func secFileInfo(ctx context.Context, path string) (json.RawMessage, error) {
 	if err != nil {
 		return r.Data, err
 	}
-	// trust and owner come from Windows directly (WinVerifyTrust, `dir /q`)
+	// trust and owner come from Windows directly (WinVerifyTrust, the security API)
 	var m map[string]any
 	if json.Unmarshal(r.Data, &m) != nil || m == nil {
 		return r.Data, nil
@@ -189,29 +189,35 @@ func secFileInfo(ctx context.Context, path string) (json.RawMessage, error) {
 	return b, nil
 }
 
-// fileOwner reads the owner column of `dir /q` (the account that owns the file).
-func fileOwner(ctx context.Context, path string) string {
-	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(cctx, filepath.Join(os.Getenv("SystemRoot"), `System32\cmd.exe`), "/c", "dir", "/q", "/a", path)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
-	out, err := cmd.Output()
+var (
+	procGetNamedSecurityInfo = syscall.NewLazyDLL("advapi32.dll").NewProc("GetNamedSecurityInfoW")
+	procLookupAccountSid     = syscall.NewLazyDLL("advapi32.dll").NewProc("LookupAccountSidW")
+)
+
+// fileOwner returns the account that owns the file (DOMAIN\name), read with the Windows security API.
+func fileOwner(_ context.Context, path string) string {
+	p, err := syscall.UTF16PtrFromString(path)
 	if err != nil {
 		return ""
 	}
-	base := filepath.Base(path)
-	for _, l := range strings.Split(string(out), "\n") {
-		l = strings.TrimRight(l, "\r ")
-		if strings.HasSuffix(l, " "+base) {
-			if m := dirOwnerRe.FindStringSubmatch(strings.TrimSuffix(l, " "+base)); m != nil {
-				return strings.TrimSpace(m[1])
-			}
-		}
+	var owner, sd uintptr
+	const seFileObject, ownerInfo = 1, 1
+	if r, _, _ := procGetNamedSecurityInfo.Call(uintptr(unsafe.Pointer(p)), seFileObject, ownerInfo, uintptr(unsafe.Pointer(&owner)), 0, 0, 0, uintptr(unsafe.Pointer(&sd))); r != 0 || owner == 0 {
+		return ""
 	}
-	return ""
+	defer procLocalFree.Call(sd)
+	name, dom := make([]uint16, 256), make([]uint16, 256)
+	nl, dl := uint32(len(name)), uint32(len(dom))
+	var use uint32
+	if r, _, _ := procLookupAccountSid.Call(0, owner, uintptr(unsafe.Pointer(&name[0])), uintptr(unsafe.Pointer(&nl)), uintptr(unsafe.Pointer(&dom[0])), uintptr(unsafe.Pointer(&dl)), uintptr(unsafe.Pointer(&use))); r == 0 {
+		return ""
+	}
+	n, d := syscall.UTF16ToString(name), syscall.UTF16ToString(dom)
+	if d == "" {
+		return n
+	}
+	return d + `\` + n
 }
-
-var dirOwnerRe = regexp.MustCompile(`(?i)\d{1,2}:\d{2}(?:\s*[ap]m)?\s+(?:<\w+>|[\d,.]+)\s+(.+)$`)
 
 func secBloatAction(ctx context.Context, b secBloat) (string, json.RawMessage, error) {
 	r, err := secRunFix(ctx, map[string]any{"op": "bloat", "kind": b.Kind, "key": b.Key})
