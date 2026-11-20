@@ -1221,6 +1221,20 @@ func secInspect(ctx context.Context, f *secFinding) *inReport {
 	if raw, err := secFileInfo(ctx, f.Path); err == nil && len(raw) > 0 {
 		_ = json.Unmarshal(raw, &plat)
 	}
+	if f.Signed != "" { // the scan's verdict (it understands Windows catalog signatures)
+		if plat.Sig == nil {
+			plat.Sig = &struct {
+				Status, Subject, Issuer, Thumb, Stamped string
+				From, To                                int64
+			}{}
+		}
+		if st := map[string]string{"valid": "Valid", "unsigned": "NotSigned", "invalid": "HashMismatch"}[f.Signed]; st != "" {
+			plat.Sig.Status = st
+		}
+		if plat.Sig.Subject == "" && f.Signer != "" {
+			plat.Sig.Subject = "CN=" + f.Signer
+		}
+	}
 	if o := f.Origin; o != nil {
 		if o.By != "" {
 			plat.Extra = append(plat.Extra, inKV{K: "Saved by program", V: o.By})

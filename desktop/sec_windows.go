@@ -176,11 +176,11 @@ func secFileInfo(ctx context.Context, path string) (json.RawMessage, error) {
 	if sig == nil {
 		sig = map[string]any{}
 	}
-	st := map[string]string{"valid": "Valid", "unsigned": "NotSigned", "invalid": "HashMismatch"}[fileSigned(path)]
-	if st == "" {
-		st = "UnknownError"
+	// WinVerifyTrust on the file itself cannot see Windows' catalog signatures, so "unsigned" is
+	// not reported here; the caller knows better (the scan checks catalogs).
+	if st := map[string]string{"valid": "Valid", "invalid": "HashMismatch"}[fileSigned(path)]; st != "" {
+		sig["status"] = st
 	}
-	sig["status"] = st
 	m["sig"] = sig
 	if o := fileOwner(ctx, path); o != "" {
 		m["owner"] = o
