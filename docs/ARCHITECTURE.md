@@ -60,6 +60,13 @@ The UIs never know which platform they run on. They talk to the host through:
   Scheduler from `Program Files\CoreKit`. Android's Live Shield is a periodic JobScheduler check of
   changed packages (`SecurityJob`).
 
+* **Remote Access** – one Go engine on both platforms (Android runs it inside `libcorekit.so`).
+  State: `{t:"state", me, hosting, code, stage, session:{role, peer, since, w, h, ctl, quality,
+  tx, rx, capErr}}` (`tx`/`rx` = screen pictures sent/received, `capErr` = why the screen can't
+  be captured). Frames: `{t:"frame", w, h, seq, d}` (`d` = base64 JPEG). `events?lite=1` leaves
+  out `d`; the page then loads the picture from `remote/frame.jpg` (Android, served from the
+  engine's `lastframe`), and falls back to full frames if that fails.
+
 * **Virtual Environment** – not part of CoreKit. Its code (engine, page, image tools and
   workflows) is kept on the `virtual-environment` branch for a separate app.
 

@@ -9,6 +9,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"hash/fnv"
 	"image"
 	"image/jpeg"
@@ -93,8 +94,7 @@ type winCap struct {
 
 func rNewCapturer(e *rEngine) rCapturer {
 	rDPIOnce.Do(setDPIAwareness)
-	dc, _, _ := rpCreateCompatibleDC.Call(0)
-	return &winCap{memDC: dc}
+	return &winCap{} // the memory DC is made on the first grab, compatible with the screen
 }
 
 func (c *winCap) close() {
@@ -109,7 +109,7 @@ func (c *winCap) close() {
 func (c *winCap) grab(q rQuality) ([]byte, int, int, error) {
 	sw, sh := screenSize()
 	if sw <= 0 || sh <= 0 {
-		return nil, 0, 0, nil
+		return nil, 0, 0, errors.New("Windows did not report a screen size")
 	}
 	tw, th := sw, sh
 	if tw > q.maxW {
@@ -119,7 +119,13 @@ func (c *winCap) grab(q rQuality) ([]byte, int, int, error) {
 	th &^= 1
 	scr, _, _ := rpGetDC.Call(0)
 	if scr == 0 {
-		return nil, 0, 0, nil
+		return nil, 0, 0, errors.New("no access to the screen (is the PC locked or asleep?)")
+	}
+	if c.memDC == 0 {
+		c.memDC, _, _ = rpCreateCompatibleDC.Call(scr)
+		if c.memDC == 0 {
+			return nil, 0, 0, errors.New("could not prepare screen capture (out of graphics memory?)")
+		}
 	}
 	defer rpReleaseDC.Call(0, scr)
 	if c.bmp == 0 || c.w != tw || c.h != th {
@@ -127,6 +133,10 @@ func (c *winCap) grab(q rQuality) ([]byte, int, int, error) {
 			rpDeleteObject.Call(c.bmp)
 		}
 		c.bmp, _, _ = rpCreateCompatBitmap.Call(scr, uintptr(tw), uintptr(th))
+		if c.bmp == 0 {
+			c.w, c.h = 0, 0
+			return nil, 0, 0, errors.New("could not create the capture picture (out of graphics memory?)")
+		}
 		c.w, c.h = tw, th
 		c.buf = make([]byte, tw*th*4)
 		c.img = image.NewRGBA(image.Rect(0, 0, tw, th))
@@ -134,7 +144,14 @@ func (c *winCap) grab(q rQuality) ([]byte, int, int, error) {
 	old, _, _ := rpSelectObject.Call(c.memDC, c.bmp)
 	rpSetStretchBltMode.Call(c.memDC, 4) // HALFTONE: smooth downscale
 	rpSetBrushOrgEx.Call(c.memDC, 0, 0, 0)
-	rpStretchBlt.Call(c.memDC, 0, 0, uintptr(tw), uintptr(th), scr, 0, 0, uintptr(sw), uintptr(sh), 0x00CC0020|0x40000000) // SRCCOPY|CAPTUREBLT
+	ok, _, _ := rpStretchBlt.Call(c.memDC, 0, 0, uintptr(tw), uintptr(th), scr, 0, 0, uintptr(sw), uintptr(sh), 0x00CC0020|0x40000000) // SRCCOPY|CAPTUREBLT
+	if ok == 0 {                                                                                                                       // some drivers refuse CAPTUREBLT: plain copy
+		ok, _, _ = rpStretchBlt.Call(c.memDC, 0, 0, uintptr(tw), uintptr(th), scr, 0, 0, uintptr(sw), uintptr(sh), 0x00CC0020)
+	}
+	if ok == 0 {
+		rpSelectObject.Call(c.memDC, old)
+		return nil, 0, 0, errors.New("Windows refused to copy the screen (a security prompt or the lock screen may be showing)")
+	}
 	c.drawCursor(sw, sh, tw, th)
 	rpSelectObject.Call(c.memDC, old)
 
@@ -146,7 +163,7 @@ func (c *winCap) grab(q rQuality) ([]byte, int, int, error) {
 	binary.LittleEndian.PutUint16(bi[12:], 1)
 	binary.LittleEndian.PutUint16(bi[14:], 32)
 	if r, _, _ := rpGetDIBits.Call(c.memDC, c.bmp, 0, uintptr(th), uintptr(unsafe.Pointer(&c.buf[0])), uintptr(unsafe.Pointer(&bi[0])), 0); r == 0 {
-		return nil, 0, 0, nil
+		return nil, 0, 0, errors.New("could not read the captured screen")
 	}
 	// skip unchanged screens (but refresh every 2 s)
 	h := fnv.New64a()

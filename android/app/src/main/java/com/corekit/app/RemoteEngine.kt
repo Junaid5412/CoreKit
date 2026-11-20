@@ -103,13 +103,24 @@ object RemoteEngine {
         }
     }
 
-    /** Event stream for the page (glue = false) or for RemoteService (glue = true). */
-    fun events(ctx: Context, glue: Boolean): InputStream? {
+    /** Event stream for the page (glue = false) or for RemoteService (glue = true).
+     *  lite: screen frames come as a small notice; the picture is fetched with [lastFrame]. */
+    fun events(ctx: Context, glue: Boolean, lite: Boolean = false): InputStream? {
         if (!ensure(ctx)) return null
         return try {
-            val c = open(if (glue) "glue" else "events")
+            val c = open(if (glue) "glue" else if (lite) "events?lite=1" else "events")
             c.readTimeout = 0
             c.inputStream
+        } catch (_: Throwable) { null }
+    }
+
+    /** The newest picture received from the other device (JPEG), or null. */
+    fun lastFrame(): ByteArray? {
+        if (port == 0) return null
+        return try {
+            val c = open("lastframe"); c.readTimeout = 4000
+            val b = if (c.responseCode == 200) c.inputStream.use { it.readBytes() } else null
+            c.disconnect(); b
         } catch (_: Throwable) { null }
     }
 
