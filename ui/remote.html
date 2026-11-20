@@ -325,7 +325,7 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke
 
 <!-- viewer -->
 <div id="viewer">
-  <div id="stageV"><div id="zoomer"><canvas id="scr" tabindex="0"></canvas></div><div id="vwait"><div><div class="sp"></div>Waiting for the screen…</div></div></div>
+  <div id="stageV"><div id="zoomer"><canvas id="scr" tabindex="0"></canvas></div><div id="vwait"><div style="max-width:420px;padding:0 20px"><div class="sp"></div><div id="vwT">Waiting for the screen…</div><div id="vwD" style="font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.5"></div><button class="btn hidden" id="vwR" style="margin-top:14px;pointer-events:auto">Try again</button></div></div></div>
   <div class="edge" id="edge"></div>
   <div class="tbar" id="tbar">
     <div class="who"><span class="pi" id="vIc"></span><div style="min-width:0"><b id="vName"></b><small><i></i><span id="vStat">Connecting</span></small></div></div>
@@ -461,6 +461,7 @@ function renderShare() {
     c.innerHTML = `<div class="ch"><span class="ci" style="background:#2a1215;color:#fca5a5">${svg('share')}</span><div><h2>Sharing this ${word}</h2><div class="cs">You can stop at any time</div></div></div>
       <div class="big"><span class="av">${svg(s.peer.plat)}</span><div style="min-width:0"><h3>${esc(s.peer.name || 'A device')} is controlling this ${word}</h3><div class="tm" id="sessT">00:00</div></div></div>
       ${!s.ctl ? `<div class="err" style="background:#1a160b;border-color:#4a3a14;color:#f3dfa6">View only: turn on Remote control below so ${esc(s.peer.name)} can tap and type.</div>` : ''}
+      ${s.capErr ? `<div class="err">Can't capture the screen: ${esc(s.capErr)}</div>` : `<div class="cs" style="margin:-4px 0 12px">${s.tx > 0 ? 'Sending your screen' : 'Starting screen capture…'}</div>`}
       ${ANDROID ? checksHTML(true) : ''}
       <div class="row"><button class="btn" data-a="voice">${svg('phone')}Voice call</button><button class="btn" data-a="video">${svg('video')}Video call</button></div>
       <div class="row" style="margin-top:10px"><button class="btn dng" data-a="end">${svg('stop')}Stop session</button></div>`;
@@ -602,8 +603,8 @@ function openViewer(s) {
   $('#vo').classList.toggle('show', !s.ctl);
   if (s.quality) quality = s.quality;
   if (viewerOpen) return;
-  viewerOpen = true; haveFrame = false; zoom = 1; panX = panY = 0; applyZoom();
-  $('#viewer').classList.add('show'); $('#vwait').classList.remove('hidden');
+  viewerOpen = true; haveFrame = false; zoom = 1; panX = panY = 0; applyZoom(); framesIn = 0; frameFails = 0; viewOpenedAt = Date.now();
+  $('#viewer').classList.add('show'); $('#vwait').classList.remove('hidden'); waitInfo();
   if (s.w && s.h) { cv.width = s.w; cv.height = s.h; layout(); }
   if (!TOUCH) setTimeout(() => cv.focus(), 50);
   showBar();
@@ -619,6 +620,24 @@ function keepAlive() {
   const on = viewerOpen || !!call;
   try { N.sessionKeep(JSON.stringify({on, peer: peerName(), viewing: viewerOpen, call: !!call, video: !!(call && call.video)})); } catch (e) {}
 }
+// what the viewer knows while no picture is shown yet (instead of an empty screen)
+let viewOpenedAt = 0;
+function waitInfo() {
+  if (!viewerOpen || haveFrame) return;
+  const s = S.session || {}, secs = (Date.now() - viewOpenedAt) / 1000, who = esc((s.peer && s.peer.name) || 'the other device');
+  let t = 'Waiting for the screen…', d = '', retry = false;
+  if (secs > 4) {
+    if (s.rx > 0 && framesIn === 0) { t = 'The screen is arriving but can\'t be shown'; d = `This ${devWord(myPlat())} received ${s.rx} picture${s.rx > 1 ? 's' : ''} from ${who}. Tap Try again.`; retry = true; }
+    else if (s.rx > 0) { t = 'The screen is arriving but can\'t be shown'; d = 'The pictures could not be decoded. Tap Try again.'; retry = true; }
+    else { t = `${who} hasn't sent its screen yet`; d = (peerPlat === 'android' ? `On ${who}, tap Start now when Android asks to share the screen.` : `On ${who}, make sure the screen is on and not locked, and that CoreKit is up to date (Remote Access › Share this PC).`) + (secs > 12 ? ' If nothing changes, end the session and connect again.' : ''); }
+  }
+  $('#vwT').textContent = t; $('#vwD').innerHTML = d; $('#vwR').classList.toggle('hidden', !retry);
+  setTimeout(waitInfo, 1000);
+}
+$('#vwR').addEventListener('click', () => {
+  if (ANDROID && N.remoteLite) { try { N.remoteLite(false); N.remoteLite(true); } catch (e) {} }
+  cmd({t:'quality', q: quality}); viewOpenedAt = Date.now(); toast('Trying again…');
+});
 function endViewer() {
   if (!viewerOpen) return;
   if (rec) recStop();
@@ -629,16 +648,24 @@ function endViewer() {
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   connBusy = false; renderConn();
 }
+let frameFails = 0, framesIn = 0;
 function drawFrame(m) {
   if (!viewerOpen) return;
+  framesIn++;
   pendingFrame = m;
   if (decoding) return;
   decoding = true;
   (async () => {
     while (pendingFrame) {
       const f = pendingFrame; pendingFrame = null;
-      const img = new Image(); img.src = 'data:image/jpeg;base64,' + f.d;
-      try { await img.decode(); } catch (e) { continue; }
+      const img = new Image();
+      // Android: a small notice; the picture itself is fetched as a JPEG (much lighter than text)
+      img.src = f.d ? 'data:image/jpeg;base64,' + f.d : API + 'remote/frame.jpg?s=' + (f.seq || Date.now());
+      try { await img.decode(); frameFails = 0; }
+      catch (e) {
+        if (!f.d && ++frameFails >= 3 && ANDROID && N.remoteLite) { try { N.remoteLite(false); } catch (x) {} frameFails = 0; }
+        continue;
+      }
       if (cv.width !== f.w || cv.height !== f.h) { cv.width = f.w; cv.height = f.h; layout(); }
       cx.drawImage(img, 0, 0); frames++;
       if (!haveFrame) { haveFrame = true; $('#vwait').classList.add('hidden'); layout(); }

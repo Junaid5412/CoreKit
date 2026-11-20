@@ -119,6 +119,8 @@ type rSession struct {
 	ctl      bool // the shared side can take input
 	quality  atomic.Value
 	inflight atomic.Int32
+	tx, rx   atomic.Int64 // pictures sent (shared) / received (viewer)
+	capErr   atomic.Value // shared: why the screen can't be captured (string)
 	done     chan struct{}
 	once     sync.Once
 }
@@ -136,6 +138,7 @@ type rSub struct {
 	ch    chan []byte   // control events
 	frame atomic.Value  // latest frame event ([]byte), newer replaces older
 	kick  chan struct{} // a new frame is waiting
+	lite  bool          // frames as a small notice; the picture itself is fetched from "lastframe"
 }
 
 type rEngine struct {
@@ -158,6 +161,9 @@ type rEngine struct {
 	gFrame    []byte // Android: latest captured JPEG from the glue
 	gW, gH    int
 	gSeq      uint64
+	vFrame    []byte // viewer: the latest picture received from the other device
+	vW, vH    int
+	vSeq      uint64
 	inputs    []map[string]any // test builds: injected input
 	shutdownd bool
 }
@@ -181,8 +187,10 @@ func randID() string { b := make([]byte, 6); rand.Read(b); return hex.EncodeToSt
 
 // ---------------------------------------------------------------- events
 
-func (e *rEngine) subscribe(glue bool) *rSub {
-	s := &rSub{ch: make(chan []byte, 128), kick: make(chan struct{}, 1)}
+func (e *rEngine) subscribe(glue bool) *rSub { return e.subscribeAs(glue, false) }
+
+func (e *rEngine) subscribeAs(glue, lite bool) *rSub {
+	s := &rSub{ch: make(chan []byte, 128), kick: make(chan struct{}, 1), lite: lite}
 	e.mu.Lock()
 	if glue {
 		e.glue[s] = true
@@ -224,9 +232,22 @@ func (e *rEngine) emitGlue(v any) {
 }
 
 func (e *rEngine) emitFrame(w, h int, jpg []byte) {
-	b, _ := json.Marshal(map[string]any{"t": "frame", "w": w, "h": h, "d": base64.StdEncoding.EncodeToString(jpg)})
 	e.mu.Lock()
+	e.vFrame, e.vW, e.vH = jpg, w, h
+	e.vSeq++
+	seq := e.vSeq
+	var full, lite []byte
 	for s := range e.subs {
+		b := full
+		if s.lite {
+			if lite == nil {
+				lite, _ = json.Marshal(map[string]any{"t": "frame", "w": w, "h": h, "seq": seq})
+			}
+			b = lite
+		} else if b == nil {
+			full, _ = json.Marshal(map[string]any{"t": "frame", "w": w, "h": h, "seq": seq, "d": base64.StdEncoding.EncodeToString(jpg)})
+			b = full
+		}
 		s.frame.Store(b)
 		select {
 		case s.kick <- struct{}{}:
@@ -249,7 +270,8 @@ func (e *rEngine) stateLocked() map[string]any {
 		st["pending"] = map[string]any{"id": e.pending.id, "peer": e.pending.peer}
 	}
 	if s := e.sess; s != nil {
-		st["session"] = map[string]any{"role": s.role, "peer": s.peer, "since": s.since.Unix(), "w": s.w, "h": s.h, "ctl": s.ctl, "quality": s.quality.Load()}
+		ce, _ := s.capErr.Load().(string)
+		st["session"] = map[string]any{"role": s.role, "peer": s.peer, "since": s.since.Unix(), "w": s.w, "h": s.h, "ctl": s.ctl, "quality": s.quality.Load(), "tx": s.tx.Load(), "rx": s.rx.Load(), "capErr": ce}
 	}
 	return st
 }
@@ -522,13 +544,28 @@ func (e *rEngine) captureLoop(s *rSession) {
 		}
 		start := time.Now()
 		jpg, w, h, err := cap.grab(qs)
-		if err == nil && jpg != nil {
+		if err != nil {
+			if old, _ := s.capErr.Load().(string); old != err.Error() {
+				s.capErr.Store(err.Error())
+				logLine("!", "Remote: screen capture: "+err.Error())
+				e.sendState()
+			}
+			time.Sleep(400 * time.Millisecond)
+			continue
+		}
+		if jpg != nil {
 			hdr := make([]byte, 8)
 			binary.BigEndian.PutUint32(hdr, uint32(w))
 			binary.BigEndian.PutUint32(hdr[4:], uint32(h))
 			s.inflight.Add(1)
 			if s.link.send('F', append(hdr, jpg...)) != nil {
 				return
+			}
+			if s.tx.Add(1) == 1 {
+				logLine("+", fmt.Sprintf("Remote: sending the screen (%dx%d)", w, h))
+			}
+			if old, _ := s.capErr.Load().(string); old != "" {
+				s.capErr.Store("")
 			}
 		}
 		if d := qs.every - time.Since(start); d > 0 {
@@ -869,8 +906,8 @@ func (e *rEngine) cancelConnect() {
 
 func (e *rEngine) readLoop(s *rSession) {
 	why := ""
-	go func() { // keep-alive
-		t := time.NewTicker(5 * time.Second)
+	go func() { // keep-alive, and fresh counters for the pages
+		t := time.NewTicker(3 * time.Second)
 		defer t.Stop()
 		for {
 			select {
@@ -880,6 +917,7 @@ func (e *rEngine) readLoop(s *rSession) {
 				if s.link.send('P', nil) != nil {
 					return
 				}
+				e.sendState()
 			}
 		}
 	}()
@@ -896,6 +934,7 @@ func (e *rEngine) readLoop(s *rSession) {
 			if len(b) > 8 && s.role == "viewer" {
 				w, h := int(binary.BigEndian.Uint32(b)), int(binary.BigEndian.Uint32(b[4:]))
 				s.link.send('A', nil)
+				s.rx.Add(1)
 				e.mu.Lock()
 				if s.w != w || s.h != h {
 					s.w, s.h = w, h
@@ -946,6 +985,7 @@ func (e *rEngine) readLoop(s *rSession) {
 	e.mu.Lock()
 	if e.sess == s {
 		e.sess = nil
+		e.vFrame = nil
 	}
 	e.mu.Unlock()
 	e.emit(map[string]any{"t": "bye", "why": why})
@@ -1058,6 +1098,25 @@ func mountRemote(mux *http.ServeMux, prefix string, auth func(*http.Request) boo
 			serveEvents(w, r, false)
 		}
 	})
+	mux.HandleFunc(prefix+"lastframe", func(w http.ResponseWriter, r *http.Request) { // the newest picture, as a plain JPEG
+		if !ok(w, r) {
+			return
+		}
+		rEng.mu.Lock()
+		f, fw, fh, seq := rEng.vFrame, rEng.vW, rEng.vH, rEng.vSeq
+		rEng.mu.Unlock()
+		w.Header().Set("Cache-Control", "no-store")
+		if len(f) == 0 {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "image/jpeg")
+		w.Header().Set("X-W", strconv.Itoa(fw))
+		w.Header().Set("X-H", strconv.Itoa(fh))
+		w.Header().Set("X-Seq", strconv.FormatUint(seq, 10))
+		w.Header().Set("Content-Length", strconv.Itoa(len(f)))
+		w.Write(f)
+	})
 	mux.HandleFunc(prefix+"glue", func(w http.ResponseWriter, r *http.Request) {
 		if ok(w, r) {
 			serveEvents(w, r, true)
@@ -1112,7 +1171,7 @@ func serveEvents(w http.ResponseWriter, r *http.Request, glue bool) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Accel-Buffering", "no")
-	s := rEng.subscribe(glue)
+	s := rEng.subscribeAs(glue, r.URL.Query().Get("lite") == "1")
 	defer rEng.unsubscribe(s)
 	write := func(b []byte) bool {
 		if _, err := fmt.Fprintf(w, "data: %s\n\n", b); err != nil {

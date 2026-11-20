@@ -107,6 +107,9 @@ class Host(private val act: MainActivity, private val web: WebView) {
         "sec/scan" -> stream { out ->
             out.event("done", SecurityScanner.scan(act) { pct, label -> out.event("progress", JSONObject().put("pct", pct).put("label", label)) })
         }
+        "remote/frame.jpg" -> RemoteEngine.lastFrame()?.let {
+            WebResourceResponse("image/jpeg", null, 200, "OK", mapOf("Cache-Control" to "no-store"), java.io.ByteArrayInputStream(it))
+        } ?: text("", 204)
         "remote/events" -> RemoteEngine.events(act, false)?.let {
             WebResourceResponse("text/event-stream", "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"), it)
         } ?: text("The Remote Access engine could not start.", 503)
@@ -117,6 +120,8 @@ class Host(private val act: MainActivity, private val web: WebView) {
 
     @Volatile private var remoteThread: Thread? = null
     @Volatile private var stopped = false
+    @Volatile private var liteFrames = true // pictures fetched as images (false: inside the event, as before)
+    @Volatile private var pushStream: java.io.InputStream? = null
     private val framePending = AtomicBoolean(false)
     @Volatile private var nextFrame: String? = null
 
@@ -124,8 +129,9 @@ class Host(private val act: MainActivity, private val web: WebView) {
         if (remoteThread?.isAlive == true) return
         remoteThread = Thread {
             while (!stopped) {
-                val s = RemoteEngine.events(act, false)
+                val s = RemoteEngine.events(act, false, liteFrames)
                 if (s == null) { Thread.sleep(1000); continue }
+                pushStream = s
                 try {
                     s.bufferedReader().forEachLine { line ->
                         if (stopped) throw InterruptedException()
@@ -138,7 +144,7 @@ class Host(private val act: MainActivity, private val web: WebView) {
     }
 
     private fun deliver(json: String) {
-        if (json.startsWith("{\"d\":")) { // a screen frame: only the newest matters
+        if (json.startsWith("{\"d\":") || json.contains("\"t\":\"frame\"")) { // a screen frame: only the newest matters
             nextFrame = json
             if (framePending.compareAndSet(false, true)) act.runOnUiThread { pushFrame() }
             return
@@ -314,6 +320,13 @@ class Host(private val act: MainActivity, private val web: WebView) {
         @JavascriptInterface fun remoteAttach() = startRemotePush()
 
         @JavascriptInterface fun remoteState(): String = RemoteEngine.state()
+
+        /** Viewer: switch how pictures reach the page (true: fetched as images; false: inside the event). */
+        @JavascriptInterface fun remoteLite(on: Boolean) {
+            if (liteFrames == on) return
+            liteFrames = on
+            try { pushStream?.close() } catch (_: Throwable) {} // the push thread reconnects in the new mode
+        }
 
         /** Remote Access: commands to the engine. "Start sharing" first asks Android for screen capture. */
         @JavascriptInterface fun remote(json: String) {
