@@ -303,6 +303,48 @@ object SecurityScanner {
         return out
     }
 
+    // ---------------------------------------------------------------- every app (the "All apps" tab)
+
+    private fun sourceOf(x: Ctx, pi: PackageInfo): Pair<String, Boolean> {
+        val ai = pi.applicationInfo ?: return "Unknown" to false
+        if ((ai.flags and ApplicationInfo.FLAG_SYSTEM) != 0 && (ai.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) == 0) return "Pre-installed" to false
+        val (inst, init) = installer(x, pi.packageName)
+        STORES[inst]?.let { return it to false }
+        if ((ai.flags and ApplicationInfo.FLAG_SYSTEM) != 0) return "Pre-installed (updated)" to false
+        return ("Outside app store · " + (SIDELOADERS[inst] ?: SIDELOADERS[init] ?: inst.ifEmpty { "unknown source" })) to true
+    }
+
+    private fun appsList(x: Ctx, all: List<PackageInfo>, findings: List<JSONObject>): JSONArray {
+        val byPkg = findings.filter { it.optString("pkg").isNotEmpty() }.associateBy { it.optString("pkg") }
+        val rows = ArrayList<JSONObject>()
+        for (pi in all) {
+            val ai = pi.applicationInfo ?: continue
+            val pkg = pi.packageName
+            val system = (ai.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            val (src, side) = sourceOf(x, pi)
+            val flags = JSONArray()
+            if (x.a11y.contains("$pkg/")) flags.put("Accessibility")
+            if (pkg in x.admins) flags.put("Device admin")
+            if (x.notif.contains("$pkg/")) flags.put("Reads notifications")
+            if (x.sms == pkg) flags.put("SMS app")
+            if (granted(pi, "android.permission.READ_SMS")) flags.put("SMS")
+            if (granted(pi, "android.permission.RECORD_AUDIO")) flags.put("Microphone")
+            if (granted(pi, "android.permission.CAMERA")) flags.put("Camera")
+            if (granted(pi, "android.permission.ACCESS_FINE_LOCATION")) flags.put("Location")
+            if (!system && pkg !in x.launchable) flags.put("No icon")
+            val f = byPkg[pkg]
+            val r = JSONObject().put("name", label(x, ai)).put("pkg", pkg).put("kind", if (system) "system" else "user").put("source", src).put("side", side)
+                .put("version", pi.versionName ?: "").put("size", try { File(ai.sourceDir).length() } catch (_: Throwable) { 0L })
+                .put("first", pi.firstInstallTime / 1000).put("last", pi.lastUpdateTime / 1000).put("flags", flags)
+                .put("enabled", ai.enabled).put("canRemove", !system)
+            if (f != null) r.put("sev", f.optString("sev")).put("score", f.optInt("score")).put("fid", f.optString("id"))
+            rows.add(r)
+        }
+        rows.sortBy { it.optString("name").lowercase() }
+        rows.forEachIndexed { i, r -> r.put("id", "p${i + 1}") }
+        return JSONArray(rows)
+    }
+
     // ---------------------------------------------------------------- MalwareBazaar
 
     fun lookup(key: String, hashes: List<String>): Pair<Map<String, JSONObject>, String> {
@@ -388,7 +430,7 @@ object SecurityScanner {
             .put("host", "${Build.MANUFACTURER.replaceFirstChar { it.uppercase() }} ${Build.MODEL}").put("os", "Android ${Build.VERSION.RELEASE}")
             .put("admin", true).put("score", score).put("verdict", verdict).put("counts", counts)
             .put("scanned", JSONObject().put("apps", all.size).put("files", toHash.size).put("lookups", intel.size).put("processes", 0).put("autoruns", 0).put("connections", 0))
-            .put("protection", prot).put("findings", JSONArray(list)).put("bloat", bloat(x)).put("notes", notes)
+            .put("protection", prot).put("findings", JSONArray(list)).put("bloat", bloat(x)).put("apps", appsList(x, all, list)).put("notes", notes)
             .put("intel", intelState).put("ms", System.currentTimeMillis() - t0)
         last = res
         val p = prefs(c)

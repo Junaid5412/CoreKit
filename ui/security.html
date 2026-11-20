@@ -344,6 +344,26 @@ const KIND = ANDROID
 /* ---------- state ---------- */
 let RES = null, HIST = null, SET = null, ASR = [], tab = 'overview', fsev = 'all', scanning = false, CUR = null;
 const DONE = new Set();
+let AQ = '', AF = ANDROID ? 'user' : 'all', AS = 'name', AFOCUS = false;
+const PENDING = {}; // Android: finding id -> package waiting for the user to confirm the uninstall
+async function checkPending() {
+  for (const [id, pkg] of Object.entries(PENDING)) {
+    const app = id.startsWith('app:') && RES ? RES.apps.find(a => a.id === id.slice(4)) : null;
+    const fid = app ? app.fid || '' : id;
+    const r = await call('installed', {id: fid, pkg, name: app ? app.name : ''});
+    if (r.installed === false) {
+      delete PENDING[id];
+      if (app) app.gone = true;
+      if (fid) DONE.add(fid);
+      if (RES && !app) { const a = (RES.apps || []).find(x => x.pkg === pkg); if (a) a.gone = true; }
+      toast('Uninstalled'); drawNav(); render(); if (CUR && CUR.id === fid) open(fid);
+    }
+  }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) setTimeout(checkPending, 400); });
+window.addEventListener('focus', () => setTimeout(checkPending, 400));
+window.__ckResume = () => setTimeout(checkPending, 300);
+setInterval(() => { if (Object.keys(PENDING).length) checkPending(); }, 2500);
 
 /* ---------- host calls ---------- */
 let seq = 0; const waits = {};
@@ -367,6 +387,7 @@ function tabs() {
   return [
     ['overview', 'Overview', 'home', ''],
     ['threats', ANDROID ? 'Findings' : 'Threats', 'threat', open ? String(open) : '', hi > 0],
+    ['apps', 'All apps', 'list', RES && RES.apps ? String(RES.apps.filter(a => !a.gone).length) : ''],
     ['bloat', 'Bloatware', 'box', RES && RES.bloat ? String(RES.bloat.filter(b => b.rating === 'remove' && b.on).length || '') : ''],
     ['shield', 'Live Shield', 'radar', ''],
     ['history', 'History', 'clock', ''],
@@ -383,6 +404,7 @@ document.addEventListener('click', e => {
   const t = e.target.closest('[data-tab]'); if (t) { go(t.dataset.tab); return; }
   const a = e.target.closest('[data-a]'); if (a) { act(a.dataset.a, a.dataset, a); return; }
   const f = e.target.closest('.fr[data-id]'); if (f) open(f.dataset.id);
+  const ar = e.target.closest('.ar[data-fid]'); if (ar && ar.dataset.fid) open(ar.dataset.fid);
 });
 $('#back').addEventListener('click', () => { if ($('#drawer').classList.contains('show')) return closeDrawer(); if (N && N.go) N.go('home'); else history.back(); });
 $('#dim').addEventListener('click', closeDrawer);
@@ -428,6 +450,7 @@ function render() {
   if (tab === 'overview') el.innerHTML = overview();
   else if (tab === 'threats') el.innerHTML = threats();
   else if (tab === 'bloat') el.innerHTML = bloat();
+  else if (tab === 'apps') { el.innerHTML = appsTab(); const q = $('#aq'); if (q) { q.value = AQ; q.oninput = () => { AQ = q.value; $('#alist').innerHTML = appRows(); }; if (AFOCUS) { q.focus(); AFOCUS = false; } } }
 }
 
 function welcome() {
@@ -565,6 +588,10 @@ async function act(a, d, el) {
     case 'untrust': return untrust(d.v);
     case 'mclose': return closeModal();
     case 'report1': return exportRecord(d.id);
+    case 'af': AF = d.v; return render();
+    case 'as': AS = d.v; return render();
+    case 'app': return appAct(d.id, d.act);
+    case 'appopen': return open(d.id);
   }
 }
 
@@ -591,6 +618,8 @@ async function doFix(f, a) {
   toast('Working…');
   const r = await call('fix', {id: f.id, action: a.id});
   if (r.error) return toast(r.error, true);
+  if (r.pending) { PENDING[f.id] = r.pending; toast(r.msg); return; }
+  if (r.gone) { DONE.add(f.id); toast(r.msg); drawNav(); render(); return; }
   if (r.ok || (r.record && r.record.done && r.record.done.length)) {
     if (a.id !== 'appinfo' && !a.id.startsWith('settings')) DONE.add(f.id);
     toast(r.msg || 'Done', !r.ok);
@@ -638,6 +667,62 @@ function harden(ids, title, lines) {
   if (!title) return run();
   modal(`<h3>${esc(title)}</h3><ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul><div class="row"><button class="btn" data-a="mclose">Cancel</button><button class="btn pri" id="mgo">Turn on</button></div>`);
   $('#mgo').onclick = () => { closeModal(); run(); };
+}
+
+/* ---------- all apps ---------- */
+function appList() {
+  const q = AQ.trim().toLowerCase();
+  let l = (RES.apps || []).filter(a => {
+    if (ANDROID) { if (AF === 'user' && a.kind !== 'user') return false; if (AF === 'side' && !a.side) return false; if (AF === 'system' && a.kind !== 'system') return false; if (AF === 'risk' && !a.sev) return false; }
+    else { if (AF === 'program' && a.kind !== 'program') return false; if (AF === 'store' && a.kind !== 'store') return false; if (AF === 'bloat' && a.rating !== 'remove') return false; }
+    return !q || (a.name + ' ' + (a.pkg || '') + ' ' + (a.publisher || '') + ' ' + (a.source || '')).toLowerCase().includes(q);
+  });
+  const rk = a => a.gone ? -1 : a.score || (a.side ? 1 : 0);
+  if (AS === 'risk') l.sort((a, b) => rk(b) - rk(a) || a.name.localeCompare(b.name));
+  else if (AS === 'new') l.sort((a, b) => (b.first || 0) - (a.first || 0));
+  else if (AS === 'size') l.sort((a, b) => (b.size || 0) - (a.size || 0));
+  return l;
+}
+function appRows() {
+  const l = appList();
+  if (!l.length) return `<div class="empty" style="padding:30px">No apps match.</div>`;
+  return l.map(a => {
+    const col = ['#2dd4bf', '#60a5fa', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#22d3ee', '#f87171'][[...a.name].reduce((s, c) => s + c.charCodeAt(0), 0) % 8];
+    const risk = a.sev ? `<span class="tag ${a.sev === 'high' ? 'red' : a.sev === 'med' ? 'amber' : 'blue'}">${SEV[a.sev]} · ${a.score}</span>` : a.rating === 'remove' ? '<span class="tag amber">Bloatware</span>' : '';
+    const meta = [a.source, a.version ? 'v' + a.version : '', size(a.size), a.first ? (ANDROID ? 'installed ' : '') + ago(a.first) : ''].filter(Boolean).join(' · ');
+    let btn = '';
+    if (a.gone) btn = '<span class="tag green">Removed</span>';
+    else if (PENDING['app:' + a.id]) btn = '<span class="tag">Waiting…</span>';
+    else if (a.canRemove) btn = `<button class="btn sm" data-a="app" data-id="${a.id}" data-act="uninstall">${svg('trash')}${a.kind === 'store' ? 'Remove' : 'Uninstall'}</button>`;
+    else if (ANDROID) btn = `<button class="btn sm" data-a="app" data-id="${a.id}" data-act="appinfo">Disable…</button>`;
+    return `<div class="br ar${a.gone ? ' gone' : ''}" data-fid="${a.fid || ''}" style="${a.fid ? 'cursor:pointer' : ''}"><span class="ki" style="background:${col}22;color:${col};font-weight:700;font-size:15px">${esc((a.name || '?').trim().charAt(0).toUpperCase())}</span><div style="min-width:0"><div class="ti">${esc(a.name)} ${risk}</div><div class="su">${esc(meta)}</div>${a.pkg || a.publisher ? `<div class="su mono" style="font-size:11.5px;overflow-wrap:anywhere">${esc(a.pkg || a.publisher)}</div>` : ''}${a.flags && a.flags.length ? `<div style="margin-top:4px">${a.flags.map(f => `<span class="tag${/Accessibility|admin|notifications|SMS|No icon/.test(f) ? ' amber' : ''}">${esc(f)}</span>`).join('')}</div>` : ''}</div>${btn}</div>`;
+  }).join('');
+}
+function appsTab() {
+  const A = RES.apps || [];
+  const n = f => A.filter(f).length;
+  const F = ANDROID
+    ? [['user', 'Installed by you', n(a => a.kind === 'user')], ['side', 'Outside app stores', n(a => a.side)], ['risk', 'Flagged', n(a => a.sev)], ['system', 'Pre-installed', n(a => a.kind === 'system')], ['all', 'All', A.length]]
+    : [['all', 'All', A.length], ['program', 'Programs', n(a => a.kind === 'program')], ['store', 'Store apps', n(a => a.kind === 'store')], ['bloat', 'Bloatware', n(a => a.rating === 'remove')]];
+  return `<h1>All apps</h1><p class="lead">Every ${ANDROID ? 'app on this phone' : 'program and Store app on this PC'}, where it came from and its risk. ${ANDROID ? 'Tap a flagged app to see why.' : ''}</p>
+    <div class="form" style="margin-top:14px;padding:12px"><input id="aq" type="search" placeholder="Search by name${ANDROID ? ', package' : ', publisher'}…" style="font-family:var(--font)"></div>
+    <div class="fbar" style="margin-top:12px">${F.map(([k, t, c]) => `<button class="chip${AF === k ? ' on' : ''}" data-a="af" data-v="${k}">${t} · ${c}</button>`).join('')}<span class="grow"></span>
+    <select onchange="AS=this.value;render()" style="height:30px;border-radius:9px;border:1px solid var(--line2);background:#121b26;padding:0 8px">${[['name', 'Name'], ['risk', 'Risk'], ['new', 'Newest'], ['size', 'Size']].map(([v, t]) => `<option value="${v}"${AS === v ? ' selected' : ''}>Sort: ${t}</option>`).join('')}</select></div>
+    <div class="card" id="alist">${appRows()}</div>`;
+}
+async function appAct(id, how) {
+  const a = (RES.apps || []).find(x => x.id === id); if (!a) return;
+  const go = async () => {
+    toast('Working…');
+    const r = await call('app', ANDROID ? {pkg: a.pkg, action: how} : {id});
+    if (r.error) return toast(r.error, true);
+    if (r.pending) PENDING['app:' + a.id] = r.pending;
+    if (r.gone) { a.gone = true; if (a.fid) DONE.add(a.fid); }
+    toast(r.msg || 'Done'); drawNav(); render();
+  };
+  if (ANDROID) return go();
+  modal(`<h3>${a.kind === 'store' ? 'Remove' : 'Uninstall'} ${esc(a.name)}?</h3><p>${a.kind === 'store' ? 'It is removed for your account. You can reinstall it from the Microsoft Store.' : 'Its own uninstaller opens: follow the steps on screen.'}</p><div class="row"><button class="btn" data-a="mclose">Cancel</button><button class="btn danger" id="mgo">${a.kind === 'store' ? 'Remove' : 'Uninstall'}</button></div>`);
+  $('#mgo').onclick = () => { closeModal(); go(); };
 }
 
 /* ---------- bloatware ---------- */

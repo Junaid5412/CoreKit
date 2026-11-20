@@ -357,7 +357,7 @@ $appx = New-Object System.Collections.ArrayList
 foreach ($a in (Get-AppxPackage)) {
     if ($a.IsFramework -or $a.IsResourcePackage -or (S $a.SignatureKind) -eq 'System') { continue }
     $pub = ''; if ((S $a.Publisher) -match 'CN=([^,]+)') { $pub = $Matches[1] }
-    [void]$appx.Add([ordered]@{ name = (S $a.Name); id = (S $a.PackageFamilyName); publisher = $pub; size = 0; uninstall = (S $a.PackageFullName); removable = (-not $a.NonRemovable) })
+    [void]$appx.Add([ordered]@{ name = (S $a.Name); id = (S $a.PackageFamilyName); publisher = $pub; size = 0; uninstall = (S $a.PackageFullName); removable = (-not $a.NonRemovable); version = (S $a.Version); date = '' })
 }
 $programs = New-Object System.Collections.ArrayList
 $seenP = @{}
@@ -367,7 +367,7 @@ foreach ($k in @('HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*', 
         if (-not $n -or [int]$e.SystemComponent -eq 1 -or $seenP[$n]) { continue }
         $seenP[$n] = $true
         $un = S $e.QuietUninstallString; if (-not $un) { $un = S $e.UninstallString }
-        [void]$programs.Add([ordered]@{ name = $n; id = $e.PSChildName; publisher = (S $e.Publisher); size = ([int64]$e.EstimatedSize * 1024); uninstall = $un; removable = [bool]$un })
+        [void]$programs.Add([ordered]@{ name = $n; id = $e.PSChildName; publisher = (S $e.Publisher); size = ([int64]$e.EstimatedSize * 1024); uninstall = $un; removable = [bool]$un; version = (S $e.DisplayVersion); date = (S $e.InstallDate) })
     }
 }
 

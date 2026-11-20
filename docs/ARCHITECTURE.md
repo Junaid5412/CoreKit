@@ -41,7 +41,9 @@ The UIs never know which platform they run on. They talk to the host through:
   `CoreKitNative.secCall(id, path, body)` and replies through `window.__secReply(id, json)`.
   Paths: `fix {id, action}`, `fixall {ids}`, `history`, `undo {id}`, `restore {id}`, `qdelete {id}`,
   `settings` (GET; POST `{key}` / `{untrust:[]}`), `shield {on}`, `harden {ids}`, `asr`, `bloat {id}`,
-  `second {id}`, `open {what}` (Android settings screens).
+  `second {id}`, `app {id}` (Windows: uninstall from All apps) / `app {pkg, action}` (Android),
+  `installed {pkg, id, name}` (Android: checks the app is gone after Android's uninstall prompt),
+  `open {what}` (Android settings screens). Android needs REQUEST_DELETE_PACKAGES for the prompt.
   Result schema (`desktop/sec_rules.go` `secResult`, Android `SecurityScanner.kt`):
   `platform, t, host, os, admin, score (0-100, higher is safer), verdict (clean|attention|danger),
   counts{high,med,low,info}, scanned{processes,autoruns,files,connections,apps,lookups},
@@ -50,7 +52,9 @@ The UIs never know which platform they run on. They talk to the host through:
   reasons[{t,w}],path,sha256,size,signer,signed,company,origin{url,ref,zone,via,text},
   chain[{pid,name,path,cmd,t,sig}],persist[{kind,where,value}],net[{remote,port,state}],first,last,
   intel[{source,verdict,family,tags,link,first}],actions[{id,label,main}],advice,mitre[],pids[],pkg}],
-  bloat[{id,name,publisher,kind,rating(remove|optional|keep),why,size,action,on}], notes[], intel, ms`.
+  bloat[{id,name,publisher,kind,rating(remove|optional|keep),why,size,action,on}],
+  apps[{id,name,pkg,publisher,kind(program|store|user|system),source,side,version,size,first,last,sev,score,fid,rating,flags[],canRemove,enabled}],
+  notes[], intel, ms`.
   Windows collects with `desktop/scripts/security.ps1` and fixes with `security_fix.ps1` (everything
   removed is backed up for undo); Live Shield is `CoreKit.exe --shield`, started at sign-in by Task
   Scheduler from `Program Files\CoreKit`. Android's Live Shield is a periodic JobScheduler check of

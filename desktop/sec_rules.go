@@ -167,6 +167,31 @@ type rawApp struct {
 	Size      int64  `json:"size"`
 	Uninstall string `json:"uninstall"`
 	Removable bool   `json:"removable"`
+	Version   string `json:"version"`
+	Date      string `json:"date"` // yyyymmdd (programs)
+}
+
+// secApp is one row of the "All apps" list (every installed program or app).
+type secApp struct {
+	ID        string   `json:"id"`
+	Name      string   `json:"name"`
+	Pkg       string   `json:"pkg,omitempty"`
+	Publisher string   `json:"publisher,omitempty"`
+	Kind      string   `json:"kind"`   // program | store (Windows) · user | system (Android)
+	Source    string   `json:"source"` // where it came from, in words
+	Side      bool     `json:"side,omitempty"`
+	Version   string   `json:"version,omitempty"`
+	Size      int64    `json:"size,omitempty"`
+	First     int64    `json:"first,omitempty"`
+	Last      int64    `json:"last,omitempty"`
+	Sev       string   `json:"sev,omitempty"`   // from a finding about this app
+	Score     int      `json:"score,omitempty"` // from a finding about this app
+	FID       string   `json:"fid,omitempty"`   // that finding's id
+	Rating    string   `json:"rating,omitempty"`
+	Flags     []string `json:"flags,omitempty"`
+	CanRemove bool     `json:"canRemove"`
+	Enabled   bool     `json:"enabled"`
+	Key       string   `json:"-"`
 }
 
 // ---------------------------------------------------------------- shared result schema
@@ -184,6 +209,7 @@ type secResult struct {
 	Protection []secProt    `json:"protection"`
 	Findings   []secFinding `json:"findings"`
 	Bloat      []secBloat   `json:"bloat"`
+	Apps       []secApp     `json:"apps"`
 	Notes      []string     `json:"notes"`
 	Intel      string       `json:"intel"` // "on" | "off" | "error: ..."
 	Ms         int64        `json:"ms"`
@@ -1147,6 +1173,7 @@ func analyzeSec(r *rawSec, now int64, trusted func(string) bool, intel map[strin
 	}
 	res.Findings = out
 	res.Bloat = bloatOf(r)
+	res.Apps = appsOf(r, res.Bloat)
 	res.Score, res.Verdict = overall(res)
 	return res
 }
@@ -1679,4 +1706,65 @@ func shieldScore(ev shieldEvent) (int, []secReason, string) {
 		return s, rs, "warn"
 	}
 	return s, rs, ""
+}
+
+// appsOf lists every installed program and Store app for the "All apps" tab.
+func appsOf(r *rawSec, bloat []secBloat) []secApp {
+	rating := map[string]string{}
+	for _, b := range bloat {
+		if b.Kind != "startup" {
+			rating[lc(b.Name)] = b.Rating
+			rating[lc(strings.SplitN(b.Key, "|", 2)[0])] = b.Rating
+		}
+	}
+	out := []secApp{}
+	for _, a := range r.Programs {
+		d := int64(0)
+		if t, err := time.Parse("20060102", a.Date); err == nil {
+			d = t.Unix()
+		}
+		out = append(out, secApp{Name: a.Name, Publisher: a.Publisher, Kind: "program", Source: "Installed program", Version: a.Version, Size: a.Size, First: d,
+			Rating: firstNonEmpty(rating[lc(a.Name)], rating[lc(a.ID)]), CanRemove: a.Uninstall != "", Enabled: true, Key: a.ID + "|" + a.Uninstall})
+	}
+	for _, a := range r.Appx {
+		name := prettyAppx(a.Name)
+		for _, b := range winBloat {
+			if strings.HasPrefix(lc(a.ID), b.match) {
+				name = b.name
+				break
+			}
+		}
+		out = append(out, secApp{Name: name, Pkg: a.ID, Publisher: a.Publisher, Kind: "store", Source: "Microsoft Store app", Version: a.Version,
+			Rating: rating[lc(a.ID)], CanRemove: a.Removable, Enabled: true, Key: a.ID + "|" + a.Uninstall})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return lc(out[i].Name) < lc(out[j].Name) })
+	for i := range out {
+		out[i].ID = fmt.Sprintf("p%d", i+1)
+	}
+	return out
+}
+
+func firstNonEmpty(a ...string) string {
+	for _, x := range a {
+		if x != "" {
+			return x
+		}
+	}
+	return ""
+}
+
+// prettyAppx turns a package name into words: Microsoft.WindowsCalculator -> Windows Calculator.
+func prettyAppx(n string) string {
+	if i := strings.LastIndex(n, "."); i >= 0 && i < len(n)-1 {
+		n = n[i+1:]
+	}
+	var b strings.Builder
+	rs := []rune(n)
+	for i, r := range rs {
+		if i > 0 && r >= 'A' && r <= 'Z' && ((rs[i-1] >= 'a' && rs[i-1] <= 'z') || (i+1 < len(rs) && rs[i+1] >= 'a' && rs[i+1] <= 'z' && rs[i-1] >= 'A' && rs[i-1] <= 'Z')) {
+			b.WriteRune(' ')
+		}
+		b.WriteRune(r)
+	}
+	return strings.TrimSpace(b.String())
 }
