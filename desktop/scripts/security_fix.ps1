@@ -245,7 +245,7 @@ try {
         'defender-remove' { Remove-MpThreat; Done 'Windows Defender removed the active threats' }
 
         'protstatus' {
-            $ids = @($q.ids); if (-not $ids.Count) { $ids = @('rtp', 'sigs', 'tamper', 'pua', 'netprot', 'cfa', 'cloud', 'asr', 'firewall', 'smartscreen') }
+            $ids = @($q.ids | Where-Object { $_ }); if (-not $ids.Count) { $ids = @('rtp', 'sigs', 'tamper', 'pua', 'netprot', 'cfa', 'cloud', 'asr', 'firewall', 'smartscreen') }
             $out = @(); foreach ($id in $ids) { $o = Prot-State $id; $o.id = $id; $out += $o }
             DoneData 'Read from Windows just now' $out
         }
@@ -306,6 +306,10 @@ try {
         'fileinfo' {
             $p = [string]$q.path
             $o = [ordered]@{ exists = $false }
+            # the security module fails to autoload under 'Stop'; load it quietly once
+            $eap = $ErrorActionPreference; $ErrorActionPreference = 'SilentlyContinue'
+            Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue
+            $ErrorActionPreference = $eap
             if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) {
                 $o.exists = $true
                 $fi = Get-Item -LiteralPath $p -Force
@@ -318,8 +322,8 @@ try {
                 if ($z) { $o.zone = @($z | ForEach-Object { [string]$_ }) }
                 $vi = $fi.VersionInfo
                 if ($vi) { $o.ver = [ordered]@{ company = [string]$vi.CompanyName; product = [string]$vi.ProductName; desc = [string]$vi.FileDescription; version = [string]$vi.FileVersion; orig = [string]$vi.OriginalFilename; internal = [string]$vi.InternalName; copyright = [string]$vi.LegalCopyright } }
-                $sg = Get-AuthenticodeSignature -LiteralPath $p
-                $o.sig = [ordered]@{ status = [string]$sg.Status; subject = [string]$sg.SignerCertificate.Subject; issuer = [string]$sg.SignerCertificate.Issuer; thumb = [string]$sg.SignerCertificate.Thumbprint; from = $(if ($sg.SignerCertificate) { [int64]([DateTimeOffset]$sg.SignerCertificate.NotBefore.ToUniversalTime()).ToUnixTimeSeconds() } else { 0 }); to = $(if ($sg.SignerCertificate) { [int64]([DateTimeOffset]$sg.SignerCertificate.NotAfter.ToUniversalTime()).ToUnixTimeSeconds() } else { 0 }); stamped = $(if ($sg.TimeStamperCertificate) { [string]$sg.TimeStamperCertificate.Subject } else { '' }) }
+                $sg = $null; try { $sg = Get-AuthenticodeSignature -LiteralPath $p } catch {}
+                if ($sg) { $o.sig = [ordered]@{ status = [string]$sg.Status; subject = [string]$sg.SignerCertificate.Subject; issuer = [string]$sg.SignerCertificate.Issuer; thumb = [string]$sg.SignerCertificate.Thumbprint; from = $(if ($sg.SignerCertificate) { [int64]([DateTimeOffset]$sg.SignerCertificate.NotBefore.ToUniversalTime()).ToUnixTimeSeconds() } else { 0 }); to = $(if ($sg.SignerCertificate) { [int64]([DateTimeOffset]$sg.SignerCertificate.NotAfter.ToUniversalTime()).ToUnixTimeSeconds() } else { 0 }); stamped = $(if ($sg.TimeStamperCertificate) { [string]$sg.TimeStamperCertificate.Subject } else { '' }) } }
             }
             DoneData 'ok' $o
         }
