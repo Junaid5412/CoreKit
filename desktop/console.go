@@ -60,6 +60,7 @@ func drawMenu() {
 	item("3", "SAFE BROWSER", "Own browser: vertical tabs, profiles, proxy / VPN (VLESS, SOCKS5...)")
 	item("4", "ACTIVITY LOG", "Who used this PC & when: sign-ins, programs, file changes, deletions")
 	item("5", "REMOTE ACCESS", "Control a phone/PC on the same Wi-Fi with a code, or share this PC; calls")
+	item("6", "SECURITY", "Deep malware scan, investigate & fix, bloatware, Live Shield")
 	item("0", "EXIT", "Close the toolkit")
 	fmt.Printf("\n    %s-- more modules coming soon --%s\n", cGray, cReset)
 	fmt.Printf("    %sPrivacy Policy & Terms: https://junaid5412.github.io/CoreKit%s\n\n", cGray, cReset)

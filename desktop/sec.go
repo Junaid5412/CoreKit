@@ -752,6 +752,15 @@ func mountSecurity(mux *http.ServeMux, base string, in *inspector) {
 		}
 		return map[string]string{"msg": msg}
 	}))
+	mux.HandleFunc(base+"restore", secPost(func(r *http.Request, b []byte) any {
+		var q struct{ ID string }
+		_ = json.Unmarshal(b, &q)
+		p, err := restoreQuarantine(q.ID)
+		if err != nil {
+			return map[string]string{"error": err.Error()}
+		}
+		return map[string]string{"msg": "Restored to " + p}
+	}))
 	mux.HandleFunc(base+"qdelete", secPost(func(r *http.Request, b []byte) any {
 		var q struct{ ID string }
 		_ = json.Unmarshal(b, &q)
@@ -975,4 +984,12 @@ func (in *inspector) secScan(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
 	_ = json.NewEncoder(&buf).Encode(res)
 	s.send("done", bytes.TrimSpace(buf.Bytes()))
+}
+
+// shieldNote reminds the user that Live Shield keeps running after the window closes.
+func shieldNote() string {
+	if st := secShieldStatus(); st["running"] == true {
+		return " Live Shield keeps protecting in the background."
+	}
+	return ""
 }

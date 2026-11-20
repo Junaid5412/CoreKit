@@ -12,6 +12,7 @@ screens' requests with data collected the platform's own way.
 | Web engine | WebView2 (built into Windows) | Android System WebView | WebKitGTK |
 | Health data | PowerShell/CIM (`desktop/scripts/collector.ps1`) | BatteryManager, StatFs, ActivityManager, sensors | /sys, /proc, upower, lsblk/smartctl |
 | Network data/fixes | PowerShell (`desktop/scripts/net.ps1`) | ConnectivityManager, WifiManager, LinkProperties | NetworkManager, resolvectl |
+| Security scan/fixes | PowerShell (`security.ps1`, `security_fix.ps1`) + Go rules (`sec_rules.go`) | PackageManager, AppOps, Settings.Secure, DevicePolicyManager (`SecurityScanner.kt`) | /proc, systemd units, cron (planned) |
 | Proxy engine | Xray (downloaded, checksum-verified) | Xray (bundled) | Xray |
 | Screen-capture shield | SetWindowDisplayAffinity | FLAG_SECURE | — |
 
@@ -34,6 +35,26 @@ The UIs never know which platform they run on. They talk to the host through:
 * **Browser chrome** – `chrome.webview.postMessage({t: ...})` from the UI and
   `window.__corekit(msg)` / web messages from the host (message list in `desktop/sb_windows.go`
   `onUIMessage`). Android provides the same `chrome.webview` object through a small shim.
+
+* **Security** – `GET api/sec/scan` (SSE): `progress`, `done` (result) or `fail`. Other calls use
+  the same paths on both platforms: Windows answers `api/sec/<path>` (POST JSON), Android answers
+  `CoreKitNative.secCall(id, path, body)` and replies through `window.__secReply(id, json)`.
+  Paths: `fix {id, action}`, `fixall {ids}`, `history`, `undo {id}`, `restore {id}`, `qdelete {id}`,
+  `settings` (GET; POST `{key}` / `{untrust:[]}`), `shield {on}`, `harden {ids}`, `asr`, `bloat {id}`,
+  `second {id}`, `open {what}` (Android settings screens).
+  Result schema (`desktop/sec_rules.go` `secResult`, Android `SecurityScanner.kt`):
+  `platform, t, host, os, admin, score (0-100, higher is safer), verdict (clean|attention|danger),
+  counts{high,med,low,info}, scanned{processes,autoruns,files,connections,apps,lookups},
+  protection[{id,name,state(on|off|warn|unknown),detail,fix}],
+  findings[{id,kind(process|autorun|file|setting|threat|app),sev(high|med|low|info),score,title,sub,summary,
+  reasons[{t,w}],path,sha256,size,signer,signed,company,origin{url,ref,zone,via,text},
+  chain[{pid,name,path,cmd,t,sig}],persist[{kind,where,value}],net[{remote,port,state}],first,last,
+  intel[{source,verdict,family,tags,link,first}],actions[{id,label,main}],advice,mitre[],pids[],pkg}],
+  bloat[{id,name,publisher,kind,rating(remove|optional|keep),why,size,action,on}], notes[], intel, ms`.
+  Windows collects with `desktop/scripts/security.ps1` and fixes with `security_fix.ps1` (everything
+  removed is backed up for undo); Live Shield is `CoreKit.exe --shield`, started at sign-in by Task
+  Scheduler from `Program Files\CoreKit`. Android's Live Shield is a periodic JobScheduler check of
+  changed packages (`SecurityJob`).
 
 * **Virtual Environment** – not part of CoreKit. Its code (engine, page, image tools and
   workflows) is kept on the `virtual-environment` branch for a separate app.

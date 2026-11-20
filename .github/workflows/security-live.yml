@@ -1,0 +1,20 @@
+name: Security module on real Windows
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["ci-*"]
+    paths: ["desktop/sec*", "desktop/scripts/security*.ps1", ".github/workflows/security-live.yml"]
+
+jobs:
+  live:
+    name: Collector, fixer, quarantine, Live Shield
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: "1.24", cache: false }
+      - name: Live tests (CK_LIVE=1)
+        env: { CK_LIVE: "1" }
+        run: go test ./desktop -run "SecLive" -v -count=1 -timeout 25m

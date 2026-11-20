@@ -19,4 +19,6 @@ var (
 	Logs []byte
 	//go:embed remote.html
 	Remote []byte
+	//go:embed security.html
+	Security []byte
 )

@@ -19,6 +19,9 @@ import (
 
 type rawSec struct {
 	Admin     bool                `json:"admin"`
+	Self      int                 `json:"self"`       // the collector's own PID
+	SelfPar   int                 `json:"selfParent"` // CoreKit.exe
+	SelfPath  string              `json:"selfPath"`
 	OS        string              `json:"os"`
 	Host      string              `json:"host"`
 	Defender  rawDefender         `json:"defender"`
@@ -449,6 +452,9 @@ func editDistance(a, b string) int {
 	return prev[len(b)]
 }
 
+// real Windows / .NET programs whose names happen to be close to a core Windows name
+var legitNames = map[string]bool{"smsvchost.exe": true, "svchost.exe": true, "sihost.exe": true, "lsaiso.exe": true, "csrss.exe": true, "conhost.exe": true, "dashost.exe": true, "dllhost.exe": true, "taskhost.exe": true, "taskhostw.exe": true, "searchhost.exe": true, "wmiprvse.exe": true}
+
 // lookalike returns the Windows name a file name imitates (svch0st.exe -> svchost.exe).
 func lookalike(name string) string {
 	n := lc(name)
@@ -786,7 +792,7 @@ func (r *rawSec) fileFacts(f *secFinding, path, name string, now int64) (unsigne
 	if _, isSys := sysNames[lc(base)]; isSys && !expectedSysPath(base, path) {
 		f.Reasons = append(f.Reasons, secReason{"Uses the name of a Windows program (" + base + ") but runs from the wrong folder", 70})
 		f.MITRE = append(f.MITRE, "T1036.005")
-	} else if real := lookalike(base); real != "" && !(f.Signed == "valid") {
+	} else if real := lookalike(base); real != "" && f.Signed != "valid" && !sysDir(path) && !legitNames[lc(base)] {
 		f.Reasons = append(f.Reasons, secReason{"Name imitates the Windows program " + real, 45})
 		f.MITRE = append(f.MITRE, "T1036.005")
 	}
@@ -860,7 +866,10 @@ func analyzeSec(r *rawSec, now int64, trusted func(string) bool, intel map[strin
 	// ---- running programs
 	for i := range r.Procs {
 		p := &r.Procs[i]
-		if p.PID <= 4 || p.Name == "" {
+		if p.PID <= 4 || p.Name == "" || p.PID == r.Self || (r.SelfPar > 0 && p.PID == r.SelfPar) || (r.SelfPath != "" && strings.EqualFold(normPath(p.Path), normPath(r.SelfPath))) {
+			continue
+		}
+		if r.Self > 0 && p.PPID == r.Self { // programs the collector itself started
 			continue
 		}
 		f := secFinding{Kind: "process", Title: p.Name, Sub: p.Path, PIDs: []int{p.PID}, Last: now}
@@ -972,7 +981,7 @@ func analyzeSec(r *rawSec, now int64, trusted func(string) bool, intel map[strin
 			f.MITRE = append(f.MITRE, "T1547.002")
 		case "task":
 			f.MITRE = append(f.MITRE, "T1053.005")
-			if a.Hidden {
+			if a.Hidden && f.Signed != "valid" && !strings.HasPrefix(lc(tgt), `c:\program files`) {
 				f.Reasons = append(f.Reasons, secReason{"Scheduled task is marked hidden", 20})
 			}
 		case "service":
@@ -994,7 +1003,7 @@ func analyzeSec(r *rawSec, now int64, trusted func(string) bool, intel map[strin
 	// ---- program files waiting in Downloads (caught before they are ever opened)
 	for _, d := range r.Downloads {
 		d = normPath(d)
-		if len(r.runningAt[lc(d)]) > 0 {
+		if len(r.runningAt[lc(d)]) > 0 || (r.SelfPath != "" && strings.EqualFold(d, normPath(r.SelfPath))) {
 			continue
 		}
 		f := secFinding{Kind: "file", Title: winBase(d), Sub: winDir(d)}
@@ -1616,7 +1625,7 @@ func shieldQuick(ev shieldEvent) []secReason {
 	}
 	if _, isSys := sysNames[me]; isSys && ev.Path != "" && !expectedSysPath(ev.Name, ev.Path) {
 		rs = append(rs, secReason{"Uses the name of a Windows program (" + ev.Name + ") but runs from the wrong folder", 70})
-	} else if real := lookalike(ev.Name); real != "" {
+	} else if real := lookalike(ev.Name); real != "" && !legitNames[me] && !sysDir(ev.Path) {
 		rs = append(rs, secReason{"Name imitates the Windows program " + real, 35})
 	}
 	if doubleExt(ev.Path) {

@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#0a0e13">
+<head>
+<meta charset="utf-8">
+<title>CoreKit · Security</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<style>
+:root{--bg:#0a0e13;--panel:#0f151d;--panel2:#121a24;--line:#1a2431;--line2:#243142;--text:#c9d1d9;--white:#f0f6fc;--muted:#6b7785;--muted2:#8b98a5;--acc:#2dd4bf;--acc2:#22d3ee;--red:#f87171;--red2:#ef4444;--amber:#fbbf24;--blue:#60a5fa;--violet:#a78bfa;--green:#34d399;
+  --font:"Segoe UI Variable Text","Segoe UI",system-ui,Roboto,Arial,sans-serif;--fontd:"Segoe UI Variable Display","Segoe UI",system-ui,Roboto,Arial,sans-serif;--mono:"Cascadia Mono",Consolas,"Roboto Mono",monospace}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.5 var(--font);-webkit-font-smoothing:antialiased}
+body{display:flex;flex-direction:column;overflow:hidden}
+button,input,select{font:inherit;color:inherit}
+a{color:var(--acc2);text-decoration:none}a:hover{text-decoration:underline}
+svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none}
+code,.mono{font-family:var(--mono);font-size:12.3px}
+
+/* header */
+.top{flex:none;display:flex;align-items:center;gap:12px;height:66px;padding:0 22px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0d131a,#0b1016)}
+.back{display:none;width:38px;height:38px;border:0;border-radius:11px;background:#141c26;color:var(--white);place-items:center;cursor:pointer;flex:none}
+.logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#0f3b35,#0e2a3a);color:var(--acc);flex:none;box-shadow:inset 0 0 0 1px #1d4a44}
+.logo svg{width:21px;height:21px}
+.brand{display:flex;flex-direction:column;min-width:0;flex:1}
+.brand b{font:600 17px var(--fontd);color:var(--white);letter-spacing:.2px}
+.brand small{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.btn{height:38px;border-radius:10px;border:1px solid var(--line2);background:#151e29;color:var(--white);font-weight:600;font-size:13px;cursor:pointer;padding:0 14px;display:inline-flex;align-items:center;justify-content:center;gap:7px;white-space:nowrap;transition:filter .15s,background .15s}
+.btn:hover{filter:brightness(1.15)}.btn:disabled{opacity:.5;cursor:default;filter:none}
+.btn svg{width:16px;height:16px}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#04201c}
+.btn.danger{background:#b91c1c;border-color:#dc2626;color:#fff}
+.btn.ghost{background:transparent}
+.btn.sm{height:32px;font-size:12.5px;padding:0 11px;border-radius:9px}
+.ib{width:40px;height:40px;border:1px solid var(--line2);background:#121b26;border-radius:11px;color:var(--muted2);cursor:pointer;display:grid;place-items:center;flex:none}
+.ib:hover{color:var(--white)}
+
+/* layout */
+.wrap{flex:1;min-height:0;display:grid;grid-template-columns:240px 1fr}
+.side{border-right:1px solid var(--line);overflow-y:auto;padding:18px 12px 30px;background:#0b1016;display:flex;flex-direction:column;gap:2px}
+.nav{width:100%;display:flex;align-items:center;gap:11px;height:42px;padding:0 10px;border-radius:10px;border:0;background:transparent;color:var(--text);cursor:pointer;font-size:13.8px;text-align:left}
+.nav:hover{background:#121a24}
+.nav.on{background:#0f2523;color:var(--white);box-shadow:inset 3px 0 0 var(--acc)}
+.nav .ic{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:#151e29;color:var(--muted2)}
+.nav.on .ic{background:#123a35;color:var(--acc)}
+.nav .ic svg{width:15px;height:15px}
+.nav .nm{flex:1}
+.nav .ct{font-size:11.5px;color:var(--muted2);background:#151e29;border-radius:10px;padding:1px 8px;font-variant-numeric:tabular-nums}
+.nav .ct.hot{background:#3b1418;color:#fecaca}
+.side .foot{margin-top:auto;padding:14px 8px 0;font-size:11.5px;color:var(--muted);line-height:1.55}
+.mtabs{display:none}
+.main{overflow-y:auto;min-width:0;position:relative}
+.inner{max-width:1100px;margin:0 auto;padding:22px 28px 70px}
+h1{margin:0;font:600 22px var(--fontd);color:var(--white)}
+h2{margin:26px 0 12px;font:700 12px var(--font);letter-spacing:1px;color:var(--muted2);text-transform:uppercase;display:flex;align-items:center;justify-content:space-between;gap:10px}
+h2 span{flex:1;text-align:right;letter-spacing:0;text-transform:none;font-weight:500;color:var(--muted);font-size:12px}
+.lead{color:var(--muted);margin:4px 0 0;font-size:13.5px}
+
+/* hero */
+.hero{display:grid;grid-template-columns:auto 1fr auto;gap:26px;align-items:center;padding:22px 24px;border-radius:18px;border:1px solid var(--line);background:radial-gradient(120% 140% at 0% 0%,#10302b 0%,#0e161f 45%,#0d131a 100%)}
+.hero.attention{background:radial-gradient(120% 140% at 0% 0%,#33270c 0%,#14140f 45%,#0d131a 100%);border-color:#3f3313}
+.hero.danger{background:radial-gradient(120% 140% at 0% 0%,#3d1216 0%,#1a1013 45%,#0d131a 100%);border-color:#4b1d23}
+.ring{position:relative;width:118px;height:118px}
+.ring svg{width:118px;height:118px;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:9}
+.ring .bgc{stroke:#1a2532}
+.ring .fg{stroke:var(--acc);stroke-linecap:round;transition:stroke-dashoffset .8s ease}
+.ring b{position:absolute;inset:0;display:grid;place-items:center;font:700 32px var(--fontd);color:var(--white);font-variant-numeric:tabular-nums}
+.ring small{position:absolute;left:0;right:0;bottom:24px;text-align:center;font-size:10.5px;color:var(--muted2);letter-spacing:.6px}
+.hero h3{margin:0;font:600 22px var(--fontd);color:var(--white)}
+.hero p{margin:4px 0 0;color:var(--muted2)}
+.hero .meta{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:12px;font-size:12.3px;color:var(--muted)}
+.hero .meta b{color:var(--text);font-weight:600}
+.hero .acts{display:flex;flex-direction:column;gap:8px;align-items:stretch}
+.hero .acts .btn{height:42px;font-size:14px;padding:0 18px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:13px;font-size:12px;font-weight:600;background:#151e29;color:var(--muted2);border:1px solid transparent;cursor:default}
+.chip i{width:8px;height:8px;border-radius:50%}
+.chip.high{background:#3a1418;color:#fecaca}.chip.high i{background:var(--red)}
+.chip.med{background:#33270c;color:#fde68a}.chip.med i{background:var(--amber)}
+.chip.low{background:#0f2238;color:#bfdbfe}.chip.low i{background:var(--blue)}
+.chip.ok{background:#0e2b23;color:#a7f3d0}.chip.ok i{background:var(--green)}
+button.chip{cursor:pointer;border-color:var(--line2)}button.chip.on{border-color:var(--acc);color:var(--white)}
+
+/* protection grid */
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.pc{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;border-radius:13px;background:linear-gradient(180deg,#111822,#0e141c);border:1px solid var(--line)}
+.pc .pi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;flex:none;background:#0e2b23;color:var(--green)}
+.pc.off .pi{background:#3a1418;color:var(--red)}.pc.warn .pi{background:#33270c;color:var(--amber)}.pc.unknown .pi{background:#151e29;color:var(--muted2)}
+.pc .pi svg{width:17px;height:17px}
+.pc .pb{flex:1;min-width:0}
+.pc b{display:block;color:var(--white);font-size:13.5px}
+.pc small{display:block;color:var(--muted);font-size:12.2px;line-height:1.45;margin-top:1px}
+.pc .btn{margin-top:8px}
+
+/* lists */
+.card{border-radius:14px;border:1px solid var(--line);background:#0d131a;overflow:hidden}
+.fr{display:grid;grid-template-columns:4px 38px 1fr auto;gap:0 13px;align-items:center;padding:12px 14px 12px 0;border-top:1px solid var(--line);cursor:pointer;transition:background .12s}
+.fr:first-child{border-top:0}
+.fr:hover{background:#101820}
+.fr .bar{align-self:stretch;border-radius:0 3px 3px 0;background:var(--line2)}
+.fr.high .bar{background:var(--red)}.fr.med .bar{background:var(--amber)}.fr.low .bar{background:var(--blue)}.fr.info .bar{background:#2a3a4b}
+.fr .ki{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:#141c26;color:var(--muted2)}
+.fr.high .ki{background:#2c1216;color:var(--red)}.fr.med .ki{background:#2b2210;color:var(--amber)}.fr.low .ki{background:#0f2238;color:var(--blue)}
+.fr .bd{min-width:0}
+.fr .ti{color:var(--white);font-weight:600;font-size:14px;overflow-wrap:anywhere}
+.fr .su{color:var(--muted2);font-size:12.5px;margin-top:1px}
+.fr .pa{color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)}
+.fr .rt{display:flex;align-items:center;gap:10px}
+.score{min-width:44px;height:26px;border-radius:13px;display:grid;place-items:center;font-weight:700;font-size:12.5px;font-variant-numeric:tabular-nums;background:#151e29;color:var(--muted2)}
+.fr.high .score{background:#3a1418;color:#fecaca}.fr.med .score{background:#33270c;color:#fde68a}.fr.low .score{background:#0f2238;color:#bfdbfe}
+.tag{display:inline-flex;align-items:center;height:21px;padding:0 8px;border-radius:11px;font-size:11px;font-weight:600;background:#151e29;color:var(--muted2);white-space:nowrap;margin-right:6px;vertical-align:1px}
+.tag.red{background:#3a1418;color:#fecaca}.tag.amber{background:#33270c;color:#fde68a}.tag.green{background:#0e2b23;color:#a7f3d0}.tag.blue{background:#0f2238;color:#bfdbfe}
+.fbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.fbar .grow{flex:1}
+.empty{padding:50px 20px;text-align:center;color:var(--muted)}
+.empty .ei{width:58px;height:58px;border-radius:18px;display:grid;place-items:center;margin:0 auto 14px;background:#0e2b23;color:var(--green)}
+.empty .ei svg{width:26px;height:26px}
+.empty b{display:block;color:var(--white);font:600 15px var(--fontd);margin-bottom:4px}
+.note{display:flex;gap:10px;align-items:flex-start;margin:14px 0;padding:12px 14px;border-radius:12px;font-size:13px;background:#0f1a24;border:1px solid #1e3346;color:#bcd6ee}
+.note.warn{background:#14130b;border-color:#3a3214;color:#e9d89b}
+.note svg{width:17px;height:17px;margin-top:1px}
+.note .btn{margin-top:8px}
+
+/* bloat */
+.br{display:grid;grid-template-columns:38px 1fr auto;gap:0 13px;align-items:center;padding:12px 14px;border-top:1px solid var(--line)}
+.br:first-child{border-top:0}
+.br .ki{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:#141c26;color:var(--muted2)}
+.br.remove .ki{background:#2b2210;color:var(--amber)}
+.br .ti{color:var(--white);font-weight:600}
+.br .su{color:var(--muted);font-size:12.5px}
+.br.gone{opacity:.45}
+
+/* shield */
+.shield{display:grid;grid-template-columns:auto 1fr auto;gap:22px;align-items:center;padding:22px 24px;border-radius:18px;border:1px solid var(--line);background:linear-gradient(135deg,#0f1a24,#0d131a)}
+.shield.on{background:radial-gradient(120% 160% at 0% 0%,#0f3b35 0%,#0e1a20 50%,#0d131a 100%);border-color:#1d4a44}
+.shield .big{width:76px;height:76px;border-radius:22px;display:grid;place-items:center;background:#151e29;color:var(--muted2)}
+.shield.on .big{background:#123a35;color:var(--acc);box-shadow:0 0 0 6px rgba(45,212,191,.08),0 0 40px rgba(45,212,191,.15)}
+.shield .big svg{width:38px;height:38px}
+.shield h3{margin:0;font:600 20px var(--fontd);color:var(--white)}
+.shield p{margin:4px 0 0;color:var(--muted2)}
+.stats{display:flex;gap:18px;margin-top:10px;font-size:12.5px;color:var(--muted)}
+.stats b{color:var(--white);font-size:15px;display:block;font-variant-numeric:tabular-nums}
+.sw{width:50px;height:28px;border-radius:14px;background:#243142;position:relative;cursor:pointer;border:0;flex:none;transition:background .2s}
+.sw::after{content:"";position:absolute;left:3px;top:3px;width:22px;height:22px;border-radius:50%;background:#c9d1d9;transition:transform .2s}
+.sw.on{background:var(--acc)}.sw.on::after{transform:translateX(22px);background:#04201c}
+.sw:disabled{opacity:.5}
+.how{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.how div{padding:13px 14px;border-radius:13px;background:#0f151d;border:1px solid var(--line)}
+.how b{display:flex;align-items:center;gap:8px;color:var(--white);font-size:13.5px;margin-bottom:4px}
+.how b svg{color:var(--acc);width:16px;height:16px}
+.how small{color:var(--muted);font-size:12.3px;line-height:1.5}
+.hr{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:12px 14px;border-top:1px solid var(--line)}
+.hr:first-child{border-top:0}
+.hr b{color:var(--white);font-size:13.5px}
+.hr small{display:block;color:var(--muted);font-size:12.3px}
+details.rules{margin-top:6px}
+details.rules summary{cursor:pointer;color:var(--acc2);font-size:12.3px}
+details.rules ul{margin:6px 0 0;padding-left:18px;color:var(--muted2);font-size:12.3px;columns:2;column-gap:28px}
+
+/* history */
+.hi{display:grid;grid-template-columns:38px 1fr auto;gap:0 13px;align-items:center;padding:12px 14px;border-top:1px solid var(--line)}
+.hi:first-child{border-top:0}
+.hi .ki{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;background:#141c26;color:var(--muted2)}
+.hi.shield .ki{background:#123a35;color:var(--acc)}.hi.scan .ki{background:#2c1216;color:var(--red)}
+.hi .ti{color:var(--white);font-weight:600}
+.hi .su{color:var(--muted);font-size:12.3px}
+.hi .acts{display:flex;gap:6px}
+
+/* settings */
+.form{padding:16px;border-radius:14px;border:1px solid var(--line);background:#0d131a}
+.form label{display:block;font-size:12.5px;font-weight:600;color:var(--muted2);margin-bottom:6px}
+.form input{width:100%;height:40px;border-radius:10px;border:1px solid var(--line2);background:#0b1016;color:var(--white);padding:0 12px;outline:none;font-family:var(--mono);font-size:13px}
+.form input:focus{border-color:var(--acc)}
+.form .row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.form p{margin:10px 0 0;color:var(--muted);font-size:12.5px}
+
+/* scanning */
+.scanning{display:grid;place-items:center;text-align:center;min-height:62vh;padding:30px}
+.radar{width:120px;height:120px;border-radius:50%;margin:0 auto 22px;position:relative;background:radial-gradient(circle,#0f2e2a 0 30%,transparent 31%),repeating-radial-gradient(circle,#13202b 0 1px,transparent 1px 20px);border:1px solid #1d3a3a;overflow:hidden}
+.radar::after{content:"";position:absolute;inset:0;background:conic-gradient(from 0deg,rgba(45,212,191,.55),rgba(45,212,191,0) 25%);animation:spin 1.6s linear infinite;border-radius:50%}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scanning h2{justify-content:center;margin:0 0 6px;font:600 18px var(--fontd);color:var(--white);text-transform:none;letter-spacing:0}
+.scanning p{margin:0;color:var(--muted);max-width:420px}
+.pbar{width:300px;max-width:72vw;height:6px;border-radius:3px;background:#17202b;margin:18px auto 0;overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));transition:width .3s}
+.steps{margin:18px auto 0;display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted);text-align:left;max-width:360px}
+.steps span::before{content:"✓ ";color:var(--green)}
+
+/* drawer */
+.dim{position:fixed;inset:0;background:rgba(3,6,9,.6);z-index:30;opacity:0;pointer-events:none;transition:opacity .2s}
+.dim.show{opacity:1;pointer-events:auto}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(640px,100%);z-index:31;background:#0c1218;border-left:1px solid var(--line2);transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column}
+.drawer.show{transform:none}
+.dh{flex:none;display:flex;gap:12px;align-items:flex-start;padding:18px 20px 14px;border-bottom:1px solid var(--line)}
+.dh .ki{width:44px;height:44px;border-radius:13px;display:grid;place-items:center;background:#141c26;color:var(--muted2);flex:none}
+.dh.high .ki{background:#2c1216;color:var(--red)}.dh.med .ki{background:#2b2210;color:var(--amber)}.dh.low .ki{background:#0f2238;color:var(--blue)}
+.dh .t{flex:1;min-width:0}
+.dh h3{margin:0;font:600 18px var(--fontd);color:var(--white);overflow-wrap:anywhere}
+.dh .s{margin-top:5px}
+.db{flex:1;overflow-y:auto;padding:4px 20px 30px}
+.db h4{margin:20px 0 8px;font:700 11.5px var(--font);letter-spacing:.9px;color:var(--muted2);text-transform:uppercase}
+.why{display:flex;flex-direction:column;gap:6px}
+.why div{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:baseline;padding:8px 11px;border-radius:10px;background:#111922;font-size:13.2px}
+.why b{font-variant-numeric:tabular-nums;font-size:12px;min-width:38px;text-align:center;border-radius:8px;padding:1px 0}
+.why .p b{background:#3a1418;color:#fecaca}.why .n b{background:#0e2b23;color:#a7f3d0}.why .z b{background:#151e29;color:var(--muted2)}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px}
+.kv dt{color:var(--muted)}.kv dd{margin:0;color:var(--text);overflow-wrap:anywhere}
+.chain{position:relative;padding-left:22px}
+.chain::before{content:"";position:absolute;left:7px;top:8px;bottom:8px;width:2px;background:var(--line2)}
+.chain .st{position:relative;padding:6px 0 10px}
+.chain .st::before{content:"";position:absolute;left:-19px;top:11px;width:10px;height:10px;border-radius:50%;background:#243142;box-shadow:0 0 0 3px #0c1218}
+.chain .st:last-child::before{background:var(--red)}
+.chain .st b{color:var(--white)}
+.chain .st small{display:block;color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.chain .st code{display:block;margin-top:3px;padding:6px 8px;border-radius:7px;background:#0a0f14;color:#e2b9b9;white-space:pre-wrap;overflow-wrap:anywhere;max-height:120px;overflow:auto}
+.pl{display:flex;flex-direction:column;gap:6px}
+.pl div{padding:8px 11px;border-radius:10px;background:#111922;font-size:12.8px}
+.pl b{color:var(--white)}
+.pl code{display:block;color:var(--muted2);overflow-wrap:anywhere;white-space:pre-wrap;margin-top:2px}
+.origin{padding:11px 13px;border-radius:11px;background:#14130b;border:1px solid #3a3214;color:#e9d89b;font-size:13px}
+.origin code{display:block;color:#f3e3a8;overflow-wrap:anywhere;margin-top:4px}
+.mitre{display:flex;flex-wrap:wrap;gap:6px}
+.mitre a{display:inline-flex;height:24px;align-items:center;padding:0 9px;border-radius:12px;background:#1e1838;color:#cbbcfd;font-size:12px;font-weight:600;font-family:var(--mono)}
+.df{flex:none;display:flex;gap:8px;flex-wrap:wrap;padding:14px 20px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:#0b1016}
+.df .btn{flex:1;min-width:130px;height:42px}
+.second{margin-top:8px;padding:10px 12px;border-radius:10px;background:#0f1a24;border:1px solid #1e3346;font-size:12.8px;color:#bcd6ee;display:none}
+.second.show{display:block}
+
+/* modal */
+.modal{position:fixed;inset:0;z-index:40;display:none;place-items:center;background:rgba(3,6,9,.65);padding:16px}
+.modal.show{display:grid}
+.mb{width:min(460px,100%);background:#0f151d;border:1px solid var(--line2);border-radius:16px;padding:20px;animation:pop .18s ease both}
+@keyframes pop{from{transform:scale(.97);opacity:.5}}
+.mb h3{margin:0 0 6px;font:600 17px var(--fontd);color:var(--white)}
+.mb p{margin:0;color:var(--muted2)}
+.mb ul{margin:12px 0 0;padding-left:18px;color:var(--text)}
+.mb .row{display:flex;gap:8px;margin-top:18px;justify-content:flex-end}
+#toast{position:fixed;left:50%;bottom:24px;transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#16212d;border:1px solid #243446;color:var(--white);padding:10px 16px;border-radius:11px;font-size:13px;transition:all .25s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.45);max-width:90vw}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+.drawer.show~#toast{bottom:96px}#toast.bad{border-color:#5a2a31;color:#fecaca}
+
+@media (max-width:760px){
+  .top{height:58px;padding:0 12px;gap:10px}
+  .back{display:grid}.logo{display:none}
+  .brand b{font-size:16px}.brand small{font-size:12px}
+  .top .btn .tx{display:none}.top .btn{width:40px;padding:0}
+  .wrap{display:block;overflow-y:auto}
+  .side{display:none}
+  .main{overflow:visible}
+  .mtabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:10px 12px;border-bottom:1px solid var(--line);background:#0b1016;position:sticky;top:0;z-index:5}
+  .mtabs::-webkit-scrollbar{display:none}
+  .mtabs button{flex:0 0 auto;height:34px;padding:0 13px;border-radius:17px;border:1px solid var(--line2);background:#121b26;color:var(--muted2);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .mtabs button.on{background:#0f2e2a;border-color:#1f5a52;color:var(--acc)}
+  .mtabs button i{font-style:normal;margin-left:5px;color:#fecaca}
+  .inner{padding:14px 12px 60px}
+  .hero{grid-template-columns:auto 1fr;gap:16px;padding:16px}
+  .hero .acts{grid-column:1/-1}
+  .ring,.ring svg{width:92px;height:92px}.ring b{font-size:26px}.ring small{bottom:17px}
+  .hero h3{font-size:18px}
+  .fr{grid-template-columns:4px 34px 1fr;padding:11px 12px 11px 0}
+  .fr .ki{width:34px;height:34px}
+  .fr .rt{grid-column:3;justify-content:flex-start;margin-top:6px}
+  .shield{grid-template-columns:auto 1fr;padding:16px}
+  .shield .big{width:58px;height:58px}.shield .big svg{width:28px;height:28px}
+  .shield .sw{grid-column:2;justify-self:start}
+  details.rules ul{columns:1}
+  .kv{grid-template-columns:96px 1fr}
+  .db{padding:4px 14px 30px}.dh{padding:14px}
+}
+@media print{
+  body{overflow:visible;height:auto;background:#fff;color:#000}
+  .top,.side,.mtabs,.drawer,.dim{display:none}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <button class="back" id="back" aria-label="Back"><svg class="i" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+  <span class="logo"><svg class="i" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg></span>
+  <div class="brand"><b>Security</b><small id="sub">Deep scan, investigate and fix threats</small></div>
+  <button class="btn ghost" id="export" title="Save report"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 21h16"/></svg><span class="tx">Report</span></button>
+  <button class="btn pri" id="scanBtn"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="tx">Deep scan</span></button>
+</header>
+<nav class="mtabs" id="mtabs"></nav>
+<div class="wrap">
+  <aside class="side"><div id="nav"></div><div class="foot" id="foot"></div></aside>
+  <main class="main" id="main"><div class="inner" id="inner"></div></main>
+</div>
+<div class="dim" id="dim"></div>
+<aside class="drawer" id="drawer"><div class="dh" id="dHead"></div><div class="db" id="dBody"></div><div class="df" id="dFoot"></div></aside>
+<div class="modal" id="modal"><div class="mb" id="mBody"></div></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const TOKEN = location.pathname.split('/')[1];
+const API = '/' + TOKEN + '/api/';
+const N = window.CoreKitNative;
+const ANDROID = !!(N && N.secCall);
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); }
+const DEV = ANDROID ? 'phone' : 'PC';
+
+/* ---------- icons ---------- */
+const IC = {
+  shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  shieldok:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>',
+  shieldx:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9.5 9.5 5 5M14.5 9.5l-5 5"/>',
+  bug:'<rect x="8" y="6" width="8" height="14" rx="4"/><path d="M19 7l-3 2M5 7l3 2M19 19l-3-2M5 19l3-2M20 13h-4M4 13h4M10 4l1 2M14 4l-1 2"/>',
+  process:'<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>',
+  autorun:'<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/>',
+  file:'<path d="M14 3v5h5"/><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>',
+  setting:'<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  app:'<rect x="5" y="2" width="14" height="20" rx="3"/><path d="M11 18h2"/>',
+  network:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  threat:'<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+  home:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',
+  list:'<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  trash:'<path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
+  bolt:'<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+  lock:'<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+  eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  download:'<path d="M12 3v12M8 11l4 4 4-4"/><path d="M4 21h16"/>',
+  undo:'<path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/>',
+  check:'<path d="M20 6 9 17l-5-5"/>',
+  x:'<path d="M18 6 6 18M6 6l12 12"/>',
+  box:'<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
+  copy:'<rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>',
+  globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/>',
+  key:'<circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M17 6l3 3"/>',
+  radar:'<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12 19 5"/>',
+  startup:'<path d="M5 3h14v18H5z"/><path d="M9 8h6M9 12h6M9 16h3"/>'
+};
+const svg = (k, cls) => `<svg class="i${cls ? ' ' + cls : ''}" viewBox="0 0 24 24">${IC[k] || IC.shield}</svg>`;
+const KIND_IC = {process:'process', autorun:'autorun', file:'file', setting:'setting', app:'app', network:'network', threat:'bug'};
+const SEV = {high:'High risk', med:'Medium', low:'Low', info:'Info'};
+const KIND = ANDROID
+  ? {app:'App', setting:'Setting', threat:'Detection', file:'File'}
+  : {process:'Running program', autorun:'Start-up entry', file:'File', setting:'Setting', threat:'Defender detection', network:'Network'};
+
+/* ---------- state ---------- */
+let RES = null, HIST = null, SET = null, ASR = [], tab = 'overview', fsev = 'all', scanning = false, CUR = null;
+const DONE = new Set();
+
+/* ---------- host calls ---------- */
+let seq = 0; const waits = {};
+window.__secReply = (id, res) => { const w = waits[id]; if (w) { delete waits[id]; w(res); } };
+function call(path, body) {
+  if (ANDROID) return new Promise(res => { const id = 's' + (++seq); waits[id] = res; try { N.secCall(id, path, body ? JSON.stringify(body) : ''); } catch (e) { delete waits[id]; res({error: 'Not available'}); } });
+  const o = body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {cache:'no-store'};
+  return fetch(API + 'sec/' + path, o).then(r => r.json()).catch(e => ({error: 'CoreKit did not answer (' + e.message + ')'}));
+}
+
+/* ---------- time ---------- */
+const two = n => (n < 10 ? '0' : '') + n;
+function when(t) { if (!t) return ''; const d = new Date(t * 1000); return d.toLocaleDateString(undefined, {day:'numeric', month:'short', year: d.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined}) + ', ' + two(d.getHours()) + ':' + two(d.getMinutes()); }
+function ago(t) { if (!t) return ''; const s = Date.now() / 1000 - t; if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + ' min ago'; if (s < 86400) return Math.floor(s / 3600) + ' h ago'; if (s < 86400 * 30) return Math.floor(s / 86400) + ' days ago'; return when(t); }
+const size = b => !b ? '' : b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(0) + ' KB' : b < 1073741824 ? (b / 1048576).toFixed(1) + ' MB' : (b / 1073741824).toFixed(2) + ' GB';
+
+/* ---------- navigation ---------- */
+function tabs() {
+  const c = RES ? RES.counts : null, open = RES ? RES.findings.filter(f => f.sev !== 'info' && !DONE.has(f.id)).length : 0;
+  const hi = RES ? RES.findings.filter(f => f.sev === 'high' && !DONE.has(f.id)).length : 0;
+  return [
+    ['overview', 'Overview', 'home', ''],
+    ['threats', ANDROID ? 'Findings' : 'Threats', 'threat', open ? String(open) : '', hi > 0],
+    ['bloat', 'Bloatware', 'box', RES && RES.bloat ? String(RES.bloat.filter(b => b.rating === 'remove' && b.on).length || '') : ''],
+    ['shield', 'Live Shield', 'radar', ''],
+    ['history', 'History', 'clock', ''],
+    ['settings', 'Settings', 'gear', '']
+  ];
+}
+function drawNav() {
+  $('#nav').innerHTML = tabs().map(([id, t, ic, ct, hi]) => `<button class="nav${tab === id ? ' on' : ''}" data-tab="${id}"><span class="ic">${svg(ic)}</span><span class="nm">${t}</span>${ct ? `<span class="ct${hi ? ' hot' : ''}">${ct}</span>` : ''}</button>`).join('');
+  $('#mtabs').innerHTML = tabs().map(([id, t, , ct]) => `<button class="${tab === id ? 'on' : ''}" data-tab="${id}">${t}${ct ? `<i>${ct}</i>` : ''}</button>`).join('');
+  $('#foot').innerHTML = RES ? `Last scan ${ago(RES.t)} · ${(RES.ms / 1000).toFixed(1)} s<br>${RES.scanned.processes ? RES.scanned.processes + ' programs, ' : ''}${RES.scanned.autoruns ? RES.scanned.autoruns + ' start-up entries, ' : ''}${RES.scanned.apps ? RES.scanned.apps + ' apps, ' : ''}${RES.scanned.files ? RES.scanned.files + ' files checked' : ''}` : 'No scan yet.';
+}
+function go(t) { tab = t; drawNav(); render(); $('#main').scrollTop = 0; window.scrollTo(0, 0); if (t === 'history') loadHistory(); if (t === 'shield' || t === 'settings') loadSettings(); }
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-tab]'); if (t) { go(t.dataset.tab); return; }
+  const a = e.target.closest('[data-a]'); if (a) { act(a.dataset.a, a.dataset, a); return; }
+  const f = e.target.closest('.fr[data-id]'); if (f) open(f.dataset.id);
+});
+$('#back').addEventListener('click', () => { if ($('#drawer').classList.contains('show')) return closeDrawer(); if (N && N.go) N.go('home'); else history.back(); });
+$('#dim').addEventListener('click', closeDrawer);
+$('#scanBtn').addEventListener('click', scan);
+$('#export').addEventListener('click', exportReport);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeDrawer(); } });
+
+/* ---------- scan ---------- */
+const STEPS = [];
+function scan() {
+  if (scanning) return;
+  if (ANDROID && N.secAgreed && !N.secAgreed()) { window.__secGo = () => scan(); try { N.secAsk(); } catch (e) {} return; }
+  scanning = true; STEPS.length = 0; $('#scanBtn').disabled = true; tab = 'overview'; drawNav();
+  $('#inner').innerHTML = `<div class="scanning"><div><div class="radar"></div><h2 id="sl">Starting deep scan…</h2><p>${ANDROID ? 'Checking every app, its permissions, where it came from and Android\'s security settings.' : 'Checking running programs, hidden start-up places, signatures, downloads, network connections and Windows protection.'}</p><div class="pbar"><i id="pb"></i></div><div class="steps" id="steps"></div></div></div>`;
+  const es = new EventSource(API + 'sec/scan');
+  let done = false, last = '';
+  es.addEventListener('progress', e => {
+    const j = JSON.parse(e.data);
+    $('#pb').style.width = Math.min(99, j.pct) + '%'; $('#sl').textContent = j.label;
+    const base = j.label.replace(/\s*\(.*\)$/, '');
+    if (last && base !== last && !STEPS.includes(last)) { STEPS.push(last); $('#steps').innerHTML = STEPS.slice(-6).map(s => `<span>${esc(s)}</span>`).join(''); }
+    last = base;
+  });
+  es.addEventListener('done', e => { done = true; es.close(); finish(JSON.parse(e.data)); });
+  es.addEventListener('fail', e => { done = true; es.close(); finish(null, JSON.parse(e.data).error); });
+  es.onerror = () => { if (!done) { done = true; es.close(); finish(null, 'The connection to the scanner was lost.'); } };
+}
+function finish(res, err) {
+  scanning = false; $('#scanBtn').disabled = false;
+  if (err) { $('#inner').innerHTML = `<div class="scanning"><div><div class="empty"><div class="ei" style="background:#2c1216;color:var(--red)">${svg('x')}</div><b>The scan could not finish</b>${esc(err)}</div><button class="btn pri" data-a="scan">Try again</button></div></div>`; return; }
+  RES = res; DONE.clear();
+  drawNav(); render();
+  if (res.counts.high) toast(res.counts.high + ' high-risk item' + (res.counts.high > 1 ? 's' : '') + ' found', true);
+}
+
+/* ---------- render ---------- */
+function render() {
+  const el = $('#inner');
+  if (tab === 'history') return renderHistory();
+  if (tab === 'shield') return renderShield();
+  if (tab === 'settings') return renderSettings();
+  if (!RES) { el.innerHTML = welcome(); return; }
+  if (tab === 'overview') el.innerHTML = overview();
+  else if (tab === 'threats') el.innerHTML = threats();
+  else if (tab === 'bloat') el.innerHTML = bloat();
+}
+
+function welcome() {
+  return `<div class="hero"><div class="ring">${ringSvg(null)}<b>${svg('shield')}</b></div><div><h3>Check this ${DEV} for threats</h3><p>${ANDROID ? 'A deep scan looks at every app: where it came from, risky permission combinations, hidden icons, apps that can read your screen or messages, and known malware.' : 'A deep scan goes beyond normal antivirus: it looks at how programs behave, where they hide to start with Windows, who started them, what they connect to, and whether Windows protection has been tampered with.'}</p><div class="meta"><span>Takes about ${ANDROID ? '10' : '20–40'} seconds</span><span>Nothing is changed until you choose</span></div></div><div class="acts"><button class="btn pri" data-a="scan">${svg('radar')}Start deep scan</button></div></div>
+  <h2>What CoreKit checks</h2><div class="how">${(ANDROID ? [
+    ['app','Every app','Installed outside Google Play, hidden icons, fake system names, very old apps that skip permission prompts.'],
+    ['eye','Spying abilities','Apps that can read your screen, notifications or SMS, draw over other apps or control the phone as an admin.'],
+    ['bug','Known malware','App fingerprints are checked against abuse.ch MalwareBazaar (with your free key).'],
+    ['lock','Phone security','Screen lock, security updates, USB debugging, developer mode and rooting.']
+  ] : [
+    ['process','Behaviour, not just signatures','Office starting PowerShell, hidden encoded commands, backup deletion, password theft tools.'],
+    ['autorun','12 hiding places','Run keys, Startup, tasks, services, WMI triggers, IFEO hijacks, sign-in hooks, AppInit, LSA, browser policies.'],
+    ['file','Fakes and disguises','Programs using Windows names in the wrong folder, look-alike names, broken signatures, invoice.pdf.exe.'],
+    ['globe','Where it came from','The website a file was downloaded from, the chain of programs that started it, and who it talks to.'],
+    ['shield','Tampering','Defender exclusions, switched-off protection, hosts-file redirects, fake root certificates, forced extensions.'],
+    ['bug','Second opinions','Known-malware lookups (abuse.ch) and a Windows Defender scan of the worst files.']
+  ]).map(([i, t, d]) => `<div><b>${svg(i)}${t}</b><small>${d}</small></div>`).join('')}</div>`;
+}
+
+function ringSvg(score) {
+  const r = 52, c = 2 * Math.PI * r, v = score == null ? 0 : score;
+  const col = score == null ? 'var(--line2)' : score >= 80 ? 'var(--acc)' : score >= 50 ? 'var(--amber)' : 'var(--red)';
+  return `<svg viewBox="0 0 118 118"><circle class="bgc" cx="59" cy="59" r="${r}"/><circle class="fg" cx="59" cy="59" r="${r}" style="stroke:${col}" stroke-dasharray="${c}" stroke-dashoffset="${c * (1 - v / 100)}"/></svg>`;
+}
+
+function openFindings(sev) { return RES.findings.filter(f => !DONE.has(f.id) && (sev ? f.sev === sev : f.sev !== 'info')); }
+
+function overview() {
+  const h = openFindings('high').length, m = openFindings('med').length, l = openFindings('low').length;
+  const v = h ? 'danger' : (m || RES.score < 80) ? 'attention' : 'clean';
+  const title = h ? `${h} threat${h > 1 ? 's' : ''} need${h > 1 ? '' : 's'} your attention` : m ? 'A few things need attention' : 'No threats found';
+  const msg = h ? 'Open each one to see exactly what it is, how it got here and what it does, then fix it in one tap.' : m ? 'Nothing dangerous is running, but some settings or files could be safer.' : `Your ${DEV} looks clean. Keep Live Shield on to stay that way.`;
+  const fixable = ANDROID ? [] : openFindings('high').filter(f => f.actions.some(a => a.main && a.id !== 'trust'));
+  const prots = RES.protection || [];
+  const offP = prots.filter(p => p.state === 'off' && p.fix);
+  let out = `<div class="hero ${v}"><div class="ring">${ringSvg(RES.score)}<b>${RES.score}</b><small>SAFETY</small></div><div><h3>${esc(title)}</h3><p>${esc(msg)}</p>
+    <div class="chips">${chip('high', h, 'high risk')}${chip('med', m, 'medium')}${chip('low', l, 'low')}${!h && !m && !l ? '<span class="chip ok"><i></i>All clear</span>' : ''}</div>
+    <div class="meta"><span>Scanned <b>${ago(RES.t)}</b></span><span><b>${(RES.ms / 1000).toFixed(1)} s</b></span>${RES.host ? `<span>${esc(RES.host)}</span>` : ''}${RES.intel === 'on' ? '<span>Known-malware check <b>on</b></span>' : ''}</div></div>
+    <div class="acts">${fixable.length ? `<button class="btn danger" data-a="fixall">${svg('bolt')}Fix ${fixable.length} high-risk</button>` : ''}<button class="btn" data-a="scan">${svg('radar')}Scan again</button></div></div>`;
+  if (!RES.admin && !ANDROID) out += note('warn', 'CoreKit is not running as administrator, so some places (other users\' programs, services, Defender settings) could not be checked and some fixes won\'t work. Restart CoreKit and allow the admin prompt.');
+  if (RES.intel === 'off') out += note('', `Known-malware check is off. Add a free abuse.ch key in Settings to also compare file fingerprints with millions of known malware samples (only the fingerprint is sent, never the file). <div><button class="btn sm" data-tab="settings">${svg('key')}Add key</button></div>`);
+  else if (RES.intel && RES.intel.startsWith('error')) out += note('warn', 'Known-malware check failed: ' + esc(RES.intel.slice(7)));
+  (RES.notes || []).forEach(n => out += note('', esc(n)));
+  if (prots.length) {
+    out += `<h2>Protection <span>${prots.filter(p => p.state === 'on').length} of ${prots.length} on</span>${offP.length && !ANDROID ? `<button class="btn sm pri" data-a="hardenAll">${svg('shieldok')}Turn on recommended</button>` : ''}</h2><div class="pgrid">${prots.map(protCard).join('')}</div>`;
+  }
+  const top = openFindings().slice(0, 6);
+  if (top.length) out += `<h2>Most important <span><a href="#" data-tab="threats">See all ${openFindings().length}</a></span></h2><div class="card">${top.map(row).join('')}</div>`;
+  return out;
+}
+const chip = (c, n, t) => n ? `<span class="chip ${c}"><i></i>${n} ${t}</span>` : '';
+function note(kind, html) { return `<div class="note ${kind}">${svg(kind === 'warn' ? 'threat' : 'shield')}<div>${html}</div></div>`; }
+function protCard(p) {
+  const ic = p.state === 'on' ? 'shieldok' : p.state === 'off' ? 'shieldx' : 'shield';
+  let btn = '';
+  if (p.state !== 'on' && p.fix) btn = `<button class="btn sm" data-a="prot" data-id="${esc(p.fix)}">${p.fix === 'tamper' || ANDROID ? 'Open settings' : 'Turn on'}</button>`;
+  return `<div class="pc ${esc(p.state)}"><span class="pi">${svg(ic)}</span><div class="pb"><b>${esc(p.name)}</b><small>${esc(p.detail)}</small>${btn}</div></div>`;
+}
+
+function row(f) {
+  const done = DONE.has(f.id);
+  return `<div class="fr ${f.sev}" data-id="${f.id}" style="${done ? 'opacity:.45' : ''}"><span class="bar"></span><span class="ki">${svg(KIND_IC[f.kind])}</span><div class="bd"><div class="ti">${esc(f.title)}</div><div class="su">${esc(f.summary || '')}</div>${f.sub ? `<div class="pa">${esc(f.sub)}</div>` : ''}</div><div class="rt">${done ? '<span class="tag green">Fixed</span>' : `<span class="tag">${KIND[f.kind] || f.kind}</span><span class="score" title="Risk score">${f.score}</span>`}</div></div>`;
+}
+
+function threats() {
+  const list = RES.findings.filter(f => fsev === 'all' ? f.sev !== 'info' : fsev === 'info' ? f.sev === 'info' : f.sev === fsev);
+  const c = s => RES.findings.filter(f => f.sev === s).length;
+  let out = `<h1>${ANDROID ? 'Findings' : 'Threats & risks'}</h1><p class="lead">Tap any item to see the full story: why it was flagged, where it came from, how it started and how it stays on your ${DEV}.</p>
+    <div class="fbar" style="margin-top:14px">${[['all', 'All', RES.findings.filter(f => f.sev !== 'info').length], ['high', 'High', c('high')], ['med', 'Medium', c('med')], ['low', 'Low', c('low')], ['info', 'Info', c('info')]].map(([k, t, n]) => `<button class="chip ${k === 'all' ? '' : k === 'info' ? '' : k}${fsev === k ? ' on' : ''}" data-a="fsev" data-v="${k}">${t} · ${n}</button>`).join('')}<span class="grow"></span>${openFindings('high').length && !ANDROID ? `<button class="btn sm danger" data-a="fixall">${svg('bolt')}Fix all high-risk</button>` : ''}</div>`;
+  if (!list.length) return out + `<div class="card"><div class="empty"><div class="ei">${svg('shieldok')}</div><b>Nothing here</b>No items in this group.</div></div>`;
+  return out + `<div class="card">${list.map(row).join('')}</div>`;
+}
+
+/* ---------- investigate ---------- */
+function open(id) {
+  const f = RES && RES.findings.find(x => x.id === id); if (!f) return;
+  CUR = f;
+  $('#dHead').className = 'dh ' + f.sev;
+  $('#dHead').innerHTML = `<span class="ki">${svg(KIND_IC[f.kind])}</span><div class="t"><h3>${esc(f.title)}</h3><div class="s"><span class="tag ${f.sev === 'high' ? 'red' : f.sev === 'med' ? 'amber' : f.sev === 'low' ? 'blue' : ''}">${SEV[f.sev]} · ${f.score}/100</span><span class="tag">${KIND[f.kind] || f.kind}</span>${DONE.has(f.id) ? '<span class="tag green">Fixed</span>' : ''}</div></div><button class="ib" data-a="close" aria-label="Close">${svg('x')}</button>`;
+  $('#dBody').innerHTML = story(f);
+  $('#dFoot').innerHTML = DONE.has(f.id) ? `<button class="btn" data-a="close">Close</button><button class="btn" data-tab="history" data-a="close">See in History</button>` :
+    f.actions.map(a => `<button class="btn ${a.main ? (a.id === 'trust' ? 'pri' : 'danger') : ''}" data-a="fix" data-id="${f.id}" data-act="${a.id}">${svg(a.id === 'trust' ? 'check' : a.id === 'quarantine' ? 'box' : a.id === 'kill' ? 'x' : a.id === 'uninstall' ? 'trash' : 'bolt')}${esc(a.label)}</button>`).join('');
+  $('#drawer').classList.add('show'); $('#dim').classList.add('show');
+  $('#dBody').scrollTop = 0;
+}
+function closeDrawer() { $('#drawer').classList.remove('show'); $('#dim').classList.remove('show'); CUR = null; }
+
+function story(f) {
+  let s = '';
+  s += `<h4>Why CoreKit flagged this</h4><div class="why">${(f.reasons || []).map(r => `<div class="${r.w > 0 ? 'p' : r.w < 0 ? 'n' : 'z'}"><b>${r.w > 0 ? '+' + r.w : r.w === 0 ? 'fact' : r.w}</b><span>${esc(r.t)}</span></div>`).join('')}</div>`;
+  if (f.advice) s += note('', esc(f.advice));
+  if (f.intel && f.intel.length) s += `<h4>Threat intelligence</h4><div class="pl">${f.intel.map(i => `<div><b>${esc(i.source)}: ${i.verdict === 'malicious' ? 'known malware' : 'not known'}</b>${i.family ? ' · ' + esc(i.family) : ''}${i.first ? `<code>First seen ${esc(i.first)}</code>` : ''}${i.tags && i.tags.length ? `<code>Tags: ${esc(i.tags.join(', '))}</code>` : ''}${i.link ? `<code><a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.link)}</a></code>` : ''}</div>`).join('')}</div>`;
+  if (f.origin) s += `<h4>Where it came from</h4><div class="origin"><b>${esc(f.origin.text)}</b>${f.origin.via ? ' · via ' + esc(f.origin.via) : ''}${f.origin.url ? `<code>File: ${esc(f.origin.url)}</code>` : ''}${f.origin.ref ? `<code>Page: ${esc(f.origin.ref)}</code>` : ''}</div>`;
+  else if (f.kind === 'process' || f.kind === 'file' || f.kind === 'autorun') s += `<h4>Where it came from</h4><div class="pl"><div>${f.pkg ? 'See the installer below.' : 'No download record on this file (it was created on this ' + DEV + ', copied, or unpacked by another program).'}</div></div>`;
+  if (f.chain && f.chain.length) s += `<h4>How it started</h4><div class="chain">${f.chain.map(c => `<div class="st"><b>${esc(c.name)}</b>${c.pid ? ` <span class="tag">PID ${c.pid}</span>` : ''}${c.t ? `<small>Started ${esc(when(c.t))}</small>` : ''}${c.path ? `<small class="mono">${esc(c.path)}</small>` : ''}${c.sig ? `<small>${esc(c.sig)}</small>` : ''}${c.cmd ? `<code>${esc(c.cmd)}</code>` : ''}</div>`).join('')}</div>`;
+  if (f.persist && f.persist.length) s += `<h4>How it stays on this ${DEV}</h4><div class="pl">${f.persist.map(p => `<div><b>${esc(p.where)}</b><code>${esc(p.value)}</code></div>`).join('')}</div>`;
+  if (f.net && f.net.length) s += `<h4>Internet connections</h4><div class="pl">${f.net.map(n => `<div><b>${esc(n.remote)}:${n.port}</b> · ${esc(n.state)} <a href="https://ipinfo.io/${encodeURIComponent(n.remote)}" target="_blank" rel="noopener">who is this?</a></div>`).join('')}</div>`;
+  const kv = [];
+  if (f.pkg) kv.push(['Package', `<span class="mono">${esc(f.pkg)}</span>`]);
+  if (f.path) kv.push(['Location', `<span class="mono">${esc(f.path)}</span>`]);
+  if (f.size) kv.push(['Size', size(f.size)]);
+  if (f.signed) kv.push(['Signature', f.signed === 'valid' ? 'Valid' + (f.signer ? ' · ' + esc(f.signer) : '') : f.signed === 'unsigned' ? 'Not signed' : f.signed === 'invalid' ? 'Broken or forged' : 'Unknown']);
+  if (f.company) kv.push(['Company', esc(f.company)]);
+  if (f.first) kv.push([ANDROID ? 'Installed' : 'First seen', esc(when(f.first))]);
+  if (f.last && f.pkg) kv.push(['Updated', esc(when(f.last))]);
+  if (f.sha256) kv.push(['SHA-256', `<span class="mono">${esc(f.sha256)}</span> <a href="#" data-a="copy" data-v="${esc(f.sha256)}">copy</a>`]);
+  if (f.pids && f.pids.length) kv.push(['Running as', 'PID ' + f.pids.join(', ')]);
+  if (kv.length) s += `<h4>${f.pkg ? 'App' : 'File'} details</h4><dl class="kv">${kv.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  if (f.sha256 || f.path) s += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">${!ANDROID && f.path ? `<button class="btn sm" data-a="second" data-id="${f.id}">${svg('shield')}Second opinion</button>` : ''}${f.sha256 ? `<a class="btn sm" href="https://www.virustotal.com/gui/file/${esc(f.sha256)}" target="_blank" rel="noopener">${svg('globe')}Look up on VirusTotal</a>` : ''}</div><div class="second" id="second"></div>`;
+  if (f.mitre && f.mitre.length) s += `<h4>Attack techniques (MITRE ATT&CK)</h4><div class="mitre">${f.mitre.map(m => `<a href="https://attack.mitre.org/techniques/${m.replace('.', '/')}/" target="_blank" rel="noopener">${esc(m)}</a>`).join('')}</div>`;
+  return s;
+}
+
+/* ---------- actions ---------- */
+async function act(a, d, el) {
+  switch (a) {
+    case 'scan': return scan();
+    case 'close': return closeDrawer();
+    case 'fsev': fsev = d.v; return render();
+    case 'copy': try { if (N && N.copy) N.copy(d.v); else await navigator.clipboard.writeText(d.v); toast('Copied'); } catch (e) {} return;
+    case 'fix': return confirmFix(d.id, d.act);
+    case 'fixall': return confirmFixAll();
+    case 'second': return second(d.id);
+    case 'prot': return protFix(d.id);
+    case 'hardenAll': return harden(['rtp', 'sigs', 'pua', 'netprot', 'cloud', 'asr', 'firewall', 'smartscreen'], 'Turn on recommended protection?', ['Real-time protection and fresh virus definitions', 'Block unwanted apps (adware, bundled toolbars)', 'Network protection for every program', 'Cloud protection at a high level', '18 attack blocking rules (Office, scripts, USB, ransomware, password theft…)', 'Firewall for all networks and SmartScreen']);
+    case 'harden': return harden([d.id]);
+    case 'bloat': return bloatAct(d.id);
+    case 'bloatAll': return bloatAll();
+    case 'shield': return shieldToggle();
+    case 'undo': return undo(d.id);
+    case 'qdel': return qdel(d.id);
+    case 'rec': return openRecord(d.id);
+    case 'saveKey': return saveKey();
+    case 'clearKey': return saveKey(true);
+    case 'untrust': return untrust(d.v);
+    case 'mclose': return closeModal();
+    case 'report1': return exportRecord(d.id);
+  }
+}
+
+const FIXTEXT = {
+  quarantine: f => [f.pids && f.pids.length ? 'Stop the running program' : '', (f.persist || []).length ? `Remove ${f.persist.length} start-up entr${f.persist.length > 1 ? 'ies' : 'y'}` : '', 'Move the file to Quarantine (scrambled, can\'t run)', 'You can restore it from History'],
+  kill: f => ['Stop the running program now', 'It may start again later if it is set to start with Windows'],
+  remove: f => [`Remove ${Math.max(1, (f.persist || []).length)} start-up entr${(f.persist || []).length > 1 ? 'ies' : 'y'} (backed up first)`, 'You can put it back from History'],
+  fixsetting: f => ['Change the setting back to the safe value (backed up first)', 'You can undo it from History'],
+  defender: f => ['Ask Windows Defender to remove all active threats'],
+  trust: f => ['Never report this file again', 'You can remove it from Settings › Trusted'],
+  uninstall: f => ['Android will ask you to confirm the uninstall'],
+  appinfo: f => ['Opens the app\'s settings: tap Disable or Force stop'],
+  settings: f => ['Opens the Android setting so you can switch it off']
+};
+function confirmFix(id, actId) {
+  const f = RES.findings.find(x => x.id === id), a = f && f.actions.find(x => x.id === actId); if (!f || !a) return;
+  const key = actId.startsWith('settings') ? 'settings' : actId;
+  const lines = (FIXTEXT[key] ? FIXTEXT[key](f) : []).filter(Boolean);
+  if (ANDROID && (actId === 'uninstall' || actId === 'appinfo' || actId.startsWith('settings'))) return doFix(f, a);
+  modal(`<h3>${esc(a.label)}?</h3><p>${esc(f.title)}</p>${lines.length ? `<ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul>` : ''}<div class="row"><button class="btn" data-a="mclose">Cancel</button><button class="btn ${actId === 'trust' ? 'pri' : 'danger'}" id="mgo">${esc(a.label)}</button></div>`);
+  $('#mgo').onclick = () => { closeModal(); doFix(f, a); };
+}
+async function doFix(f, a) {
+  toast('Working…');
+  const r = await call('fix', {id: f.id, action: a.id});
+  if (r.error) return toast(r.error, true);
+  if (r.ok || (r.record && r.record.done && r.record.done.length)) {
+    if (a.id !== 'appinfo' && !a.id.startsWith('settings')) DONE.add(f.id);
+    toast(r.msg || 'Done', !r.ok);
+  } else toast(r.msg || 'Could not fix it', true);
+  drawNav(); render(); if (CUR && CUR.id === f.id) open(f.id);
+}
+function confirmFixAll() {
+  const list = openFindings('high').filter(f => f.actions.some(a => a.main && a.id !== 'trust'));
+  if (!list.length) return toast('Nothing to fix');
+  modal(`<h3>Fix ${list.length} high-risk item${list.length > 1 ? 's' : ''}?</h3><p>Each one gets its recommended fix. Every change is recorded and can be undone from History.</p><ul>${list.slice(0, 8).map(f => `<li>${esc(f.actions.find(a => a.main).label)}: ${esc(f.title)}</li>`).join('')}${list.length > 8 ? `<li>…and ${list.length - 8} more</li>` : ''}</ul><div class="row"><button class="btn" data-a="mclose">Cancel</button><button class="btn danger" id="mgo">${svg('bolt')}Fix now</button></div>`);
+  $('#mgo').onclick = async () => {
+    closeModal(); toast('Fixing ' + list.length + ' items…');
+    const r = await call('fixall', {ids: list.map(f => f.id)});
+    if (r.error) return toast(r.error, true);
+    const res = r.results || [];
+    res.forEach((x, i) => { if (x.ok || (x.record && x.record.done && x.record.done.length)) DONE.add(list[i] ? list[i].id : ''); });
+    const ok = res.filter(x => x.ok).length;
+    toast(ok === res.length ? `Fixed ${ok} item${ok > 1 ? 's' : ''}. Scan again to confirm.` : `Fixed ${ok} of ${res.length}. Open History for details.`, ok !== res.length);
+    drawNav(); render();
+  };
+}
+async function second(id) {
+  const box = $('#second'); box.classList.add('show'); box.innerHTML = 'Asking Windows Defender and MalwareBazaar…';
+  const r = await call('second', {id});
+  if (r.error) { box.textContent = r.error; return; }
+  box.innerHTML = `<b>Windows Defender:</b> ${esc(r.defender || '—')}<br><b>MalwareBazaar:</b> ${esc(r.bazaar || '—')}${r.link ? ` · <a href="${esc(r.link)}" target="_blank" rel="noopener">details</a>` : ''}`;
+}
+async function protFix(id) {
+  if (ANDROID) { const r = await call('open', {what: id}); if (r.error) toast(r.error, true); return; }
+  if (id === 'tamper') return harden(['tamper']);
+  const map = {rtp:'rtp', sigs:'sigs', pua:'pua', netprot:'netprot', cfa:'cfa', asr:'asr', firewall:'firewall', smartscreen:'smartscreen', uac:'uac'};
+  if (id === 'uac') { const f = RES.findings.find(x => x.title.startsWith('Admin prompts')); if (f) return confirmFix(f.id, 'fixsetting'); }
+  if (id === 'cfa') return harden(['cfa'], 'Turn on the ransomware folder guard?', ['Only trusted apps may change Documents, Pictures, Desktop and Videos', 'If a program you trust is blocked, Windows shows a notification and you can allow it in Windows Security']);
+  return harden([map[id] || id]);
+}
+function harden(ids, title, lines) {
+  const run = async () => {
+    toast('Turning on…');
+    const r = await call('harden', {ids});
+    if (r.error) return toast(r.error, true);
+    toast(r.msg || 'Done');
+    if (RES) (RES.protection || []).forEach(p => { if (ids.includes(p.fix) && p.fix !== 'tamper') p.state = 'on'; });
+    render();
+  };
+  if (!title) return run();
+  modal(`<h3>${esc(title)}</h3><ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul><div class="row"><button class="btn" data-a="mclose">Cancel</button><button class="btn pri" id="mgo">Turn on</button></div>`);
+  $('#mgo').onclick = () => { closeModal(); run(); };
+}
+
+/* ---------- bloatware ---------- */
+function bloat() {
+  const B = RES.bloat || [];
+  const grp = (r, t, d) => { const l = B.filter(b => b.rating === r); return l.length ? `<h2>${t} <span>${d}</span></h2><div class="card">${l.map(bRow).join('')}</div>` : ''; };
+  const rem = B.filter(b => b.rating === 'remove' && b.on && b.action === 'remove');
+  let out = `<h1>Bloatware</h1><p class="lead">${ANDROID ? 'Pre-installed apps you may not need. Android only lets you turn these off from each app\'s settings page, so CoreKit opens it for you.' : 'Pre-installed apps, trial software and start-up extras that slow your PC down or show ads.'}</p>`;
+  if (!B.length) return out + `<div class="card" style="margin-top:14px"><div class="empty"><div class="ei">${svg('check')}</div><b>No bloatware found</b>Nothing pre-installed that we'd suggest removing.</div></div>`;
+  if (rem.length > 1 && !ANDROID) out += `<div class="fbar" style="margin-top:12px"><span class="grow"></span><button class="btn sm" data-a="bloatAll">${svg('trash')}Remove all ${rem.length} recommended Store apps</button></div>`;
+  return out + grp('remove', 'Safe to remove', 'Not needed by Windows or your hardware') + grp('optional', 'Your choice', 'Remove if you don\'t use it') + grp('keep', 'Keep', 'Useful or needed by your hardware');
+}
+function bRow(b) {
+  const lbl = {remove:'Remove', uninstall:'Uninstall', disable:'Turn off at start-up', appinfo:'Disable…'}[b.action] || 'Remove';
+  const kind = {store:'Store app', program:'Program', startup:'Start-up', system:'Pre-installed'}[b.kind] || b.kind;
+  return `<div class="br ${b.rating}${b.on ? '' : ' gone'}"><span class="ki">${svg(b.kind === 'startup' ? 'startup' : b.kind === 'program' ? 'file' : 'app')}</span><div><div class="ti">${esc(b.name)} <span class="tag">${kind}</span></div><div class="su">${esc(b.why)}${b.publisher ? ' · ' + esc(b.publisher) : ''}${b.size ? ' · ' + size(b.size) : ''}</div></div>${b.on ? (b.rating === 'keep' ? '' : `<button class="btn sm" data-a="bloat" data-id="${b.id}">${lbl}</button>`) : '<span class="tag green">Done</span>'}</div>`;
+}
+async function bloatAct(id) {
+  const b = RES.bloat.find(x => x.id === id); if (!b) return;
+  const go = async () => {
+    toast('Working…');
+    const r = await call('bloat', {id});
+    if (r.error) return toast(r.error, true);
+    if (b.action !== 'appinfo' && b.action !== 'uninstall') b.on = false;
+    toast(r.msg || 'Done'); render();
+  };
+  if (ANDROID || b.action === 'uninstall') return go();
+  modal(`<h3>${b.action === 'disable' ? 'Stop it starting with Windows?' : 'Remove ' + esc(b.name) + '?'}</h3><p>${esc(b.why)}</p><ul>${b.action === 'disable' ? '<li>It still opens when you click it</li><li>You can undo this from History or Task Manager</li>' : '<li>You can reinstall it from the Microsoft Store any time</li>'}</ul><div class="row"><button class="btn" data-a="mclose">Cancel</button><button class="btn pri" id="mgo">${b.action === 'disable' ? 'Turn off' : 'Remove'}</button></div>`);
+  $('#mgo').onclick = () => { closeModal(); go(); };
+}
+function bloatAll() {
+  const l = RES.bloat.filter(b => b.rating === 'remove' && b.on && b.action === 'remove');
+  modal(`<h3>Remove ${l.length} apps?</h3><ul>${l.map(b => `<li>${esc(b.name)}</li>`).join('')}</ul><p style="margin-top:10px">All can be reinstalled from the Microsoft Store.</p><div class="row"><button class="btn" data-a="mclose">Cancel</button><button class="btn pri" id="mgo">Remove all</button></div>`);
+  $('#mgo').onclick = async () => { closeModal(); let ok = 0; for (const b of l) { toast('Removing ' + b.name + '…'); const r = await call('bloat', {id: b.id}); if (!r.error) { b.on = false; ok++; } render(); } toast(`Removed ${ok} of ${l.length}`); };
+}
+
+/* ---------- Live Shield ---------- */
+async function loadSettings() { SET = await call('settings'); if (tab === 'shield' || tab === 'settings') render(); if (!ASR.length && !ANDROID) { const a = await call('asr'); ASR = a.rules || []; if (tab === 'shield') render(); } }
+function renderShield() {
+  const s = SET && SET.shield || {};
+  const on = !!(s.installed || s.on);
+  const run = !!s.running;
+  let out = `<div class="shield ${on ? 'on' : ''}"><span class="big">${svg(on ? 'shieldok' : 'shield')}</span><div><h3>Live Shield is ${on ? (run || ANDROID ? 'on' : 'on, starting…') : 'off'}</h3><p>${on ? (ANDROID ? 'Every new or updated app is checked, and you get an alert if it looks dangerous.' : 'Every program is checked the moment it starts. Threats are stopped and quarantined before they can do harm.') : 'Turn it on to protect this ' + DEV + ' in the background, even when CoreKit is closed.'}</p>
+    ${on ? `<div class="stats"><span><b>${s.checked || 0}</b>${ANDROID ? 'apps checked' : 'programs checked'}</span><span><b>${s.blocked || 0}</b>${ANDROID ? 'alerts' : 'blocked'}</span>${ANDROID ? '' : `<span><b>${s.warned || 0}</b>warnings</span>`}${s.since ? `<span><b>${ago(s.since).replace(' ago', '')}</b>running</span>` : ''}</div>` : ''}</div>
+    <button class="sw ${on ? 'on' : ''}" data-a="shield" aria-label="Live Shield" ${s.admin === false ? 'disabled' : ''}></button></div>`;
+  if (s.admin === false && !ANDROID) out += note('warn', 'Live Shield needs CoreKit to run as administrator. Restart CoreKit and allow the admin prompt.');
+  if (s.error) out += note('warn', esc(s.error));
+  out += `<h2>How it protects you</h2><div class="how">${(ANDROID ? [
+    ['app', 'New apps checked', 'Android tells CoreKit about every installed or updated app. It is checked for spying permissions, a hidden icon, a fake name and known malware.'],
+    ['bolt', 'Alert within about 15 minutes', 'Android doesn\'t let any app block other installs. CoreKit checks for new apps about every 15 minutes (and every time you open it) and alerts you with a one-tap uninstall.'],
+    ['lock', 'Light on battery', 'No constant background service: a short check about every 15 minutes, handled by Android.']
+  ] : [
+    ['bolt', 'Freeze, then decide', 'A suspicious program is paused the instant it appears, checked (signature, origin, known malware), then stopped or let go.'],
+    ['process', 'Behaviour rules', 'Office starting PowerShell, hidden encoded commands, backup deletion, password theft tools, fake Windows programs.'],
+    ['download', 'Downloads guard', 'Dangerous files in Downloads (fake documents, known malware) are quarantined before you can open them.'],
+    ['shield', 'Windows\' own blocking', 'Attack blocking rules stop attacks inside Windows itself, before a program even starts.']
+  ]).map(([i, t, d]) => `<div><b>${svg(i)}${t}</b><small>${d}</small></div>`).join('')}</div>`;
+  if (!ANDROID) {
+    const P = RES ? RES.protection || [] : [];
+    const st = id => { const p = P.find(x => x.id === id); return p ? p.state : ''; };
+    const rows = [
+      ['asr', 'Attack blocking rules', 'Stops Office, scripts, email attachments, USB programs and ransomware tricks before they run (Windows Defender).', true],
+      ['pua', 'Block unwanted apps', 'Stops adware, bundled toolbars and fake cleaners.'],
+      ['netprot', 'Network protection', 'Blocks known dangerous websites for every program, not just the browser.'],
+      ['cloud', 'Cloud protection: high', 'Checks unknown files with Microsoft\'s cloud within seconds.'],
+      ['cfa', 'Ransomware folder guard', 'Only trusted apps may change Documents, Pictures and Desktop. Unknown apps get blocked; you can allow them in Windows Security.'],
+      ['tamper', 'Tamper protection', 'Stops malware switching Defender off. Only Windows Security can turn this on.']
+    ];
+    out += `<h2>Block before it runs <span>Windows Defender hardening</span><button class="btn sm pri" data-a="hardenAll">${svg('shieldok')}Turn on recommended</button></h2><div class="card">${rows.map(([id, t, d, rules]) => `<div class="hr"><div><b>${t}</b> ${st(id) === 'on' ? '<span class="tag green">On</span>' : st(id) === 'off' ? '<span class="tag red">Off</span>' : st(id) === 'warn' ? '<span class="tag amber">Partly</span>' : ''}<small>${d}</small>${rules && ASR.length ? `<details class="rules"><summary>The ${ASR.length} rules</summary><ul>${ASR.map(r => `<li>${esc(r.Name)}${r.Mode === 'Warn' ? ' (asks first)' : ''}</li>`).join('')}</ul></details>` : ''}</div><button class="btn sm" data-a="${id === 'cfa' || id === 'tamper' ? 'prot' : 'harden'}" data-id="${id}">${id === 'tamper' ? 'Open' : 'Turn on'}</button></div>`).join('')}</div>`;
+    out += note('', 'Smart App Control (Windows 11) also blocks untrusted apps before they run, but Windows only lets you switch it on after a fresh install. Its current state is shown on the Overview.');
+  }
+  $('#inner').innerHTML = out;
+}
+async function shieldToggle() {
+  const s = SET && SET.shield || {}; const on = !(s.installed || s.on);
+  if (on && ANDROID) { const r = await call('shield', {on: true}); SET = Object.assign(SET || {}, {shield: r.shield || {on: true}}); if (r.error) toast(r.error, true); else toast('Live Shield is on'); return render(); }
+  if (on) return modal(`<h3>Turn on Live Shield?</h3><ul><li>CoreKit runs in the background from sign-in (Task Scheduler, as administrator)</li><li>Programs that start are checked within a fraction of a second</li><li>Threats are stopped and quarantined; you get an alert and can restore anything from History</li><li>Uses very little CPU and memory</li></ul><div class="row"><button class="btn" data-a="mclose">Cancel</button><button class="btn pri" id="mgo">Turn on</button></div>`), $('#mgo').onclick = async () => { closeModal(); toast('Starting Live Shield…'); const r = await call('shield', {on: true}); SET = Object.assign(SET || {}, {shield: Object.assign({}, r.shield, r.error ? {error: r.error} : {})}); toast(r.error || 'Live Shield is on', !!r.error); render(); };
+  const r = await call('shield', {on: false}); SET = Object.assign(SET || {}, {shield: r.shield || {}}); toast(r.error || 'Live Shield is off', !!r.error); render();
+}
+
+/* ---------- history ---------- */
+async function loadHistory() { HIST = await call('history'); if (tab === 'history') renderHistory(); }
+function renderHistory() {
+  if (!HIST) { $('#inner').innerHTML = '<div class="scanning"><div><div class="radar"></div><h2>Loading history…</h2></div></div>'; return; }
+  if (HIST.error) { $('#inner').innerHTML = note('warn', esc(HIST.error)); return; }
+  const items = HIST.items || [], Q = HIST.quarantine || [];
+  let out = `<h1>History</h1><p class="lead">Everything CoreKit fixed, blocked or changed, with the full details. Undo anything.</p>`;
+  if (Q.length) out += `<h2>Quarantine <span>${Q.length} file${Q.length > 1 ? 's' : ''}, scrambled so they can't run</span></h2><div class="card">${Q.map(q => `<div class="hi"><span class="ki">${svg('box')}</span><div><div class="ti">${esc(q.title || q.path.split(/[\\/]/).pop())}</div><div class="su mono">${esc(q.path)}</div><div class="su">${esc(when(q.t))} · ${size(q.size)}</div></div><div class="acts"><button class="btn sm" data-a="undo" data-id="q:${esc(q.id)}">${svg('undo')}Restore</button><button class="btn sm" data-a="qdel" data-id="${esc(q.id)}">${svg('trash')}</button></div></div>`).join('')}</div>`;
+  out += `<h2>Activity <span>${items.length} record${items.length === 1 ? '' : 's'}</span></h2>`;
+  if (!items.length) return $('#inner').innerHTML = out + `<div class="card"><div class="empty"><div class="ei">${svg('clock')}</div><b>Nothing yet</b>Fixes and Live Shield blocks will appear here.</div></div>`;
+  out += `<div class="card">${items.map(h => {
+    const src = h.source === 'shield' ? (h.action === 'blocked' ? 'Live Shield blocked' : h.action === 'alert' ? 'Live Shield alert' : 'Live Shield warning') : h.source === 'bloat' ? 'Bloatware' : h.source === 'harden' ? 'Protection' : 'Fixed';
+    return `<div class="hi ${h.source}"><span class="ki">${svg(h.source === 'shield' ? 'radar' : h.source === 'bloat' ? 'box' : h.source === 'harden' ? 'shieldok' : 'bolt')}</span><div style="min-width:0"><div class="ti">${esc(h.title)}</div><div class="su">${src} · ${esc(when(h.t))}${h.restored ? ' · <span class="tag green">Undone</span>' : ''}</div><div class="su">${esc((h.done || []).join(' · '))}${h.failed && h.failed.length ? ` <span style="color:#fecaca">· ${esc(h.failed.join(' · '))}</span>` : ''}</div></div><div class="acts">${h.reasons && h.reasons.length ? `<button class="btn sm" data-a="rec" data-id="${h.id}">${svg('eye')}</button>` : ''}${h.canUndo && !h.restored ? `<button class="btn sm" data-a="undo" data-id="${h.id}">${svg('undo')}Undo</button>` : ''}</div></div>`;
+  }).join('')}</div>`;
+  $('#inner').innerHTML = out;
+}
+async function undo(id) {
+  const q = id.startsWith('q:');
+  const rec = !q && HIST && (HIST.items || []).find(h => h.id === id);
+  if (rec && rec.qid) id = rec.id;
+  modal(`<h3>${q ? 'Restore this file?' : 'Undo this change?'}</h3><p>${q ? 'The file goes back to where it was and can run again. Only do this if you are sure it is safe.' : 'Files go back from Quarantine and removed settings are put back.'}</p><div class="row"><button class="btn" data-a="mclose">Cancel</button><button class="btn pri" id="mgo">${q ? 'Restore' : 'Undo'}</button></div>`);
+  $('#mgo').onclick = async () => {
+    closeModal();
+    let r;
+    if (q) { const qid = id.slice(2); const owner = HIST && (HIST.items || []).find(h => h.qid === qid && !h.restored); r = owner ? await call('undo', {id: owner.id}) : await call('restore', {id: qid}); }
+    else r = await call('undo', {id});
+    toast(r.error || r.msg || 'Done', !!r.error); loadHistory();
+  };
+}
+async function qdel(id) {
+  modal(`<h3>Delete for good?</h3><p>The quarantined file is erased and can't be restored.</p><div class="row"><button class="btn" data-a="mclose">Cancel</button><button class="btn danger" id="mgo">Delete</button></div>`);
+  $('#mgo').onclick = async () => { closeModal(); const r = await call('qdelete', {id}); toast(r.error || r.msg, !!r.error); loadHistory(); };
+}
+function openRecord(id) {
+  const h = (HIST.items || []).find(x => x.id === id); if (!h) return;
+  const f = Object.assign({id: 'rec', kind: h.path ? 'file' : 'setting', actions: [], summary: '', sub: h.sub}, h);
+  CUR = null;
+  $('#dHead').className = 'dh ' + (h.sev || 'info');
+  $('#dHead').innerHTML = `<span class="ki">${svg(h.source === 'shield' ? 'radar' : 'bolt')}</span><div class="t"><h3>${esc(h.title)}</h3><div class="s"><span class="tag">${esc(when(h.t))}</span>${h.sev ? `<span class="tag ${h.sev === 'high' ? 'red' : h.sev === 'med' ? 'amber' : 'blue'}">${SEV[h.sev]} · ${h.score}/100</span>` : ''}</div></div><button class="ib" data-a="close" aria-label="Close">${svg('x')}</button>`;
+  $('#dBody').innerHTML = `<h4>What CoreKit did</h4><div class="pl">${(h.done || []).map(d => `<div>${svg('check')} ${esc(d)}</div>`).join('')}${(h.failed || []).map(d => `<div style="color:#fecaca">${svg('x')} ${esc(d)}</div>`).join('')}</div>` + story(f);
+  $('#dFoot').innerHTML = `<button class="btn" data-a="report1" data-id="${h.id}">${svg('download')}Save incident report</button>${h.canUndo && !h.restored ? `<button class="btn" data-a="undo" data-id="${h.id}">${svg('undo')}Undo</button>` : ''}`;
+  $('#drawer').classList.add('show'); $('#dim').classList.add('show');
+}
+
+/* ---------- settings ---------- */
+function renderSettings() {
+  const s = SET || {};
+  let out = `<h1>Settings</h1><h2>Known-malware check</h2><div class="form"><label for="key">abuse.ch Auth-Key</label><input id="key" type="password" autocomplete="off" spellcheck="false" placeholder="${s.keySet ? '•••••••••• saved (encrypted on this ' + DEV + ')' : 'Paste your free key'}"><div class="row"><button class="btn pri" data-a="saveKey">${svg('key')}${s.keySet ? 'Replace key' : 'Save key'}</button>${s.keySet ? `<button class="btn" data-a="clearKey">Remove key</button>` : ''}<a class="btn" href="https://auth.abuse.ch/" target="_blank" rel="noopener">${svg('globe')}Get a free key</a></div>
+    <p>CoreKit sends only file fingerprints (SHA-256), never the files, to MalwareBazaar by abuse.ch, a free database of millions of malware samples used by security teams. Without a key, everything else still works.</p></div>`;
+  const T = s.trusted || [];
+  out += `<h2>Trusted <span>Never reported again</span></h2><div class="card">${T.length ? T.map(t => `<div class="hr"><div><b class="mono" style="font-weight:500;overflow-wrap:anywhere">${esc(t)}</b><small>${/^[0-9a-f]{64}$/.test(t) ? 'File fingerprint' : t.includes('.') && !t.includes('\\') && !t.includes('/') ? 'App' : 'File location'}</small></div><button class="btn sm" data-a="untrust" data-v="${esc(t)}">Remove</button></div>`).join('') : `<div class="empty" style="padding:28px">Nothing trusted yet.</div>`}</div>`;
+  out += `<h2>About the scanner</h2><div class="how">${(ANDROID ? [
+    ['eye', 'Private', 'The scan runs on your phone. Only fingerprints go online, and only with your key.'],
+    ['shield', 'Not a replacement for Play Protect', 'CoreKit adds a second, deeper look. Keep Google Play Protect on.']
+  ] : [
+    ['eye', 'Private', 'The scan runs on your PC. Only fingerprints go online, and only with your key.'],
+    ['shield', 'Works with Defender', 'CoreKit adds behaviour analysis, deep start-up checks and second opinions. Keep Windows Defender on.'],
+    ['box', 'Quarantine', s.dir ? 'Stored in ' + esc(s.dir) + ', readable only by administrators.' : 'Files are scrambled so they can never run by accident.']
+  ]).map(([i, t, d]) => `<div><b>${svg(i)}${t}</b><small>${d}</small></div>`).join('')}</div>`;
+  $('#inner').innerHTML = out;
+}
+async function saveKey(clear) {
+  const k = clear ? '' : ($('#key').value || '').trim();
+  if (!clear && !k) return toast('Paste the key first', true);
+  toast(clear ? 'Removing…' : 'Checking the key with abuse.ch…');
+  const r = await call('settings', {key: k});
+  if (r.error) return toast(r.error, true);
+  SET = r; toast(clear ? 'Key removed' : 'Key saved. Scan again to check files online.'); render();
+}
+async function untrust(v) { const r = await call('settings', {untrust: [v]}); if (r.error) return toast(r.error, true); SET = r; render(); toast('Removed from trusted'); }
+
+/* ---------- reports ---------- */
+const RS = '<style>body{font:14px/1.5 Segoe UI,Arial,sans-serif;color:#111;max-width:900px;margin:30px auto;padding:0 20px}h1{margin:0}h2{margin-top:28px;border-bottom:2px solid #eee;padding-bottom:4px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:top;font-size:13px}th{background:#f6f6f6}.h{color:#b91c1c;font-weight:700}.m{color:#b45309;font-weight:700}.l{color:#1d4ed8;font-weight:700}code{font:12px Consolas,monospace;word-break:break-all}.muted{color:#666}</style>';
+function reportHTML() {
+  const sevc = {high:'h', med:'m', low:'l', info:''};
+  let h = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>CoreKit Security Report</title>${RS}</head><body><h1>CoreKit Security Report</h1><p class="muted">${esc(RES.host || '')} · ${esc(RES.os || '')} · ${esc(when(RES.t))} · Safety score ${RES.score}/100</p>`;
+  h += `<h2>Protection</h2><table><tr><th>Setting</th><th>State</th><th>Detail</th></tr>${(RES.protection || []).map(p => `<tr><td>${esc(p.name)}</td><td>${esc(p.state)}</td><td>${esc(p.detail)}</td></tr>`).join('')}</table>`;
+  h += `<h2>Findings</h2><table><tr><th>Risk</th><th>Item</th><th>Why</th></tr>${RES.findings.filter(f => f.sev !== 'info').map(f => `<tr><td class="${sevc[f.sev]}">${SEV[f.sev]}<br>${f.score}/100${DONE.has(f.id) ? '<br>Fixed' : ''}</td><td><b>${esc(f.title)}</b><br><code>${esc(f.path || f.sub || '')}</code>${f.sha256 ? `<br><code>SHA-256 ${esc(f.sha256)}</code>` : ''}${f.origin ? `<br>${esc(f.origin.text)}${f.origin.url ? ' <code>' + esc(f.origin.url) + '</code>' : ''}` : ''}</td><td>${(f.reasons || []).filter(r => r.w > 0).map(r => esc(r.t)).join('<br>')}${f.mitre && f.mitre.length ? `<br><span class="muted">MITRE ATT&CK: ${esc(f.mitre.join(', '))}</span>` : ''}</td></tr>`).join('')}</table>`;
+  if ((RES.bloat || []).length) h += `<h2>Bloatware</h2><table><tr><th>App</th><th>Advice</th><th>Why</th></tr>${RES.bloat.map(b => `<tr><td>${esc(b.name)}</td><td>${esc(b.rating)}</td><td>${esc(b.why)}</td></tr>`).join('')}</table>`;
+  return h + '<p class="muted">Made with CoreKit.</p></body></html>';
+}
+function exportRecord(id) {
+  const x = (HIST.items || []).find(i => i.id === id); if (!x) return;
+  const h = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>CoreKit Incident Report</title>${RS}</head><body><h1>Incident report</h1><p class="muted">${esc(when(x.t))} · ${esc(x.source === 'shield' ? 'Live Shield' : 'Security scan')}</p><h2>${esc(x.title)}</h2><table><tr><th>Location</th><td><code>${esc(x.path || x.sub || '')}</code></td></tr>${x.sha256 ? `<tr><th>SHA-256</th><td><code>${esc(x.sha256)}</code></td></tr>` : ''}${x.sev ? `<tr><th>Risk</th><td>${SEV[x.sev]} (${x.score}/100)</td></tr>` : ''}${x.origin ? `<tr><th>Origin</th><td>${esc(x.origin.text)} ${x.origin.url ? '<code>' + esc(x.origin.url) + '</code>' : ''}</td></tr>` : ''}<tr><th>Actions</th><td>${(x.done || []).map(esc).join('<br>')}${(x.failed || []).map(f => '<br>Failed: ' + esc(f)).join('')}</td></tr></table><h2>Why</h2><ul>${(x.reasons || []).map(r => `<li>${esc(r.t)} (${r.w > 0 ? '+' : ''}${r.w})</li>`).join('')}</ul>${x.chain && x.chain.length ? `<h2>Process chain</h2><ol>${x.chain.map(c => `<li><b>${esc(c.name)}</b> ${c.pid ? 'PID ' + c.pid : ''}<br><code>${esc(c.path || '')}</code>${c.cmd ? '<br><code>' + esc(c.cmd) + '</code>' : ''}</li>`).join('')}</ol>` : ''}${x.persist && x.persist.length ? `<h2>Persistence</h2><ul>${x.persist.map(p => `<li>${esc(p.where)}: <code>${esc(p.value)}</code></li>`).join('')}</ul>` : ''}${x.mitre && x.mitre.length ? `<p>MITRE ATT&CK: ${esc(x.mitre.join(', '))}</p>` : ''}</body></html>`;
+  saveHTML('CoreKit-Incident-' + new Date(x.t * 1000).toISOString().slice(0, 19).replace(/[:T]/g, '-'), h);
+}
+function exportReport() { if (!RES) return toast('Run a scan first', true); saveHTML('CoreKit-Security-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-'), reportHTML()); }
+async function saveHTML(name, html) {
+  if (N && N.save) { let r = {}; try { r = JSON.parse(N.save(name, html)); } catch (e) {} if (r.error) return toast(r.error, true); toast('Saved to ' + (r.label || 'Downloads')); if (r.path && N.open) N.open(r.path); return; }
+  const r = await fetch(API + 'save', {method:'POST', body:JSON.stringify({name, html})}).then(x => x.json()).catch(() => null);
+  if (!r || !r.path) return toast('Could not save the report', true);
+  toast('Report saved'); fetch(API + 'reveal', {method:'POST', body:JSON.stringify({path:r.path})});
+}
+
+/* ---------- modal / toast ---------- */
+function modal(html) { $('#mBody').innerHTML = html; $('#modal').classList.add('show'); }
+function closeModal() { $('#modal').classList.remove('show'); }
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+let tt;
+function toast(msg, bad) { const t = $('#toast'); t.textContent = msg; t.className = 'show' + (bad ? ' bad' : ''); clearTimeout(tt); tt = setTimeout(() => t.className = '', 3800); }
+
+/* ---------- start ---------- */
+if (ANDROID) { $('#sub').textContent = 'Deep scan of every app, spyware check, bloatware'; }
+drawNav(); render(); loadSettings();
+if (location.hash === '#scan') scan();
+</script>
+</body>
+</html>

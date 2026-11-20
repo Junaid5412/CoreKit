@@ -44,7 +44,7 @@ class Host(private val act: MainActivity, private val web: WebView) {
     companion object {
         const val ORIGIN = "https://appassets.androidplatform.net"
         const val BASE = "$ORIGIN/ck/"
-        private val PAGES = mapOf("home" to "mobile/home.html", "health" to "health.html", "net" to "net.html", "logs" to "logs.html", "remote" to "remote.html")
+        private val PAGES = mapOf("home" to "mobile/home.html", "health" to "health.html", "net" to "net.html", "logs" to "logs.html", "remote" to "remote.html", "security" to "security.html")
     }
 
     val client = object : WebViewClient() {
@@ -104,6 +104,9 @@ class Host(private val act: MainActivity, private val web: WebView) {
         "net/fix" -> startFix(u.getQueryParameter("actions") ?: "")
         "net/fixstatus" -> fixStatus(u.getQueryParameter("id") ?: "", u.getQueryParameter("since")?.toIntOrNull() ?: 0)
         "open" -> { openSettings(u.getQueryParameter("what") ?: ""); text("", 204) }
+        "sec/scan" -> stream { out ->
+            out.event("done", SecurityScanner.scan(act) { pct, label -> out.event("progress", JSONObject().put("pct", pct).put("label", label)) })
+        }
         "remote/events" -> RemoteEngine.events(act, false)?.let {
             WebResourceResponse("text/event-stream", "utf-8", 200, "OK", mapOf("Cache-Control" to "no-store"), it)
         } ?: text("The Remote Access engine could not start.", 503)
@@ -390,6 +393,23 @@ class Host(private val act: MainActivity, private val web: WebView) {
             }
         }
 
+        /** Security: Google Play prominent disclosure before the first app scan. */
+        @JavascriptInterface fun secAgreed(): Boolean = act.getSharedPreferences("corekit-security", Context.MODE_PRIVATE).getBoolean("agreed", false)
+
+        @JavascriptInterface fun secAsk() = act.disclose(MainActivity.Disclosure.APPS) {
+            act.getSharedPreferences("corekit-security", Context.MODE_PRIVATE).edit().putBoolean("agreed", true).apply()
+            web.evaluateJavascript("window.__secGo&&__secGo()", null)
+        }
+
+        /** Security: every other call (same paths and JSON as Windows' api/sec/...), answered asynchronously. */
+        @JavascriptInterface fun secCall(id: String, path: String, body: String) {
+            pool.execute {
+                val res = try { secRoute(path, if (body.isBlank()) JSONObject() else JSONObject(body)) }
+                    catch (e: Throwable) { JSONObject().put("error", e.message ?: "failed") }
+                act.runOnUiThread { web.evaluateJavascript("window.__secReply&&__secReply(${JSONObject.quote(id)},$res)", null) }
+            }
+        }
+
         /** No Recycle Bin on Android; the usage log never offers restore. */
         @JavascriptInterface fun restoreFile(token: String): String = JSONObject().put("error", "Not available on Android").toString()
 
@@ -413,6 +433,96 @@ class Host(private val act: MainActivity, private val web: WebView) {
             }
         }
     }
+
+    // ---------------------------------------------------------------- Security calls
+
+    private fun findFinding(id: String): JSONObject? {
+        val f = SecurityScanner.last?.optJSONArray("findings") ?: return null
+        for (i in 0 until f.length()) if (f.getJSONObject(i).optString("id") == id) return f.getJSONObject(i)
+        return null
+    }
+
+    private fun startSafe(i: Intent, fallback: Intent? = null): Boolean = try {
+        act.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true
+    } catch (_: Throwable) { if (fallback != null) startSafe(fallback) else false }
+
+    private fun openSec(what: String, pkg: String = "") {
+        val sec = Intent(Settings.ACTION_SECURITY_SETTINGS)
+        when (what) {
+            "a11y" -> startSafe(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            "notif" -> startSafe(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            "admin", "lock", "encrypt" -> startSafe(sec)
+            "update" -> startSafe(Intent("android.settings.SYSTEM_UPDATE_SETTINGS"), Intent(Settings.ACTION_DEVICE_INFO_SETTINGS))
+            "dev" -> startSafe(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS), Intent(Settings.ACTION_DEVICE_INFO_SETTINGS))
+            "playprotect" -> startSafe(Intent().setClassName("com.google.android.gms", "com.google.android.gms.security.settings.VerifyAppsSettingsActivity"), sec)
+            "appinfo" -> startSafe(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$pkg")))
+            else -> startSafe(Intent(Settings.ACTION_SETTINGS))
+        }
+    }
+
+    private fun secSettings(): JSONObject = JSONObject().put("keySet", SecurityScanner.apiKey(act).isNotEmpty())
+        .put("trusted", JSONArray(SecurityScanner.trusted(act).sorted())).put("shield", SecurityScanner.shieldStatus(act))
+
+    private fun secRoute(path: String, b: JSONObject): JSONObject { return when (path) {
+        "settings" -> {
+            if (b.has("key")) {
+                val k = b.optString("key").trim()
+                if (k.isNotEmpty() && !Regex("^[A-Za-z0-9_-]{20,128}$").matches(k)) return JSONObject().put("error", "That doesn't look like an abuse.ch Auth-Key.")
+                if (k.isNotEmpty() && SecurityScanner.lookup(k, listOf("0".repeat(64))).second.contains("refused")) return JSONObject().put("error", "abuse.ch refused this key. Check it and try again.")
+                SecurityScanner.setKey(act, k)
+            }
+            b.optJSONArray("untrust")?.let { u ->
+                val t = SecurityScanner.trusted(act)
+                for (i in 0 until u.length()) t.remove(u.getString(i))
+                SecurityScanner.setTrusted(act, t)
+            }
+            secSettings()
+        }
+        "shield" -> {
+            val on = b.optBoolean("on")
+            if (on) act.requestNotifications()
+            SecurityScanner.setShield(act, on)
+            if (on) pool.execute { try { SecurityScanner.checkChanged(act) } catch (_: Throwable) {} }
+            JSONObject().put("shield", SecurityScanner.shieldStatus(act))
+        }
+        "history" -> {
+            val h = SecurityScanner.history(act)
+            JSONObject().put("items", JSONArray((h.length() - 1 downTo 0).map { h.get(it) })).put("quarantine", JSONArray())
+        }
+        "fix" -> {
+            val f = findFinding(b.optString("id")) ?: return JSONObject().put("error", "Please scan again: this result is out of date.")
+            val a = b.optString("action")
+            val pkg = f.optString("pkg")
+            when {
+                a == "uninstall" && pkg.isNotEmpty() -> {
+                    startSafe(Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkg")))
+                    val r = SecurityScanner.addRecord(act, SecurityScanner.recordOf(f, a, "Uninstall started (confirmed by you on Android's screen)"))
+                    JSONObject().put("ok", true).put("msg", "Confirm the uninstall on the next screen").put("record", r)
+                }
+                a == "appinfo" -> { openSec("appinfo", pkg); JSONObject().put("ok", true).put("msg", "Tap Force stop or Disable") }
+                a.startsWith("settings:") -> { openSec(a.removePrefix("settings:"), pkg); JSONObject().put("ok", true).put("msg", "Switch it off for " + f.optString("title")) }
+                a == "trust" -> {
+                    val t = SecurityScanner.trusted(act)
+                    if (pkg.isNotEmpty()) t.add(pkg)
+                    f.optString("sha256").takeIf { it.isNotEmpty() }?.let { t.add(it) }
+                    SecurityScanner.setTrusted(act, t)
+                    val r = SecurityScanner.addRecord(act, SecurityScanner.recordOf(f, a, "Marked as trusted: it won't be reported again"))
+                    JSONObject().put("ok", true).put("msg", "Marked as trusted").put("record", r)
+                }
+                else -> JSONObject().put("error", "Not available on Android")
+            }
+        }
+        "bloat" -> {
+            val bl = SecurityScanner.last?.optJSONArray("bloat")
+            var pkg = ""
+            if (bl != null) for (i in 0 until bl.length()) if (bl.getJSONObject(i).optString("id") == b.optString("id")) pkg = bl.getJSONObject(i).optString("pkg")
+            if (pkg.isEmpty()) JSONObject().put("error", "Please scan again: this list is out of date.")
+            else { openSec("appinfo", pkg); JSONObject().put("msg", "Tap Disable (or Uninstall) on the next screen") }
+        }
+        "open" -> { openSec(b.optString("what")); JSONObject().put("ok", true) }
+        "asr" -> JSONObject().put("rules", JSONArray())
+        else -> JSONObject().put("error", "Not available on Android")
+    } }
 
     private fun appVersion(): String = try {
         act.packageManager.getPackageInfo(act.packageName, 0).versionName ?: ""

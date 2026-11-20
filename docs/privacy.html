@@ -15,7 +15,7 @@
 </div></header>
 <main><div class="card">
 <h1>Privacy Policy</h1>
-<p class="meta">Effective date: 18 November 2026 · Applies to CoreKit for Android (package <code>com.hostzelon.corekit</code>) and CoreKit for Windows</p>
+<p class="meta">Effective date: 20 November 2026 · Applies to CoreKit for Android (package <code>com.hostzelon.corekit</code>) and CoreKit for Windows</p>
 
 <p>This Privacy Policy explains what information CoreKit accesses, why, where it goes and the choices you have. CoreKit is developed and published by <b>Junaid Shaheen</b> ("we", "us"). If you have any question, write to <a href="mailto:hostzelon@gmail.com">hostzelon@gmail.com</a>.</p>
 
@@ -32,6 +32,7 @@
 <tr><td>Remote Access</td><td>Your screen (screen capture), remote taps and typing (Accessibility service), microphone and camera (only during a call you start), notifications</td><td>To let you view and control another of your devices, or let a person you trust control yours, and to make calls between them</td><td>Only directly to the other device you connect to, on the same Wi-Fi (section 4)</td></tr>
 <tr><td>Session recording</td><td>The remote screen you are viewing</td><td>To save a video only when you press Record</td><td>No. Saved to your Downloads folder</td></tr>
 <tr><td>Camera test</td><td>Camera</td><td>To check that your cameras work</td><td>No</td></tr>
+<tr><td>Security</td><td>On Android: the list of installed apps, where each came from, the permissions and special access they have (Accessibility, notification access, device admin, SMS), and the phone's security settings. On Windows: running programs, start-up entries, services, scheduled tasks, signatures, network connections, Windows Defender settings and history, and installed programs</td><td>To find malware, spyware, risky settings and bloatware, explain them and fix them when you choose. With Live Shield on, the same checks run in the background for new programs and apps</td><td>No, except file fingerprints when you add your own abuse.ch key (section 3)</td></tr>
 </table></div>
 
 <h2>2. Accessibility service (Android)</h2>
@@ -52,6 +53,7 @@
 <li><b>Your public IP and its approximate location (country and city):</b> ipinfo.io, ipapi.co, ipwho.is and ip-api.com. This shows you which network and country your traffic appears to come from, for example to check that a VPN works. CoreKit does not use your device's GPS location for this.</li>
 <li><b>Leak check (Safe Browser):</b> public STUN servers of Google and Cloudflare, to check whether your real IP address leaks through a VPN or proxy.</li>
 <li><b>Translation (Safe Browser):</b> if you translate a page, its text is sent to Google Translate or Microsoft Translator. Pages are translated automatically only if you turn that on. When a page does not state its language, a short sample of its text (not your personal data) may be sent to the same service to detect the language, so CoreKit can offer a translation.</li>
+<li><b>Known-malware check (Security):</b> only if you add your own free abuse.ch key. CoreKit then sends SHA-256 fingerprints of files (Windows) or of apps installed from outside app stores (Android) to MalwareBazaar by abuse.ch to see whether they are known malware. It never sends the files themselves, their names, the list of your apps or any personal information. Links to VirusTotal or ipinfo.io in the Security screen open only if you tap them.</li>
 <li><b>Websites and proxy servers you choose:</b> the sites you visit and any proxy or VPN server you add receive your traffic, as in any browser. Their own privacy policies apply.</li>
 <li><b>Windows only:</b> CoreKit for Windows may download the open-source Xray proxy engine from GitHub the first time you use a proxy in Safe Browser.</li>
 </ul>
@@ -70,6 +72,8 @@
 <ul>
 <li><b>Location:</b> Android shows the Wi-Fi network name only to apps with this permission. CoreKit uses it only to show your Wi-Fi details. It does not track your location and does not use it in the background.</li>
 <li><b>Usage access:</b> for the Activity Log on Android.</li>
+<li><b>See all apps (QUERY_ALL_PACKAGES):</b> for the Security scan, which checks every installed app for malware and spyware, like an antivirus. CoreKit explains this and asks before the first scan. The list stays on your device.</li>
+<li><b>Run at start-up:</b> so Live Shield's periodic check of new apps keeps working after a restart. Used only if you turn Live Shield on.</li>
 <li><b>Accessibility:</b> for remote control in Remote Access (section 2).</li>
 <li><b>Screen capture:</b> for sharing your screen in Remote Access. Android asks you each time.</li>
 <li><b>Microphone and camera:</b> for calls in Remote Access, the camera test, and websites in Safe Browser that you allow.</li>
@@ -88,7 +92,8 @@
 
 <h2>7. Storage, security and deletion</h2>
 <ul>
-<li>Your settings, browser profiles and proxy links are stored only on your device. Proxy links are encrypted on the device.</li>
+<li>Your settings, browser profiles and proxy links are stored only on your device. Proxy links and your abuse.ch key are encrypted on the device.</li>
+<li>Files the Security module moves to Quarantine (Windows) stay on your PC, scrambled so they cannot run, until you restore or delete them. The Security history (what was found and fixed) is kept only on your device.</li>
 <li>Because we do not collect your data, there is nothing for us to delete on our side. To delete everything CoreKit stored, uninstall the app or clear its storage (Android: <i>Settings › Apps › CoreKit › Storage › Clear storage</i>). Recordings in your Downloads folder can be deleted like any file.</li>
 <li>Data sent to the internet services in section 3 is handled under their own privacy policies.</li>
 </ul>

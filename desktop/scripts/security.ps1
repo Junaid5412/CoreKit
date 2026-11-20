@@ -12,6 +12,10 @@ function Set-Status([string]$Text, [int]$Pct) { Out-Line ("P|{0}|{1}" -f $Pct, $
 function U($d) { if (-not $d) { return 0 }; try { [int64]([math]::Floor(([datetime]$d).ToUniversalTime().Subtract([datetime]'1970-01-01T00:00:00Z').TotalSeconds)) } catch { 0 } }
 function S($v) { if ($null -eq $v) { '' } else { [string]$v } }
 
+# CoreKit's own processes (this collector and the CoreKit window that started it) are never reported
+$SelfPID = $PID
+$SelfParent = 0; $SelfPath = ''
+try { $me = Get-CimInstance Win32_Process -Filter "ProcessId=$PID"; $SelfParent = [int]$me.ParentProcessId; $SelfPath = [string](Get-CimInstance Win32_Process -Filter "ProcessId=$SelfParent").ExecutablePath } catch {}
 $IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 $WinDir = $env:SystemRoot
 $Notes = New-Object System.Collections.ArrayList
@@ -164,7 +168,7 @@ foreach ($t in (Get-ScheduledTask)) {
         $tgt = Get-Target $val
         $ms = ($t.TaskPath -like '\Microsoft\*')
         if ($ms -and $tgt -like "$WinDir\*" -and $val -notmatch '(?i)-enc|downloadstring|frombase64|http') { continue }
-        Add-Auto 'task' ("Task Scheduler" + $t.TaskPath) $t.TaskName $val ("task|" + $t.TaskPath + $t.TaskName) ([bool]$t.Settings.Hidden) (S $t.Author) ((S $t.State) -eq 'Disabled') $tgt
+        Add-Auto 'task' ("Task Scheduler · " + $t.TaskPath) $t.TaskName $val ("task|" + $t.TaskPath + $t.TaskName) ([bool]$t.Settings.Hidden) (S $t.Author) ((S $t.State) -eq 'Disabled') $tgt
     }
 }
 
@@ -221,11 +225,11 @@ $lsa = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\Lsa'
 foreach ($vn in @('Authentication Packages', 'Notification Packages', 'Security Packages')) {
     foreach ($pkg in @($lsa.$vn)) {
         $pkg = (S $pkg).Trim('"').Trim()
-        if (-not $pkg) { continue }
+        if (-not $pkg -or $pkg.ToLower() -in @('msv1_0', 'scecli', 'kerberos', 'schannel', 'wdigest', 'tspkg', 'pku2u', 'cloudap', 'negoexts', 'livessp', 'rassfm', 'msoidssp', 'negotiate', 'msapsspc', 'msnsspc')) { continue }
         $dll = Join-Path "$WinDir\System32" ($pkg + '.dll')
         if (Test-Path -LiteralPath $dll) {
             $sg = Get-AuthenticodeSignature -LiteralPath $dll
-            if ($sg.Status -eq 'Valid' -and ($sg.SignerCertificate.Subject -match 'O=Microsoft Corporation')) { continue }
+            if ($sg.Status -eq 'Valid' -and ($sg.IsOSBinary -or ($sg.SignerCertificate.Subject -match 'O=Microsoft Corporation'))) { continue }
         }
         Add-Auto 'lsa' ("LSA · " + $vn) $pkg $dll ("lsa|$vn|$pkg") $false '' $false $dll
     }
@@ -371,6 +375,7 @@ Set-Status 'Packing results' 97
 $os = ''
 try { $o = Get-CimInstance Win32_OperatingSystem; $os = "$($o.Caption) $($o.Version)" } catch {}
 $out = [ordered]@{
+    self = $SelfPID; selfParent = $SelfParent; selfPath = $SelfPath
     admin = $IsAdmin; os = $os; host = $env:COMPUTERNAME; defender = $def; fw = $fw; uac = $uac; smartscreen = $smart; sac = $sac
     procs = $procs; sigs = $sigs; files = $files; autoruns = $auto; conns = $conns; threats = $threats
     hosts = $hostsBad; hostsN = $hostsN; proxy = $proxy; roots = $roots; policies = $policies; appx = $appx; programs = $programs

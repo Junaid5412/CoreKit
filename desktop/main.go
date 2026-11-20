@@ -24,6 +24,8 @@ var logsHTML = ui.Logs
 
 var remoteHTML = ui.Remote
 
+var securityHTML = ui.Security
+
 //go:embed scripts/activity.ps1
 var activityPS []byte
 
@@ -43,7 +45,11 @@ func main() {
 	pick := flag.Bool("pick", false, "open CoreKit Browser's profile picker")
 	helper := flag.String("helper", "", "run one shared-code command for the Android app (JSON on stdin/stdout)")
 	remoteEngine := flag.Bool("remote", false, "run the Remote Access engine for the Android app")
+	shield := flag.Bool("shield", false, "run Live Shield (background protection, started by Task Scheduler)")
 	flag.Parse()
+	if *shield {
+		os.Exit(runShield())
+	}
 	if *helper != "" {
 		os.Exit(runHelper(*helper))
 	}
@@ -96,6 +102,12 @@ func main() {
 			runInspector("remote")
 			rEng.shutdown()
 			fmt.Printf("\n    %s[*]%s Module closed. Sharing stopped.\n", cDGreen, cReset)
+			time.Sleep(600 * time.Millisecond)
+		case '6':
+			markUsed("Security")
+			boot("security")
+			runInspector("security")
+			fmt.Printf("\n    %s[*]%s Module closed.%s\n", cDGreen, cReset, shieldNote())
 			time.Sleep(600 * time.Millisecond)
 		case '3':
 			markUsed("Safe Browser")

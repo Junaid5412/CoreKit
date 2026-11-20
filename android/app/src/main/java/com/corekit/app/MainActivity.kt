@@ -77,7 +77,7 @@ class MainActivity : Activity() {
         web.addJavascriptInterface(host.bridge, "CoreKitNative")
         WebView.setWebContentsDebuggingEnabled(false)
         if (savedInstanceState != null) web.restoreState(savedInstanceState)
-        else web.loadUrl(Host.BASE + when (intent?.action) { ACTION_OPEN_REMOTE -> "remote"; else -> "home" })
+        else web.loadUrl(Host.BASE + when (intent?.action) { ACTION_OPEN_REMOTE -> "remote"; ACTION_OPEN_SECURITY -> "security"; else -> "home" })
     }
 
     /** A Remote Access notification was tapped: show the Remote Access screen. */
@@ -85,6 +85,7 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.action == ACTION_OPEN_REMOTE && !(web.url ?: "").endsWith("/remote")) web.loadUrl(Host.BASE + "remote")
+        else if (intent.action == ACTION_OPEN_SECURITY) web.loadUrl(Host.BASE + "security")
         else web.evaluateJavascript("window.__ckStatus&&__ckStatus()", null)
     }
 
@@ -205,6 +206,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (SecurityScanner.shieldOn(this)) Thread { try { SecurityScanner.checkChanged(applicationContext) } catch (_: Throwable) {} }.start()
         web.evaluateJavascript("window.__ckStatus&&__ckStatus()", null)
     }
 
@@ -268,6 +270,14 @@ class MainActivity : Activity() {
                 "stays on this phone and is never sent anywhere.\n\n" +
                 "Tap Agree to open the setting, then turn on CoreKit. You can turn it off at any time.",
             "Agree"),
+        APPS(
+            "Scan your apps?",
+            "The Security scan checks every app on this phone for malware and spyware: where it came from, which sensitive abilities it has " +
+                "(Accessibility, notification access, device admin, SMS) and whether it hides its icon.\n\n" +
+                "For this, CoreKit reads the list of installed apps. The list stays on this phone and is never sent anywhere. " +
+                "If you add an abuse.ch key, only fingerprints (SHA-256) of apps installed from outside app stores are checked online against known malware.\n\n" +
+                "Live Shield, if you turn it on, repeats this check for new and updated apps in the background.",
+            "Scan"),
         LOCATION(
             "Show your Wi-Fi name?",
             "Android shares the Wi-Fi network name only with apps that have location permission.\n\n" +
@@ -310,6 +320,7 @@ class MainActivity : Activity() {
         private const val REQ_NOTIF_ONLY = 34
         const val PRIVACY_URL = "https://junaid5412.github.io/CoreKit/privacy.html"
         const val ACTION_OPEN_REMOTE = "com.corekit.OPEN_REMOTE"
+        const val ACTION_OPEN_SECURITY = "com.corekit.OPEN_SECURITY"
         @Volatile var current: MainActivity? = null
     }
 }
