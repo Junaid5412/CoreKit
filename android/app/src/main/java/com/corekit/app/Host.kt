@@ -460,6 +460,18 @@ class Host(private val act: MainActivity, private val web: WebView) {
         }
     }
 
+    private fun installed(pkg: String): Boolean = try { act.packageManager.getPackageInfo(pkg, 0); true } catch (_: Throwable) { false }
+
+    /** Android's uninstall prompt; if a phone doesn't show it, the app's settings page (with its Uninstall button) opens instead. */
+    private fun uninstall(pkg: String) {
+        val ok = startSafe(Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkg")))
+        act.runOnUiThread {
+            web.postDelayed({
+                if ((!ok || act.hasWindowFocus()) && installed(pkg)) openSec("appinfo", pkg)
+            }, 1500)
+        }
+    }
+
     private fun secSettings(): JSONObject = JSONObject().put("keySet", SecurityScanner.apiKey(act).isNotEmpty())
         .put("trusted", JSONArray(SecurityScanner.trusted(act).sorted())).put("shield", SecurityScanner.shieldStatus(act))
 
@@ -495,9 +507,9 @@ class Host(private val act: MainActivity, private val web: WebView) {
             val pkg = f.optString("pkg")
             when {
                 a == "uninstall" && pkg.isNotEmpty() -> {
-                    startSafe(Intent(Intent.ACTION_DELETE, Uri.parse("package:$pkg")))
-                    val r = SecurityScanner.addRecord(act, SecurityScanner.recordOf(f, a, "Uninstall started (confirmed by you on Android's screen)"))
-                    JSONObject().put("ok", true).put("msg", "Confirm the uninstall on the next screen").put("record", r)
+                    if (!installed(pkg)) return JSONObject().put("ok", true).put("gone", true).put("msg", "Already uninstalled")
+                    uninstall(pkg)
+                    JSONObject().put("ok", true).put("pending", pkg).put("msg", "Tap OK on Android's screen to uninstall")
                 }
                 a == "appinfo" -> { openSec("appinfo", pkg); JSONObject().put("ok", true).put("msg", "Tap Force stop or Disable") }
                 a.startsWith("settings:") -> { openSec(a.removePrefix("settings:"), pkg); JSONObject().put("ok", true).put("msg", "Switch it off for " + f.optString("title")) }
@@ -520,6 +532,27 @@ class Host(private val act: MainActivity, private val web: WebView) {
             else { openSec("appinfo", pkg); JSONObject().put("msg", "Tap Disable (or Uninstall) on the next screen") }
         }
         "open" -> { openSec(b.optString("what")); JSONObject().put("ok", true) }
+        "installed" -> {
+            // called when the user comes back from Android's uninstall screen
+            val pkg = b.optString("pkg")
+            if (pkg.isEmpty() || installed(pkg)) JSONObject().put("installed", true)
+            else {
+                val f = findFinding(b.optString("id"))
+                val rec = if (f != null) SecurityScanner.recordOf(f, "uninstall", "Uninstalled")
+                    else JSONObject().put("source", "bloat").put("title", b.optString("name").ifEmpty { pkg }).put("sub", pkg).put("action", "uninstall").put("done", JSONArray().put("Uninstalled")).put("canUndo", false)
+                JSONObject().put("installed", false).put("record", SecurityScanner.addRecord(act, rec))
+            }
+        }
+        "app" -> {
+            // the "All apps" list: uninstall a user app, or open a system app's page to disable it
+            val pkg = b.optString("pkg")
+            when {
+                pkg.isEmpty() -> JSONObject().put("error", "Unknown app")
+                !installed(pkg) -> JSONObject().put("ok", true).put("gone", true).put("msg", "Already uninstalled")
+                b.optString("action") == "appinfo" -> { openSec("appinfo", pkg); JSONObject().put("ok", true).put("msg", "Tap Disable or Uninstall updates") }
+                else -> { uninstall(pkg); JSONObject().put("ok", true).put("pending", pkg).put("msg", "Tap OK on Android's screen to uninstall") }
+            }
+        }
         "asr" -> JSONObject().put("rules", JSONArray())
         else -> JSONObject().put("error", "Not available on Android")
     } }

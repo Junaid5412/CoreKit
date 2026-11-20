@@ -207,6 +207,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (SecurityScanner.shieldOn(this)) Thread { try { SecurityScanner.checkChanged(applicationContext) } catch (_: Throwable) {} }.start()
+        if (::web.isInitialized) web.evaluateJavascript("window.__ckResume&&__ckResume()", null)
         web.evaluateJavascript("window.__ckStatus&&__ckStatus()", null)
     }
 

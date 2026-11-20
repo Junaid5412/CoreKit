@@ -897,6 +897,40 @@ func mountSecurity(mux *http.ServeMux, base string, in *inspector) {
 		secDB.mu.Unlock()
 		return map[string]string{"msg": msg}
 	}))
+	mux.HandleFunc(base+"app", secPost(func(r *http.Request, b []byte) any {
+		var q struct{ ID string }
+		_ = json.Unmarshal(b, &q)
+		secDB.mu.Lock()
+		var ap *secApp
+		if secDB.last != nil {
+			for i := range secDB.last.Apps {
+				if secDB.last.Apps[i].ID == q.ID {
+					ap = &secDB.last.Apps[i]
+				}
+			}
+		}
+		secDB.mu.Unlock()
+		if ap == nil {
+			return map[string]string{"error": "Please scan again: this list is out of date."}
+		}
+		if !ap.CanRemove {
+			return map[string]string{"error": "Windows doesn't allow removing this one."}
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 4*time.Minute)
+		defer cancel()
+		msg, _, err := secBloatAction(ctx, secBloat{Kind: ap.Kind, Key: ap.Key, Name: ap.Name})
+		if err != nil {
+			return map[string]string{"error": err.Error()}
+		}
+		secDB.addRecord(secRecord{Source: "bloat", Title: ap.Name, Sub: ap.Publisher, Action: "uninstall", Done: []string{msg}})
+		if ap.Kind == "store" {
+			secDB.mu.Lock()
+			ap.Enabled = false
+			secDB.mu.Unlock()
+			return map[string]any{"msg": msg, "gone": true}
+		}
+		return map[string]any{"msg": msg}
+	}))
 	mux.HandleFunc(base+"second", secPost(func(r *http.Request, b []byte) any {
 		var q struct{ ID string }
 		_ = json.Unmarshal(b, &q)

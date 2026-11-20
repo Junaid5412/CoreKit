@@ -110,6 +110,13 @@ func TestSecSampleCatchesThreats(t *testing.T) {
 			t.Errorf("bloat %q = %q, want %q (have %v)", k, names[k], r, names)
 		}
 	}
+	apps := map[string]secApp{}
+	for _, a := range res.Apps {
+		apps[lc(a.Name)] = a
+	}
+	if len(res.Apps) != 8 || apps["mcafee livesafe"].Rating != "remove" || !apps["google chrome"].CanRemove || apps["candy crush / king games"].Kind != "store" {
+		t.Errorf("all apps list: %+v", res.Apps)
+	}
 	if _, ok := names["google chrome"]; ok {
 		t.Errorf("Chrome must not be listed as bloatware")
 	}
@@ -151,6 +158,14 @@ func TestShieldVerdicts(t *testing.T) {
 		s, rs, v := shieldScore(c.ev)
 		if v != c.want {
 			t.Errorf("%s (%s): got %q score %d %+v, want %q", c.ev.Name, c.ev.Cmd, v, s, rs, c.want)
+		}
+	}
+}
+
+func TestPrettyAppx(t *testing.T) {
+	for in, want := range map[string]string{"Microsoft.WindowsCalculator": "Windows Calculator", "MicrosoftCorporationII.QuickAssist": "Quick Assist", "Microsoft.ScreenSketch": "Screen Sketch", "SpotifyAB.SpotifyMusic": "Spotify Music", "Microsoft.YourPhone": "Your Phone", "Microsoft.HEIFImageExtension": "HEIF Image Extension"} {
+		if got := prettyAppx(in); got != want {
+			t.Errorf("%s -> %q, want %q", in, got, want)
 		}
 	}
 }
