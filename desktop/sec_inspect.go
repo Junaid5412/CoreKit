@@ -206,6 +206,7 @@ type analysis struct {
 	signed    bool
 	dotnet    bool
 	packed    bool
+	verified  bool // Windows verified the publisher\'s signature
 }
 
 func (a *analysis) note(s string) {
