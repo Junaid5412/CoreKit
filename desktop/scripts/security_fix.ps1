@@ -86,7 +86,17 @@ function Prot-State([string]$id) {
             try { $f = @(Get-NetFirewallProfile); $off = @($f | Where-Object { -not $_.Enabled } | ForEach-Object { [string]$_.Name }); & $set ($off.Count -eq 0) $(if ($off.Count) { 'Off for: ' + ($off -join ', ') } else { 'On for all networks' }) } catch {}
         }
         'smartscreen' {
-            try { $v = [string](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -Name SmartScreenEnabled -ErrorAction Stop).SmartScreenEnabled; & $set ($v -in @('Warn', 'RequireAdmin', 'On')) ('SmartScreen = ' + $v) } catch {}
+            # same rule as the scan: policy first, then the Explorer setting; no value means Windows' default (Warn)
+            $v = 'Warn'
+            try {
+                $p1 = Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\System' -ErrorAction SilentlyContinue
+                if ($p1 -and $null -ne $p1.EnableSmartScreen -and [int]$p1.EnableSmartScreen -eq 0) { $v = 'Off' }
+                else {
+                    $p2 = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -ErrorAction SilentlyContinue
+                    if ($p2 -and $p2.SmartScreenEnabled) { $v = [string]$p2.SmartScreenEnabled }
+                }
+            } catch {}
+            & $set ($v -in @('Warn', 'RequireAdmin', 'On', 'Block')) ('SmartScreen = ' + $v)
         }
         { $_ -in @('asr', 'asr-off') } {
             if ($mp) {
@@ -245,7 +255,7 @@ try {
         'defender-remove' { Remove-MpThreat; Done 'Windows Defender removed the active threats' }
 
         'protstatus' {
-            $ids = @($q.ids); if (-not $ids.Count) { $ids = @('rtp', 'sigs', 'tamper', 'pua', 'netprot', 'cfa', 'cloud', 'asr', 'firewall', 'smartscreen') }
+            $ids = @($q.ids | Where-Object { $_ }); if (-not $ids.Count) { $ids = @('rtp', 'sigs', 'tamper', 'pua', 'netprot', 'cfa', 'cloud', 'asr', 'firewall', 'smartscreen') }
             $out = @(); foreach ($id in $ids) { $o = Prot-State $id; $o.id = $id; $out += $o }
             DoneData 'Read from Windows just now' $out
         }
@@ -309,7 +319,6 @@ try {
             if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) {
                 $o.exists = $true
                 $fi = Get-Item -LiteralPath $p -Force
-                try { $o.owner = [string](Get-Acl -LiteralPath $p).Owner } catch {}
                 $o.created = [int64]([DateTimeOffset]$fi.CreationTimeUtc).ToUnixTimeSeconds()
                 $o.modified = [int64]([DateTimeOffset]$fi.LastWriteTimeUtc).ToUnixTimeSeconds()
                 $o.accessed = [int64]([DateTimeOffset]$fi.LastAccessTimeUtc).ToUnixTimeSeconds()
@@ -318,8 +327,12 @@ try {
                 if ($z) { $o.zone = @($z | ForEach-Object { [string]$_ }) }
                 $vi = $fi.VersionInfo
                 if ($vi) { $o.ver = [ordered]@{ company = [string]$vi.CompanyName; product = [string]$vi.ProductName; desc = [string]$vi.FileDescription; version = [string]$vi.FileVersion; orig = [string]$vi.OriginalFilename; internal = [string]$vi.InternalName; copyright = [string]$vi.LegalCopyright } }
-                $sg = Get-AuthenticodeSignature -LiteralPath $p
-                $o.sig = [ordered]@{ status = [string]$sg.Status; subject = [string]$sg.SignerCertificate.Subject; issuer = [string]$sg.SignerCertificate.Issuer; thumb = [string]$sg.SignerCertificate.Thumbprint; from = $(if ($sg.SignerCertificate) { [int64]([DateTimeOffset]$sg.SignerCertificate.NotBefore.ToUniversalTime()).ToUnixTimeSeconds() } else { 0 }); to = $(if ($sg.SignerCertificate) { [int64]([DateTimeOffset]$sg.SignerCertificate.NotAfter.ToUniversalTime()).ToUnixTimeSeconds() } else { 0 }); stamped = $(if ($sg.TimeStamperCertificate) { [string]$sg.TimeStamperCertificate.Subject } else { '' }) }
+                # certificate details straight from .NET (no PowerShell module needed); trust is judged by CoreKit
+                try {
+                    $c = [System.Security.Cryptography.X509Certificates.X509Certificate]::CreateFromSignedFile($p)
+                    $c2 = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2 $c
+                    $o.sig = [ordered]@{ subject = [string]$c2.Subject; issuer = [string]$c2.Issuer; thumb = [string]$c2.Thumbprint; from = [int64]([DateTimeOffset]$c2.NotBefore.ToUniversalTime()).ToUnixTimeSeconds(); to = [int64]([DateTimeOffset]$c2.NotAfter.ToUniversalTime()).ToUnixTimeSeconds() }
+                } catch {}
             }
             DoneData 'ok' $o
         }

@@ -233,8 +233,18 @@ func TestSecLiveInspectAndDelete(t *testing.T) {
 	if err := json.Unmarshal(raw, &plat); err != nil {
 		t.Fatal(err)
 	}
-	if plat.Sig == nil || plat.Sig.Status != "Valid" || plat.Ver == nil || !strings.Contains(plat.Ver.Company, "Microsoft") || plat.Created == 0 {
+	if plat.Sig == nil || plat.Ver == nil || !strings.Contains(plat.Ver.Company, "Microsoft") || plat.Created == 0 || plat.Owner == "" {
 		t.Fatalf("file info: %s", raw)
+	}
+	t.Logf("notepad owner=%s signature=%s", plat.Owner, plat.Sig.Status)
+	// a program with its own embedded signature: certificate details must come through
+	if edge := filepath.Join(os.Getenv("ProgramFiles(x86)"), `Microsoft\Edge\Application\msedge.exe`); fileExists(edge) {
+		raw2, err := secFileInfo(ctx, edge)
+		var p2 inPlat
+		if err != nil || json.Unmarshal(raw2, &p2) != nil || p2.Sig == nil || p2.Sig.Status != "Valid" || !strings.Contains(p2.Sig.Subject, "Microsoft") || p2.Sig.Thumb == "" {
+			t.Fatalf("edge signature: %v %s", err, raw2)
+		}
+		t.Logf("edge signed by %s until %d", p2.Sig.Subject, p2.Sig.To)
 	}
 	r := inspectFile(exe, plat)
 	if r.Kind != "program" || !strings.Contains(r.KindText, "Windows") || len(r.Creator) < 4 || r.SHA256 == "" {
@@ -273,3 +283,5 @@ func TestSecLiveInspectAndDelete(t *testing.T) {
 		t.Fatal("archive is still there after Delete it myself")
 	}
 }
+
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }

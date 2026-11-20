@@ -206,6 +206,7 @@ type analysis struct {
 	signed    bool
 	dotnet    bool
 	packed    bool
+	verified  bool // Windows verified the publisher\'s signature
 }
 
 func (a *analysis) note(s string) {
@@ -487,8 +488,8 @@ func (a *analysis) pe(data []byte, plat inPlat) {
 		t := time.Unix(ts, 0).UTC()
 		switch {
 		case t.Year() < 1996 || t.After(time.Now().Add(48*time.Hour)):
-			a.creator("Build time (in the file)", "Looks forged: "+t.Format("2 Jan 2006"))
-			a.note("The build time inside the program is impossible, so someone edited it to hide when it was made.")
+			// Windows itself is built "reproducibly": the field holds a code, not a date
+			a.creator("Build time (in the file)", "Not a real date (reproducible builds store a code here; some malware also fakes it)")
 		default:
 			a.creator("Built on", t.Format("2 Jan 2006 15:04")+" UTC (written by the builder; can be faked)")
 		}
@@ -647,7 +648,7 @@ func maxU32(a, b uint32) uint32 {
 func (a *analysis) signature(status, subject, issuer, thumb, stamped string, from, to int64) {
 	switch strings.ToLower(status) {
 	case "valid":
-		a.signed = true
+		a.signed, a.verified = true, true
 		a.creator("Signed by", cnOf(subject)+" (verified by Windows)")
 	case "notsigned":
 		a.creator("Signature", "None. Nobody vouches for who made this.")
@@ -1184,6 +1185,14 @@ func (a *analysis) finish(plat inPlat) {
 		r.Summary = "Nothing clearly dangerous was found inside, but a clean read does not prove a file is safe."
 	default:
 		r.Summary = "Nothing risky was found inside. This only looks at the file's contents; it can't see what it downloads later."
+	}
+	if a.verified && (r.Risk == "high" || r.Risk == "med") {
+		if r.Risk == "high" {
+			r.Risk = "med"
+		} else {
+			r.Risk = "low"
+		}
+		r.Summary += " It is signed by a verified publisher, so abilities like these are usually normal for that program."
 	}
 	if len(r.Servers) == 0 && len(r.Caps) == 0 {
 		r.Notes = append(r.Notes, "No server addresses or risky abilities were found in plain view. Hidden or downloaded parts cannot be seen without running it, which CoreKit never does.")

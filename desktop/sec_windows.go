@@ -164,7 +164,59 @@ func secProtStatus(ctx context.Context, ids []string) ([]protRes, error) {
 // version resource and signature details.
 func secFileInfo(ctx context.Context, path string) (json.RawMessage, error) {
 	r, err := secRunFix(ctx, map[string]any{"op": "fileinfo", "path": path})
-	return r.Data, err
+	if err != nil {
+		return r.Data, err
+	}
+	// trust and owner come from Windows directly (WinVerifyTrust, the security API)
+	var m map[string]any
+	if json.Unmarshal(r.Data, &m) != nil || m == nil {
+		return r.Data, nil
+	}
+	sig, _ := m["sig"].(map[string]any)
+	if sig == nil {
+		sig = map[string]any{}
+	}
+	// WinVerifyTrust on the file itself cannot see Windows' catalog signatures, so "unsigned" is
+	// not reported here; the caller knows better (the scan checks catalogs).
+	if st := map[string]string{"valid": "Valid", "invalid": "HashMismatch"}[fileSigned(path)]; st != "" {
+		sig["status"] = st
+	}
+	m["sig"] = sig
+	if o := fileOwner(ctx, path); o != "" {
+		m["owner"] = o
+	}
+	b, _ := json.Marshal(m)
+	return b, nil
+}
+
+var (
+	procGetNamedSecurityInfo = syscall.NewLazyDLL("advapi32.dll").NewProc("GetNamedSecurityInfoW")
+	procLookupAccountSid     = syscall.NewLazyDLL("advapi32.dll").NewProc("LookupAccountSidW")
+)
+
+// fileOwner returns the account that owns the file (DOMAIN\name), read with the Windows security API.
+func fileOwner(_ context.Context, path string) string {
+	p, err := syscall.UTF16PtrFromString(path)
+	if err != nil {
+		return ""
+	}
+	var owner, sd uintptr
+	const seFileObject, ownerInfo = 1, 1
+	if r, _, _ := procGetNamedSecurityInfo.Call(uintptr(unsafe.Pointer(p)), seFileObject, ownerInfo, uintptr(unsafe.Pointer(&owner)), 0, 0, 0, uintptr(unsafe.Pointer(&sd))); r != 0 || owner == 0 {
+		return ""
+	}
+	defer procLocalFree.Call(sd)
+	name, dom := make([]uint16, 256), make([]uint16, 256)
+	nl, dl := uint32(len(name)), uint32(len(dom))
+	var use uint32
+	if r, _, _ := procLookupAccountSid.Call(0, owner, uintptr(unsafe.Pointer(&name[0])), uintptr(unsafe.Pointer(&nl)), uintptr(unsafe.Pointer(&dom[0])), uintptr(unsafe.Pointer(&dl)), uintptr(unsafe.Pointer(&use))); r == 0 {
+		return ""
+	}
+	n, d := syscall.UTF16ToString(name), syscall.UTF16ToString(dom)
+	if d == "" {
+		return n
+	}
+	return d + `\` + n
 }
 
 func secBloatAction(ctx context.Context, b secBloat) (string, json.RawMessage, error) {
