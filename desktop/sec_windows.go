@@ -164,8 +164,54 @@ func secProtStatus(ctx context.Context, ids []string) ([]protRes, error) {
 // version resource and signature details.
 func secFileInfo(ctx context.Context, path string) (json.RawMessage, error) {
 	r, err := secRunFix(ctx, map[string]any{"op": "fileinfo", "path": path})
-	return r.Data, err
+	if err != nil {
+		return r.Data, err
+	}
+	// trust and owner come from Windows directly (WinVerifyTrust, `dir /q`)
+	var m map[string]any
+	if json.Unmarshal(r.Data, &m) != nil || m == nil {
+		return r.Data, nil
+	}
+	sig, _ := m["sig"].(map[string]any)
+	if sig == nil {
+		sig = map[string]any{}
+	}
+	st := map[string]string{"valid": "Valid", "unsigned": "NotSigned", "invalid": "HashMismatch"}[fileSigned(path)]
+	if st == "" {
+		st = "UnknownError"
+	}
+	sig["status"] = st
+	m["sig"] = sig
+	if o := fileOwner(ctx, path); o != "" {
+		m["owner"] = o
+	}
+	b, _ := json.Marshal(m)
+	return b, nil
 }
+
+// fileOwner reads the owner column of `dir /q` (the account that owns the file).
+func fileOwner(ctx context.Context, path string) string {
+	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(cctx, filepath.Join(os.Getenv("SystemRoot"), `System32\cmd.exe`), "/c", "dir", "/q", "/a", path)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	base := filepath.Base(path)
+	for _, l := range strings.Split(string(out), "\n") {
+		l = strings.TrimRight(l, "\r ")
+		if strings.HasSuffix(l, " "+base) {
+			if m := dirOwnerRe.FindStringSubmatch(strings.TrimSuffix(l, " "+base)); m != nil {
+				return strings.TrimSpace(m[1])
+			}
+		}
+	}
+	return ""
+}
+
+var dirOwnerRe = regexp.MustCompile(`(?i)\d{1,2}:\d{2}(?:\s*[ap]m)?\s+(?:<\w+>|[\d,.]+)\s+(.+)$`)
 
 func secBloatAction(ctx context.Context, b secBloat) (string, json.RawMessage, error) {
 	r, err := secRunFix(ctx, map[string]any{"op": "bloat", "kind": b.Kind, "key": b.Key})
