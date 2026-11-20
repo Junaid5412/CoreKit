@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: ["ci-*"]
-    paths: ["desktop/sec*", "desktop/scripts/security*.ps1", ".github/workflows/security-live.yml"]
+    paths: ["desktop/sec*", "desktop/remote*", "desktop/scripts/security*.ps1", ".github/workflows/security-live.yml"]
 
 jobs:
   live:
@@ -17,4 +17,4 @@ jobs:
         with: { go-version: "1.24", cache: false }
       - name: Live tests (CK_LIVE=1)
         env: { CK_LIVE: "1" }
-        run: go test ./desktop -run "SecLive" -v -count=1 -timeout 25m
+        run: go test ./desktop -run "SecLive|RemoteLive" -v -count=1 -timeout 25m
