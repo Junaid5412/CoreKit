@@ -315,7 +315,12 @@ foreach ($d in (Get-MpThreatDetection | Where-Object { $_.InitialDetectionTime -
     $path = ''; if ($res) { $path = $res -replace '^(file|process):_', '' }
     $stt = $statusMap[[int]$d.ThreatStatusID]; if (-not $stt) { $stt = 'Status ' + $d.ThreatStatusID }
     $act = ''; if ($n -and $n.active) { $act = 'still active' }
-    [void]$threats.Add([ordered]@{ name = $(if ($n) { $n.n } else { 'Threat ' + $d.ThreatID }); path = $path; t = (U $d.InitialDetectionTime); action = $act; status = $stt; sev = $(if ($n) { [string]$n.sev } else { '' }); id = [string]$d.ThreatID })
+    # who/where: Defender records the program that wrote the file, the Windows user, how it was caught and (for downloads) the web address
+    $srcMap = @{ 0 = 'unknown'; 1 = 'on-demand scan'; 2 = 'system'; 3 = 'real-time protection'; 4 = 'download scan'; 5 = 'network inspection'; 6 = 'early launch'; 7 = 'local attestation'; 8 = 'remote attestation' }
+    $web = @($d.Resources) | Where-Object { $_ -match '^webfile:_' } | Select-Object -First 1
+    $dsrc = $srcMap[[int]$d.DetectionSourceTypeID]; if (-not $dsrc) { $dsrc = '' }
+    $rem = 0; try { if ($d.RemediationTime -and $d.RemediationTime.Year -gt 2000) { $rem = U $d.RemediationTime } } catch {}
+    [void]$threats.Add([ordered]@{ name = $(if ($n) { $n.n } else { 'Threat ' + $d.ThreatID }); path = $path; t = (U $d.InitialDetectionTime); action = $act; status = $stt; sev = $(if ($n) { [string]$n.sev } else { '' }); id = [string]$d.ThreatID; proc = (S $d.ProcessName); user = (S $d.DomainUser); dsrc = $dsrc; web = $(if ($web) { S ($web -replace '^webfile:_', '') } else { '' }); rem = $rem; err = [string]$d.ThreatStatusErrorCode })
 }
 
 # ---------------------------------------------------------------- hosts file, proxy, certificates

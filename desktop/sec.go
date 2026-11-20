@@ -602,6 +602,8 @@ func applyFix(ctx context.Context, f *secFinding, action string) fixOutcome {
 		if err == nil && len(undo) > 0 {
 			rec.Undo = append(rec.Undo, undo)
 		}
+	case "delete":
+		return deleteOwn(ctx, f, rec)
 	case "defender":
 		_, err := secRunFix(ctx, map[string]any{"op": "defender-remove"})
 		note(err == nil, "Windows Defender removed the threat", err)
@@ -856,10 +858,32 @@ func mountSecurity(mux *http.ServeMux, base string, in *inspector) {
 		defer cancel()
 		res, err := secHarden(ctx, q.IDs)
 		if err != nil {
+			secDB.addRecord(secRecord{Source: "harden", Title: "Could not turn on protection", Action: "harden", Failed: []string{err.Error()}})
 			return map[string]string{"error": err.Error()}
 		}
-		secDB.addRecord(secRecord{Source: "harden", Title: "Turned on protection: " + strings.Join(q.IDs, ", "), Action: "harden", Done: []string{res}})
-		return map[string]string{"msg": res}
+		rec := secRecord{Source: "harden", Title: "Protection: " + res.summary(), Action: "harden"}
+		for _, it := range res.Items {
+			if it.OK {
+				rec.Done = append(rec.Done, it.Name+" confirmed on")
+			} else {
+				rec.Failed = append(rec.Failed, it.Name+": "+it.problem())
+			}
+		}
+		secDB.addRecord(rec)
+		return map[string]any{"msg": res.summary(), "items": res.Items, "note": res.Note}
+	}))
+	mux.HandleFunc(base+"protstatus", secPost(func(r *http.Request, b []byte) any {
+		var q struct {
+			IDs []string `json:"ids"`
+		}
+		_ = json.Unmarshal(b, &q)
+		ctx, cancel := context.WithTimeout(r.Context(), time.Minute)
+		defer cancel()
+		items, err := secProtStatus(ctx, q.IDs)
+		if err != nil {
+			return map[string]string{"error": "Could not read the protection status: " + shortErr(err)}
+		}
+		return map[string]any{"items": items}
 	}))
 	mux.HandleFunc(base+"asr", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"rules": asrRules})
@@ -930,6 +954,36 @@ func mountSecurity(mux *http.ServeMux, base string, in *inspector) {
 			return map[string]any{"msg": msg, "gone": true}
 		}
 		return map[string]any{"msg": msg}
+	}))
+	mux.HandleFunc(base+"inspect", secPost(func(r *http.Request, b []byte) any {
+		var q struct{ ID string }
+		_ = json.Unmarshal(b, &q)
+		secDB.mu.Lock()
+		f := secDB.byID[q.ID]
+		secDB.mu.Unlock()
+		if f == nil || f.Path == "" {
+			return map[string]string{"error": "There is no file to look at."}
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
+		defer cancel()
+		rep := secInspect(ctx, f)
+		inspMu.Lock()
+		inspCache[q.ID] = rep
+		inspMu.Unlock()
+		return rep
+	}))
+	mux.HandleFunc(base+"trace", secPost(func(r *http.Request, b []byte) any {
+		var q struct{ ID string }
+		_ = json.Unmarshal(b, &q)
+		inspMu.Lock()
+		rep := inspCache[q.ID]
+		inspMu.Unlock()
+		if rep == nil || len(rep.Servers) == 0 {
+			return map[string]string{"error": "There are no servers to look up."}
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 40*time.Second)
+		defer cancel()
+		return map[string]any{"items": traceHosts(ctx, rep.Servers)}
 	}))
 	mux.HandleFunc(base+"second", secPost(func(r *http.Request, b []byte) any {
 		var q struct{ ID string }
@@ -1026,4 +1080,174 @@ func shieldNote() string {
 		return " Live Shield keeps protecting in the background."
 	}
 	return ""
+}
+
+// ---------------------------------------------------------------- protection results
+
+// protRes is one protection as Windows reports it AFTER we tried to switch it on.
+type protRes struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	OK     bool   `json:"ok"`
+	State  string `json:"state"` // on | off | partial | unknown
+	Detail string `json:"detail"`
+	Err    string `json:"err,omitempty"`
+	On     int    `json:"on"`
+	Of     int    `json:"of"`
+}
+
+type hardenOut struct {
+	Items []protRes `json:"items"`
+	Note  string    `json:"note,omitempty"`
+}
+
+var protNames = map[string]string{"rtp": "Real-time protection", "sigs": "Virus definitions", "tamper": "Tamper protection", "pua": "Block unwanted apps", "netprot": "Network protection", "cfa": "Ransomware folder guard", "cloud": "Cloud protection", "asr": "Attack blocking rules", "asr-off": "Attack blocking rules", "firewall": "Firewall", "smartscreen": "SmartScreen"}
+
+func protName(id string) string {
+	if n := protNames[id]; n != "" {
+		return n
+	}
+	return id
+}
+
+// fill names the items and decides OK from what Windows reported (never from what we asked for).
+func (h *hardenOut) fill() {
+	for i := range h.Items {
+		it := &h.Items[i]
+		it.Name = protName(it.ID)
+		if it.ID != "asr-off" {
+			it.OK = it.State == "on"
+		}
+	}
+}
+
+func (h hardenOut) summary() string {
+	n := 0
+	for _, it := range h.Items {
+		if it.OK {
+			n++
+		}
+	}
+	if n == len(h.Items) {
+		return fmt.Sprintf("All %d confirmed on", n)
+	}
+	return fmt.Sprintf("%d of %d confirmed on", n, len(h.Items))
+}
+
+// problem is the plain reason an item is not on.
+func (p protRes) problem() string {
+	if p.Err != "" {
+		return p.Err
+	}
+	switch p.State {
+	case "partial":
+		return "only partly on (" + p.Detail + ")"
+	case "unknown":
+		return "Windows would not say (" + p.Detail + ")"
+	}
+	return "Windows still reports it as off. " + p.Detail
+}
+
+// deleteOwn removes the file itself (no Defender): it stops the program and its start-up entries,
+// then deletes the file. A threat found inside an archive is removed by deleting the whole archive.
+// It cannot be undone, so it is only offered for files outside Windows' own folders.
+func deleteOwn(ctx context.Context, f *secFinding, rec secRecord) fixOutcome {
+	if f.Path == "" {
+		return fixOutcome{false, "There is no file to delete.", rec}
+	}
+	path := normPath(f.Path)
+	if sysDir(path) {
+		return fixOutcome{false, "Windows system files are never deleted. Stop the process instead.", rec}
+	}
+	var errs []string
+	for _, p := range dedupeInts(append(append([]int{}, f.PIDs...), secPIDsOf(path)...)) {
+		if secKill(p) == nil {
+			rec.Done = append(rec.Done, fmt.Sprintf("Stopped process %d", p))
+		}
+	}
+	for _, a := range f.Auto {
+		if _, err := secAutorunRemove(ctx, a); err != nil {
+			rec.Failed = append(rec.Failed, "Start-up entry ("+a.Kind+"): "+shortErr(err))
+			errs = append(errs, "start-up entry")
+		} else {
+			rec.Done = append(rec.Done, "Removed start-up entry ("+a.Kind+")")
+		}
+	}
+	time.Sleep(300 * time.Millisecond)
+	st, err := os.Stat(path)
+	switch {
+	case os.IsNotExist(err):
+		rec.Done = append(rec.Done, "The file was already gone")
+	case err != nil:
+		rec.Failed = append(rec.Failed, "Could not reach the file: "+shortErr(err))
+		errs = append(errs, "file")
+	case st.IsDir():
+		rec.Failed = append(rec.Failed, "It is a folder; CoreKit only deletes files")
+		errs = append(errs, "file")
+	default:
+		if err := removeFileHard(path); err != nil {
+			rec.Failed = append(rec.Failed, "Could not delete the file: "+shortErr(err))
+			errs = append(errs, "file")
+		} else if _, e := os.Stat(path); e == nil {
+			rec.Done = append(rec.Done, "The file is in use: Windows will delete it at the next restart")
+		} else if f.Inner != "" {
+			rec.Done = append(rec.Done, "Deleted "+winBase(path)+" and everything inside it")
+		} else {
+			rec.Done = append(rec.Done, "Deleted "+winBase(path))
+		}
+	}
+	rec.CanUndo = false
+	rec = secDB.addRecord(rec)
+	if len(errs) > 0 && len(rec.Done) == 0 {
+		return fixOutcome{false, "Could not delete it: " + strings.Join(rec.Failed, "; "), rec}
+	}
+	msg := strings.Join(rec.Done, " · ")
+	if len(errs) > 0 {
+		msg += " (some steps failed: " + strings.Join(errs, ", ") + ")"
+	}
+	return fixOutcome{len(errs) == 0, msg, rec}
+}
+
+// ---------------------------------------------------------------- reverse view (Windows)
+
+var (
+	inspMu    sync.Mutex
+	inspCache = map[string]*inReport{}
+)
+
+// secInspect gathers what Windows and Defender recorded about the file, then reads inside it.
+func secInspect(ctx context.Context, f *secFinding) *inReport {
+	var plat inPlat
+	if raw, err := secFileInfo(ctx, f.Path); err == nil && len(raw) > 0 {
+		_ = json.Unmarshal(raw, &plat)
+	}
+	if o := f.Origin; o != nil {
+		if o.By != "" {
+			plat.Extra = append(plat.Extra, inKV{K: "Saved by program", V: o.By})
+		}
+		if o.User != "" {
+			plat.Extra = append(plat.Extra, inKV{K: "Windows user at the time", V: o.User})
+		}
+		if o.URL != "" {
+			plat.Extra = append(plat.Extra, inKV{K: "Download address (Defender's record)", V: o.URL})
+			if g := githubRepo(o.URL); g != "" {
+				plat.Extra = append(plat.Extra, inKV{K: "GitHub project", V: g, Link: "https://github.com/" + g})
+			}
+		}
+		if o.Ref != "" {
+			plat.Extra = append(plat.Extra, inKV{K: "Page it was linked from", V: o.Ref})
+		}
+		if o.How != "" {
+			plat.Extra = append(plat.Extra, inKV{K: "How Defender caught it", V: o.How})
+		}
+	}
+	if f.Kind == "threat" && f.First > 0 {
+		plat.Extra = append(plat.Extra, inKV{K: "First detected", V: time.Unix(f.First, 0).Format("2 Jan 2006 15:04")})
+	}
+	if f.Inner != "" {
+		plat.Extra = append(plat.Extra, inKV{K: "Dangerous part found inside", V: f.Inner})
+	}
+	rep := inspectFile(normPath(f.Path), plat)
+	rep.Inner = f.Inner
+	return rep
 }

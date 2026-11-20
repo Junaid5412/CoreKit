@@ -138,6 +138,12 @@ type rawThreat struct {
 	Status string `json:"status"`
 	Sev    string `json:"sev"`
 	ID     string `json:"id"`
+	Proc   string `json:"proc"` // program that wrote the file (e.g. chrome.exe)
+	User   string `json:"user"` // Windows user it happened under
+	DSrc   string `json:"dsrc"` // how Defender caught it
+	Web    string `json:"web"`  // path|url|referrer|pid from Defender (downloads)
+	Rem    int64  `json:"rem"`
+	Err    string `json:"err"`
 }
 
 type rawProxy struct {
@@ -254,6 +260,9 @@ type secStep struct {
 }
 
 type secOrigin struct {
+	By   string `json:"by,omitempty"`   // program that saved the file (Defender record)
+	User string `json:"user,omitempty"` // Windows user
+	How  string `json:"how,omitempty"`  // how it was caught
 	URL  string `json:"url,omitempty"`
 	Ref  string `json:"ref,omitempty"`
 	Zone int    `json:"zone"`
@@ -298,6 +307,7 @@ type secFinding struct {
 	Summary string       `json:"summary"`
 	Reasons []secReason  `json:"reasons"`
 	Path    string       `json:"path,omitempty"`
+	Inner   string       `json:"inner,omitempty"` // path inside an archive, when Defender found it there
 	SHA     string       `json:"sha256,omitempty"`
 	Size    int64        `json:"size,omitempty"`
 	Signer  string       `json:"signer,omitempty"`
@@ -655,6 +665,57 @@ func originOf(f rawFile, path string) *secOrigin {
 		o.Via = "a browser download"
 	case strings.HasSuffix(b, ".tmp") || strings.Contains(lc(path), `\temp\`):
 		o.Via = "unpacked into a temporary folder"
+	}
+	return o
+}
+
+// splitContainer separates "C:\x\a.zip->dir\b.apk->classes.dex" into the real file on disk
+// and the path inside it. A path without "->" is returned as is.
+func splitContainer(p string) (outer, inner string) {
+	if i := strings.Index(p, "->"); i > 0 {
+		return p[:i], p[i+2:]
+	}
+	return p, ""
+}
+
+// threatOrigin builds "who saved it, from where, when" from what Defender recorded.
+func threatOrigin(t rawThreat, outer, inner string) *secOrigin {
+	o := &secOrigin{By: t.Proc, User: t.User, How: t.DSrc, Zone: -1}
+	if t.Web != "" {
+		for _, part := range strings.Split(t.Web, "|")[1:] {
+			part = strings.TrimSpace(part)
+			if strings.HasPrefix(strings.ToLower(part), "http") {
+				if o.URL == "" {
+					o.URL = part
+				} else if o.Ref == "" {
+					o.Ref = part
+				}
+			}
+		}
+	}
+	var b []string
+	switch {
+	case o.URL != "":
+		b = append(b, "Downloaded from "+hostOf(o.URL))
+	case t.DSrc == "download scan":
+		b = append(b, "Came from an internet download")
+	}
+	if o.By != "" {
+		b = append(b, "saved by "+o.By)
+	}
+	if inner != "" {
+		b = append(b, "hidden inside the archive "+winBase(outer))
+	}
+	if len(b) == 0 {
+		if o.User == "" && o.How == "" {
+			return nil
+		}
+		o.Text = "Found on this computer. Windows did not record where it came from"
+	} else {
+		o.Text = strings.ToUpper(b[0][:1]) + b[0][1:]
+		if len(b) > 1 {
+			o.Text += ", " + strings.Join(b[1:], ", ")
+		}
 	}
 	return o
 }
@@ -1042,7 +1103,9 @@ func analyzeSec(r *rawSec, now int64, trusted func(string) bool, intel map[strin
 
 	// ---- Defender's own findings
 	for _, t := range r.Threats {
-		f := secFinding{Kind: "threat", Title: t.Name, Sub: "Found by Windows Defender " + ago(t.Time, now), Path: normPath(t.Path), First: t.Time, FixKey: t.ID}
+		outer, inner := splitContainer(t.Path)
+		f := secFinding{Kind: "threat", Title: t.Name, Sub: "Found by Windows Defender " + ago(t.Time, now), Path: normPath(outer), Inner: inner, First: t.Time, FixKey: t.ID}
+		f.Origin = threatOrigin(t, outer, inner)
 		st := lc(t.Status + " " + t.Action)
 		f.Intel = []secIntel{{Source: "Windows Defender", Verdict: "malicious", Family: t.Name}}
 		switch {
@@ -1274,6 +1337,7 @@ func actionsFor(f *secFinding) []secAction {
 	case "process":
 		if f.Path != "" && !sysDir(f.Path) {
 			a = append(a, secAction{"quarantine", "Stop & quarantine", true})
+			a = append(a, secAction{"delete", "Stop & delete", false})
 		}
 		a = append(a, secAction{"kill", "Stop it only", f.Path == "" || sysDir(f.Path)})
 		if len(f.Auto) > 0 {
@@ -1281,6 +1345,9 @@ func actionsFor(f *secFinding) []secAction {
 		}
 	case "file":
 		a = append(a, secAction{"quarantine", "Quarantine file", true})
+		if f.Path != "" && !sysDir(f.Path) {
+			a = append(a, secAction{"delete", "Delete it myself", false})
+		}
 	case "autorun":
 		if len(f.Auto) > 0 && f.Auto[0].Kind == "service" {
 			a = append(a, secAction{"remove", "Disable service", true})
@@ -1291,8 +1358,12 @@ func actionsFor(f *secFinding) []secAction {
 			a = append(a, secAction{"quarantine", "Remove & quarantine file", false})
 		}
 	case "threat":
+		own := f.Path != "" && !sysDir(f.Path)
+		if own {
+			a = append(a, secAction{"delete", "Delete it myself", f.Score >= 40})
+		}
 		if f.Score >= 40 {
-			a = append(a, secAction{"defender", "Let Defender remove it", true})
+			a = append(a, secAction{"defender", "Let Defender remove it", !own})
 		}
 	case "setting":
 		a = append(a, secAction{"fixsetting", settingLabel(f.FixKey), true})

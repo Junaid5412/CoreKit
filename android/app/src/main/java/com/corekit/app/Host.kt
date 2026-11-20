@@ -510,6 +510,27 @@ class Host(private val act: MainActivity, private val web: WebView) {
             if (on) pool.execute { try { SecurityScanner.checkChanged(act) } catch (_: Throwable) {} }
             JSONObject().put("shield", SecurityScanner.shieldStatus(act))
         }
+        "inspect", "trace" -> {
+            // the same reverse-view code as Windows (shared Go), pointed at the app's APK file
+            val f = findFinding(b.optString("id")) ?: return JSONObject().put("error", "Please scan again: this result is out of date.")
+            val pkg = f.optString("pkg")
+            val apk = try { act.packageManager.getApplicationInfo(pkg, 0).sourceDir } catch (_: Throwable) { "" }
+            if (apk.isEmpty()) return JSONObject().put("error", "This app is not installed any more.")
+            val r = Helper(act).call(path, JSONObject().put("path", apk), if (path == "trace") 60L else 90L)
+            if (path == "inspect" && r.has("source")) {
+                val src = JSONArray()
+                fun add(k: String, v: String) { if (v.isNotEmpty()) src.put(JSONObject().put("k", k).put("v", v)) }
+                val fmt = java.text.SimpleDateFormat("d MMM yyyy HH:mm", java.util.Locale.getDefault())
+                add("Package", pkg)
+                add("Installed by", f.optString("sub"))
+                if (f.optLong("first") > 0) add("Installed on this phone", fmt.format(java.util.Date(f.optLong("first") * 1000)))
+                if (f.optLong("last") > 0) add("Last updated", fmt.format(java.util.Date(f.optLong("last") * 1000)))
+                val old = r.optJSONArray("source")
+                if (old != null) for (i in 0 until old.length()) src.put(old.get(i))
+                r.put("source", src)
+            }
+            r
+        }
         "history" -> {
             val h = SecurityScanner.history(act)
             JSONObject().put("items", JSONArray((h.length() - 1 downTo 0).map { h.get(it) })).put("quarantine", JSONArray())

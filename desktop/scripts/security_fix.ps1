@@ -7,6 +7,7 @@ $ProgressPreference    = 'SilentlyContinue'
 try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
 function Out-Line([string]$s) { [Console]::Out.WriteLine($s); [Console]::Out.Flush() }
 function Done($msg, $undo = $null) { Out-Line ('R|' + ([ordered]@{ ok = $true; msg = $msg; undo = $undo } | ConvertTo-Json -Depth 6 -Compress)); exit 0 }
+function DoneData($msg, $data, $undo = $null) { Out-Line ('R|' + ([ordered]@{ ok = $true; msg = $msg; undo = $undo; data = $data } | ConvertTo-Json -Depth 8 -Compress)); exit 0 }
 function Fail($msg) { Out-Line ('R|' + ([ordered]@{ ok = $false; msg = [string]$msg } | ConvertTo-Json -Compress)); exit 0 }
 
 $reqFile = ''
@@ -53,6 +54,53 @@ function Approved-Key([string]$entryKey) {
     if ($rp -like 'Registry::HKEY_USERS\*') { $hive = ($rp -split '\\')[0..1] -join '\' }
     $sub = 'Run'; if ($rp -match 'WOW6432Node') { $sub = 'Run32' }
     return @{ path = "$hive\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\$sub"; name = $parts[2] }
+}
+
+function Short-Err($e) {
+    $m = [string]$e.Exception.Message
+    $m = ($m -replace '\s+', ' ').Trim()
+    if ($m -match '0x800106ba|not running|service.*stopped') { return 'The Windows Defender service is not running' }
+    if ($m -match '0x80070005|Access is denied|Access denied') { return 'Windows said access denied (a policy or another security program may control this setting)' }
+    if ($m -match '0x80070422') { return 'The related Windows service is switched off' }
+    if ($m -match 'internet|network|0x80072ee7|0x80072efd|could not be reached|connect') { return 'No internet connection to download updates' }
+    if ($m.Length -gt 160) { $m = $m.Substring(0, 160) + '…' }
+    return $m
+}
+
+# what Windows says right now (never what we hope it is)
+function Prot-State([string]$id) {
+    $mp = $null; $cs = $null
+    try { $mp = Get-MpPreference } catch {}
+    try { $cs = Get-MpComputerStatus } catch {}
+    $r = [ordered]@{ state = 'unknown'; detail = 'Could not read this from Windows'; on = 0; of = 1 }
+    $set = { param($on, $detail) $r.state = $(if ($on) { 'on' } else { 'off' }); $r.detail = $detail; $r.on = [int][bool]$on }
+    switch ($id) {
+        'rtp' { if ($cs) { & $set ([bool]$cs.RealTimeProtectionEnabled) 'Real-time protection' } }
+        'sigs' { if ($cs) { $age = [int]$cs.AntivirusSignatureAge; & $set ($age -le 2) ("Definitions are {0} day(s) old" -f $age) } }
+        'tamper' { if ($cs) { & $set ([bool]$cs.IsTamperProtected) 'Tamper protection' } }
+        'pua' { if ($mp) { & $set ([int]$mp.PUAProtection -eq 1) ('Unwanted-app blocking = ' + $mp.PUAProtection) } }
+        'netprot' { if ($mp) { & $set ([int]$mp.EnableNetworkProtection -eq 1) ('Network protection = ' + $mp.EnableNetworkProtection) } }
+        'cfa' { if ($mp) { & $set ([int]$mp.EnableControlledFolderAccess -eq 1) ('Ransomware folder guard = ' + $mp.EnableControlledFolderAccess) } }
+        'cloud' { if ($mp) { & $set (([int]$mp.MAPSReporting -ge 1) -and ([int]$mp.CloudBlockLevel -ge 2)) ('Cloud reporting ' + $mp.MAPSReporting + ', block level ' + $mp.CloudBlockLevel) } }
+        'firewall' {
+            try { $f = @(Get-NetFirewallProfile); $off = @($f | Where-Object { -not $_.Enabled } | ForEach-Object { [string]$_.Name }); & $set ($off.Count -eq 0) $(if ($off.Count) { 'Off for: ' + ($off -join ', ') } else { 'On for all networks' }) } catch {}
+        }
+        'smartscreen' {
+            try { $v = [string](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -Name SmartScreenEnabled -ErrorAction Stop).SmartScreenEnabled; & $set ($v -in @('Warn', 'RequireAdmin', 'On')) ('SmartScreen = ' + $v) } catch {}
+        }
+        { $_ -in @('asr', 'asr-off') } {
+            if ($mp) {
+                $ids = @($mp.AttackSurfaceReductionRules_Ids); $acts = @($mp.AttackSurfaceReductionRules_Actions)
+                $want = @($q.asr | ForEach-Object { [string]$_.ID }); if (-not $want.Count) { $want = $ids }
+                $on = 0
+                for ($i = 0; $i -lt $ids.Count; $i++) { if (($want -contains [string]$ids[$i]) -and ([int]$acts[$i] -in 1, 6)) { $on++ } }
+                $r.on = $on; $r.of = [math]::Max(1, $want.Count)
+                $r.state = $(if ($on -ge $want.Count) { 'on' } elseif ($on -gt 0) { 'partial' } else { 'off' })
+                $r.detail = ("{0} of {1} rules active" -f $on, $want.Count)
+            }
+        }
+    }
+    return $r
 }
 
 try {
@@ -196,33 +244,84 @@ try {
 
         'defender-remove' { Remove-MpThreat; Done 'Windows Defender removed the active threats' }
 
+        'protstatus' {
+            $ids = @($q.ids); if (-not $ids.Count) { $ids = @('rtp', 'sigs', 'tamper', 'pua', 'netprot', 'cfa', 'cloud', 'asr', 'firewall', 'smartscreen') }
+            $out = @(); foreach ($id in $ids) { $o = Prot-State $id; $o.id = $id; $out += $o }
+            DoneData 'Read from Windows just now' $out
+        }
+
         'harden' {
-            $did = @()
-            foreach ($id in @($q.ids)) {
-                switch ($id) {
-                    'rtp' { Set-MpPreference -DisableRealtimeMonitoring $false; $did += 'real-time protection' }
-                    'sigs' { Update-MpSignature; $did += 'virus definitions' }
-                    'pua' { Set-MpPreference -PUAProtection Enabled; $did += 'unwanted-app blocking' }
-                    'netprot' { Set-MpPreference -EnableNetworkProtection Enabled; $did += 'network protection' }
-                    'cfa' { Set-MpPreference -EnableControlledFolderAccess Enabled; $did += 'ransomware folder guard' }
-                    'cloud' { Set-MpPreference -MAPSReporting Advanced -SubmitSamplesConsent SendSafeSamples -CloudBlockLevel High; $did += 'cloud protection (high)' }
-                    'firewall' { Set-NetFirewallProfile -All -Enabled True; $did += 'firewall' }
-                    'smartscreen' { Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -Name SmartScreenEnabled -Value 'Warn'; $did += 'SmartScreen' }
-                    'asr' {
-                        $ids = @($q.asr | ForEach-Object { $_.ID })
-                        $acts = @($q.asr | ForEach-Object { $_.Mode })
-                        Add-MpPreference -AttackSurfaceReductionRules_Ids $ids -AttackSurfaceReductionRules_Actions $acts
-                        $did += ("{0} attack blocking rules" -f $ids.Count)
+            $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+            if (-not $isAdmin) { Fail 'Windows only lets an administrator change protection. Close CoreKit and start it with Right-click > Run as administrator.' }
+            $note = ''
+            try { $cs = Get-MpComputerStatus; if ($cs.AMRunningMode -and [string]$cs.AMRunningMode -ne 'Normal') { $note = 'Windows Defender is in ' + $cs.AMRunningMode + ' mode because another antivirus is in charge, so Defender settings may not apply.' } } catch { $note = 'Windows Defender is not running (' + (Short-Err $_) + ').' }
+            # one item must never stop the others: each runs on its own, definitions last (they need the internet)
+            $ids = @($q.ids | Where-Object { $_ -ne 'sigs' }) + @($q.ids | Where-Object { $_ -eq 'sigs' })
+            $res = @()
+            foreach ($id in $ids) {
+                $err = ''
+                try {
+                    switch ($id) {
+                        'rtp' { Set-MpPreference -DisableRealtimeMonitoring $false }
+                        'sigs' { Update-MpSignature }
+                        'pua' { Set-MpPreference -PUAProtection Enabled }
+                        'netprot' { Set-MpPreference -EnableNetworkProtection Enabled }
+                        'cfa' { Set-MpPreference -EnableControlledFolderAccess Enabled }
+                        'cloud' { Set-MpPreference -MAPSReporting Advanced; Set-MpPreference -SubmitSamplesConsent SendSafeSamples; Set-MpPreference -CloudBlockLevel High }
+                        'firewall' { Set-NetFirewallProfile -All -Enabled True }
+                        'smartscreen' { Set-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer' -Name SmartScreenEnabled -Value 'Warn' }
+                        'asr' {
+                            # rule by rule, so one rule Windows refuses does not block the other 17
+                            $bad = @()
+                            foreach ($r in @($q.asr)) {
+                                try { Add-MpPreference -AttackSurfaceReductionRules_Ids $r.ID -AttackSurfaceReductionRules_Actions $r.Mode }
+                                catch {
+                                    try { Add-MpPreference -AttackSurfaceReductionRules_Ids $r.ID -AttackSurfaceReductionRules_Actions Enabled }
+                                    catch { $bad += $r.Name }
+                                }
+                            }
+                            if ($bad.Count) { $err = ('Windows refused: ' + ($bad -join ', ')) }
+                        }
+                        'asr-off' {
+                            foreach ($r in @($q.asr)) { try { Add-MpPreference -AttackSurfaceReductionRules_Ids $r.ID -AttackSurfaceReductionRules_Actions Disabled } catch {} }
+                        }
+                        'tamper' { Start-Process 'windowsdefender://threatsettings'; $err = 'Windows only lets you turn this on yourself: switch it on in the Windows Security window that just opened.' }
                     }
-                    'asr-off' {
-                        $ids = @($q.asr | ForEach-Object { $_.ID })
-                        Add-MpPreference -AttackSurfaceReductionRules_Ids $ids -AttackSurfaceReductionRules_Actions (@($ids | ForEach-Object { 'Disabled' }))
-                        $did += 'attack blocking rules switched off'
-                    }
-                    'tamper' { Start-Process 'windowsdefender://threatsettings'; $did += 'opened Tamper Protection settings' }
-                }
+                } catch { $err = Short-Err $_ }
+                $res += [ordered]@{ id = $id; err = $err }
             }
-            Done ('Turned on: ' + ($did -join ', '))
+            Start-Sleep -Milliseconds 900
+            $out = @()
+            foreach ($r in $res) {
+                $o = Prot-State $r.id
+                $o.id = $r.id
+                $o.err = $r.err
+                if ($r.id -eq 'asr-off') { $o.ok = ($o.on -eq 0) } else { $o.ok = ($o.state -eq 'on') }
+                $out += $o
+            }
+            $n = @($out | Where-Object { $_.ok }).Count
+            DoneData ("{0} of {1} confirmed on" -f $n, $out.Count) ([ordered]@{ items = $out; note = $note })
+        }
+
+        'fileinfo' {
+            $p = [string]$q.path
+            $o = [ordered]@{ exists = $false }
+            if ($p -and (Test-Path -LiteralPath $p -PathType Leaf)) {
+                $o.exists = $true
+                $fi = Get-Item -LiteralPath $p -Force
+                try { $o.owner = [string](Get-Acl -LiteralPath $p).Owner } catch {}
+                $o.created = [int64]([DateTimeOffset]$fi.CreationTimeUtc).ToUnixTimeSeconds()
+                $o.modified = [int64]([DateTimeOffset]$fi.LastWriteTimeUtc).ToUnixTimeSeconds()
+                $o.accessed = [int64]([DateTimeOffset]$fi.LastAccessTimeUtc).ToUnixTimeSeconds()
+                try { $o.streams = @(Get-Item -LiteralPath $p -Stream * -ErrorAction Stop | ForEach-Object { [string]$_.Stream } | Where-Object { $_ -ne ':$DATA' }) } catch { $o.streams = @() }
+                $z = Get-Content -LiteralPath $p -Stream Zone.Identifier -ErrorAction SilentlyContinue
+                if ($z) { $o.zone = @($z | ForEach-Object { [string]$_ }) }
+                $vi = $fi.VersionInfo
+                if ($vi) { $o.ver = [ordered]@{ company = [string]$vi.CompanyName; product = [string]$vi.ProductName; desc = [string]$vi.FileDescription; version = [string]$vi.FileVersion; orig = [string]$vi.OriginalFilename; internal = [string]$vi.InternalName; copyright = [string]$vi.LegalCopyright } }
+                $sg = Get-AuthenticodeSignature -LiteralPath $p
+                $o.sig = [ordered]@{ status = [string]$sg.Status; subject = [string]$sg.SignerCertificate.Subject; issuer = [string]$sg.SignerCertificate.Issuer; thumb = [string]$sg.SignerCertificate.Thumbprint; from = $(if ($sg.SignerCertificate) { [int64]([DateTimeOffset]$sg.SignerCertificate.NotBefore.ToUniversalTime()).ToUnixTimeSeconds() } else { 0 }); to = $(if ($sg.SignerCertificate) { [int64]([DateTimeOffset]$sg.SignerCertificate.NotAfter.ToUniversalTime()).ToUnixTimeSeconds() } else { 0 }); stamped = $(if ($sg.TimeStamperCertificate) { [string]$sg.TimeStamperCertificate.Subject } else { '' }) }
+            }
+            DoneData 'ok' $o
         }
 
         'bloat' {

@@ -70,6 +70,7 @@ type psFix struct {
 	OK   bool            `json:"ok"`
 	Msg  string          `json:"msg"`
 	Undo json.RawMessage `json:"undo"`
+	Data json.RawMessage `json:"data"`
 }
 
 func secRunFix(ctx context.Context, req map[string]any) (psFix, error) {
@@ -129,9 +130,41 @@ func secUndo(ctx context.Context, raw json.RawMessage) error {
 	return err
 }
 
-func secHarden(ctx context.Context, ids []string) (string, error) {
+func secHarden(ctx context.Context, ids []string) (hardenOut, error) {
 	r, err := secRunFix(ctx, map[string]any{"op": "harden", "ids": ids, "asr": asrRules})
-	return r.Msg, err
+	if err != nil {
+		return hardenOut{}, err
+	}
+	var out hardenOut
+	if e := json.Unmarshal(r.Data, &out); e != nil {
+		return hardenOut{}, errors.New("Windows did not report back. Try again.")
+	}
+	out.fill()
+	return out, nil
+}
+
+// secProtStatus reads the real state of each protection from Windows (nothing is assumed).
+func secProtStatus(ctx context.Context, ids []string) ([]protRes, error) {
+	r, err := secRunFix(ctx, map[string]any{"op": "protstatus", "ids": ids, "asr": asrRules})
+	if err != nil {
+		return nil, err
+	}
+	var out []protRes
+	if e := json.Unmarshal(r.Data, &out); e != nil {
+		return nil, e
+	}
+	for i := range out {
+		out[i].Name = protName(out[i].ID)
+		out[i].OK = out[i].State == "on"
+	}
+	return out, nil
+}
+
+// secFileInfo asks Windows for the facts it records about a file: owner, times, streams,
+// version resource and signature details.
+func secFileInfo(ctx context.Context, path string) (json.RawMessage, error) {
+	r, err := secRunFix(ctx, map[string]any{"op": "fileinfo", "path": path})
+	return r.Data, err
 }
 
 func secBloatAction(ctx context.Context, b secBloat) (string, json.RawMessage, error) {

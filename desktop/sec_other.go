@@ -9,6 +9,7 @@ import (
 	"context"
 	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,8 +66,25 @@ func secFixSetting(ctx context.Context, key string) (json.RawMessage, error) {
 
 func secUndo(ctx context.Context, raw json.RawMessage) error { return nil }
 
-func secHarden(ctx context.Context, ids []string) (string, error) {
-	return fmt.Sprintf("Turned on: %v (preview)", ids), nil
+func secHarden(ctx context.Context, ids []string) (hardenOut, error) {
+	out := hardenOut{}
+	for _, id := range ids {
+		out.Items = append(out.Items, protRes{ID: id, OK: true, State: "on", Detail: "preview", On: 1, Of: 1})
+	}
+	out.fill()
+	return out, nil
+}
+
+func secProtStatus(ctx context.Context, ids []string) ([]protRes, error) {
+	var out []protRes
+	for _, id := range ids {
+		out = append(out, protRes{ID: id, Name: protName(id), OK: true, State: "on", Detail: "preview", On: 1, Of: 1})
+	}
+	return out, nil
+}
+
+func secFileInfo(ctx context.Context, path string) (json.RawMessage, error) {
+	return nil, errors.New("not available in the preview")
 }
 
 func secBloatAction(ctx context.Context, b secBloat) (string, json.RawMessage, error) {

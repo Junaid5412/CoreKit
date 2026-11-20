@@ -41,7 +41,8 @@ The UIs never know which platform they run on. They talk to the host through:
   `CoreKitNative.secCall(id, path, body)` and replies through `window.__secReply(id, json)`.
   Paths: `fix {id, action}`, `fixall {ids}`, `history`, `undo {id}`, `restore {id}`, `qdelete {id}`,
   `settings` (GET; POST `{key}` / `{untrust:[]}`), `shield {on}`, `harden {ids}`, `asr`, `bloat {id}`,
-  `second {id}`, `app {id}` (Windows: uninstall from All apps) / `app {pkg, action}` (Android),
+  `protstatus {ids}` (reads the real state of each protection), `inspect {id}` (reverse view of the
+  file), `trace {id}` (public DNS/RDAP records for the servers found), `second {id}`, `app {id}` (Windows: uninstall from All apps) / `app {pkg, action}` (Android),
   `installed {pkg, id, name}` (Android: checks the app is gone after Android's uninstall prompt),
   `open {what}` (Android settings screens). Android needs REQUEST_DELETE_PACKAGES for the prompt.
   Result schema (`desktop/sec_rules.go` `secResult`, Android `SecurityScanner.kt`):
@@ -49,12 +50,21 @@ The UIs never know which platform they run on. They talk to the host through:
   counts{high,med,low,info}, scanned{processes,autoruns,files,connections,apps,lookups},
   protection[{id,name,state(on|off|warn|unknown),detail,fix}],
   findings[{id,kind(process|autorun|file|setting|threat|app),sev(high|med|low|info),score,title,sub,summary,
-  reasons[{t,w}],path,sha256,size,signer,signed,company,origin{url,ref,zone,via,text},
+  reasons[{t,w}],path,sha256,size,signer,signed,company,origin{by,user,how,url,ref,zone,via,text},inner,
   chain[{pid,name,path,cmd,t,sig}],persist[{kind,where,value}],net[{remote,port,state}],first,last,
   intel[{source,verdict,family,tags,link,first}],actions[{id,label,main}],advice,mitre[],pids[],pkg}],
   bloat[{id,name,publisher,kind,rating(remove|optional|keep),why,size,action,on}],
   apps[{id,name,pkg,publisher,kind(program|store|user|system),source,side,version,size,first,last,sev,score,fid,rating,flags[],canRemove,enabled}],
   notes[], intel, ms`.
+  `harden {ids}` replies `{msg, note, items:[{id,name,ok,state(on|off|partial|unknown),detail,err,on,of}]}`:
+  each item is applied on its own and then READ BACK from Windows, so `ok` means Windows confirmed it.
+  Actions: `quarantine` (restorable), `delete` ("Delete it myself": stops it, removes it, no undo; a
+  threat found inside an archive deletes the archive), `defender`, `kill`, `remove`, `trust`.
+  `inspect` replies `{exists,kind,kindText,size,md5,sha1,sha256,created,modified,source[{k,v,link}],
+  creator[{k,v}],contents[{name,size,flag}],servers[{host,kind,count,why,sev,urls,link}],
+  caps[{t,why,ev,sev}],bad[],notes[],risk,summary}`; `trace` replies `{items:[{host,ips,owner,country,
+  registrar,created,ageDays,note,sev}]}`. Both come from the shared Go code (`sec_inspect.go`,
+  `sec_trace.go`); on Android the same code runs as `libcorekit.so --helper inspect|trace`.
   Windows collects with `desktop/scripts/security.ps1` and fixes with `security_fix.ps1` (everything
   removed is backed up for undo); Live Shield is `CoreKit.exe --shield`, started at sign-in by Task
   Scheduler from `Program Files\CoreKit`. Android's Live Shield is a periodic JobScheduler check of

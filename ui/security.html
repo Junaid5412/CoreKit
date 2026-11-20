@@ -223,6 +223,24 @@ details.rules ul{margin:6px 0 0;padding-left:18px;color:var(--muted2);font-size:
 .mitre a{display:inline-flex;height:24px;align-items:center;padding:0 9px;border-radius:12px;background:#1e1838;color:#cbbcfd;font-size:12px;font-weight:600;font-family:var(--mono)}
 .df{flex:none;display:flex;gap:8px;flex-wrap:wrap;padding:14px 20px calc(14px + env(safe-area-inset-bottom));border-top:1px solid var(--line);background:#0b1016}
 .df .btn{flex:1;min-width:130px;height:42px}
+.rvs{padding:12px 14px;border-radius:12px;font-size:13.4px;line-height:1.5;border:1px solid var(--line2);background:#101822;color:var(--text)}
+.rvs.high{background:#2a1115;border-color:#5b1f26;color:#fecaca}.rvs.med{background:#2a2110;border-color:#4d3a12;color:#fde68a}
+.rvs b{color:var(--white)}
+.rvl{display:flex;flex-direction:column;gap:6px}
+.rvl>div{padding:9px 11px;border-radius:10px;background:#111922;font-size:12.8px;overflow-wrap:anywhere}
+.rvl b{color:var(--white)}.rvl small{display:block;color:var(--muted);font-size:12px;margin-top:2px;line-height:1.45}
+.rvl code{display:block;color:var(--muted2);font-size:11.5px;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:3px}
+.rvl .tr{margin-top:6px;padding:7px 9px;border-radius:8px;background:#0a0f14;color:#bcd6ee;font-size:12px}
+.rvl details summary{cursor:pointer;color:var(--white)}
+.rvb{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.rvb li{padding:9px 11px 9px 30px;border-radius:10px;background:#1c1013;border:1px solid #3d1a20;color:#f3c9cd;font-size:12.9px;line-height:1.45;position:relative}
+.rvb li::before{content:"!";position:absolute;left:10px;top:9px;width:14px;height:14px;border-radius:50%;background:var(--red);color:#1c1013;font:700 10px/14px var(--font);text-align:center}
+.pr{display:grid;grid-template-columns:22px 1fr;gap:4px 10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:start}
+.pr:last-child{border-bottom:0}
+.pr .pi{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;margin-top:1px}
+.pr .pi.ok{background:#0e2b23;color:#6ee7b7}.pr .pi.bad{background:#3a1418;color:#fca5a5}.pr .pi.mid{background:#33270c;color:#fde68a}
+.pr .pi svg{width:13px;height:13px}
+.pr small{display:block;color:var(--muted);font-size:12.2px;line-height:1.45;margin-top:2px}
 .second{margin-top:8px;padding:10px 12px;border-radius:10px;background:#0f1a24;border:1px solid #1e3346;font-size:12.8px;color:#bcd6ee;display:none}
 .second.show{display:block}
 
@@ -495,7 +513,7 @@ function overview() {
   else if (RES.intel && RES.intel.startsWith('error')) out += note('warn', 'Known-malware check failed: ' + esc(RES.intel.slice(7)));
   (RES.notes || []).forEach(n => out += note('', esc(n)));
   if (prots.length) {
-    out += `<h2>Protection <span>${prots.filter(p => p.state === 'on').length} of ${prots.length} on</span>${offP.length && !ANDROID ? `<button class="btn sm pri" data-a="hardenAll">${svg('shieldok')}Turn on recommended</button>` : ''}</h2><div class="pgrid">${prots.map(protCard).join('')}</div>`;
+    out += `<h2>Protection <span>${prots.filter(p => p.state === 'on').length} of ${prots.length} on</span>${!ANDROID ? `<button class="btn sm" data-a="protcheck">${svg('eye')}Check what's really on</button>` : ''}${offP.length && !ANDROID ? `<button class="btn sm pri" data-a="hardenAll">${svg('shieldok')}Turn on recommended</button>` : ''}</h2><div class="pgrid">${prots.map(protCard).join('')}</div>`;
   }
   const top = openFindings().slice(0, 6);
   if (top.length) out += `<h2>Most important <span><a href="#" data-tab="threats">See all ${openFindings().length}</a></span></h2><div class="card">${top.map(row).join('')}</div>`;
@@ -532,9 +550,10 @@ function open(id) {
   $('#dHead').innerHTML = `<span class="ki">${svg(KIND_IC[f.kind])}</span><div class="t"><h3>${esc(f.title)}</h3><div class="s"><span class="tag ${f.sev === 'high' ? 'red' : f.sev === 'med' ? 'amber' : f.sev === 'low' ? 'blue' : ''}">${SEV[f.sev]} · ${f.score}/100</span><span class="tag">${KIND[f.kind] || f.kind}</span>${DONE.has(f.id) ? '<span class="tag green">Fixed</span>' : ''}</div></div><button class="ib" data-a="close" aria-label="Close">${svg('x')}</button>`;
   $('#dBody').innerHTML = story(f);
   $('#dFoot').innerHTML = DONE.has(f.id) ? `<button class="btn" data-a="close">Close</button><button class="btn" data-tab="history" data-a="close">See in History</button>` :
-    f.actions.map(a => `<button class="btn ${a.main ? (a.id === 'trust' ? 'pri' : 'danger') : ''}" data-a="fix" data-id="${f.id}" data-act="${a.id}">${svg(a.id === 'trust' ? 'check' : a.id === 'quarantine' ? 'box' : a.id === 'kill' ? 'x' : a.id === 'uninstall' ? 'trash' : 'bolt')}${esc(a.label)}</button>`).join('');
+    f.actions.map(a => `<button class="btn ${a.main ? (a.id === 'trust' ? 'pri' : 'danger') : ''}" data-a="fix" data-id="${f.id}" data-act="${a.id}">${svg(a.id === 'trust' ? 'check' : a.id === 'quarantine' ? 'box' : a.id === 'kill' ? 'x' : a.id === 'uninstall' || a.id === 'delete' ? 'trash' : 'bolt')}${esc(a.label)}</button>`).join('');
   $('#drawer').classList.add('show'); $('#dim').classList.add('show');
   $('#dBody').scrollTop = 0;
+  if ($('#rev')) loadRev(f);
 }
 function closeDrawer() { $('#drawer').classList.remove('show'); $('#dim').classList.remove('show'); CUR = null; }
 
@@ -543,14 +562,17 @@ function story(f) {
   s += `<h4>Why CoreKit flagged this</h4><div class="why">${(f.reasons || []).map(r => `<div class="${r.w > 0 ? 'p' : r.w < 0 ? 'n' : 'z'}"><b>${r.w > 0 ? '+' + r.w : r.w === 0 ? 'fact' : r.w}</b><span>${esc(r.t)}</span></div>`).join('')}</div>`;
   if (f.advice) s += note('', esc(f.advice));
   if (f.intel && f.intel.length) s += `<h4>Threat intelligence</h4><div class="pl">${f.intel.map(i => `<div><b>${esc(i.source)}: ${i.verdict === 'malicious' ? 'known malware' : 'not known'}</b>${i.family ? ' · ' + esc(i.family) : ''}${i.first ? `<code>First seen ${esc(i.first)}</code>` : ''}${i.tags && i.tags.length ? `<code>Tags: ${esc(i.tags.join(', '))}</code>` : ''}${i.link ? `<code><a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.link)}</a></code>` : ''}</div>`).join('')}</div>`;
-  if (f.origin) s += `<h4>Where it came from</h4><div class="origin"><b>${esc(f.origin.text)}</b>${f.origin.via ? ' · via ' + esc(f.origin.via) : ''}${f.origin.url ? `<code>File: ${esc(f.origin.url)}</code>` : ''}${f.origin.ref ? `<code>Page: ${esc(f.origin.ref)}</code>` : ''}</div>`;
+  const deep = !!(f.path || f.pkg) && ['threat', 'file', 'process', 'autorun', 'app'].includes(f.kind);
+  if (f.origin) s += `<h4>Where it came from</h4><div class="origin"><b>${esc(f.origin.text)}</b>${f.origin.via ? ' · via ' + esc(f.origin.via) : ''}${deep ? '' : (f.origin.url ? `<code>File: ${esc(f.origin.url)}</code>` : '') + (f.origin.ref ? `<code>Page: ${esc(f.origin.ref)}</code>` : '')}</div>`;
   else if (f.kind === 'process' || f.kind === 'file' || f.kind === 'autorun') s += `<h4>Where it came from</h4><div class="pl"><div>${f.pkg ? 'See the installer below.' : 'No download record on this file (it was created on this ' + DEV + ', copied, or unpacked by another program).'}</div></div>`;
+  if (deep) s += `<h4>Full investigation</h4><div id="rev"><div class="pl"><div><span class="sp" style="display:inline-block;vertical-align:-3px;margin-right:8px"></span>Opening the file and reading what is inside… (it is only read, never run)</div></div></div>`;
   if (f.chain && f.chain.length) s += `<h4>How it started</h4><div class="chain">${f.chain.map(c => `<div class="st"><b>${esc(c.name)}</b>${c.pid ? ` <span class="tag">PID ${c.pid}</span>` : ''}${c.t ? `<small>Started ${esc(when(c.t))}</small>` : ''}${c.path ? `<small class="mono">${esc(c.path)}</small>` : ''}${c.sig ? `<small>${esc(c.sig)}</small>` : ''}${c.cmd ? `<code>${esc(c.cmd)}</code>` : ''}</div>`).join('')}</div>`;
   if (f.persist && f.persist.length) s += `<h4>How it stays on this ${DEV}</h4><div class="pl">${f.persist.map(p => `<div><b>${esc(p.where)}</b><code>${esc(p.value)}</code></div>`).join('')}</div>`;
   if (f.net && f.net.length) s += `<h4>Internet connections</h4><div class="pl">${f.net.map(n => `<div><b>${esc(n.remote)}:${n.port}</b> · ${esc(n.state)} <a href="https://ipinfo.io/${encodeURIComponent(n.remote)}" target="_blank" rel="noopener">who is this?</a></div>`).join('')}</div>`;
   const kv = [];
   if (f.pkg) kv.push(['Package', `<span class="mono">${esc(f.pkg)}</span>`]);
-  if (f.path) kv.push(['Location', `<span class="mono">${esc(f.path)}</span>`]);
+  if (f.path) kv.push([f.inner ? 'Archive' : 'Location', `<span class="mono">${esc(f.path)}</span>`]);
+  if (f.inner) kv.push(['Found inside', `<span class="mono">${esc(f.inner)}</span>`]);
   if (f.size) kv.push(['Size', size(f.size)]);
   if (f.signed) kv.push(['Signature', f.signed === 'valid' ? 'Valid' + (f.signer ? ' · ' + esc(f.signer) : '') : f.signed === 'unsigned' ? 'Not signed' : f.signed === 'invalid' ? 'Broken or forged' : 'Unknown']);
   if (f.company) kv.push(['Company', esc(f.company)]);
@@ -574,6 +596,9 @@ async function act(a, d, el) {
     case 'fix': return confirmFix(d.id, d.act);
     case 'fixall': return confirmFixAll();
     case 'second': return second(d.id);
+    case 'trace': return traceSrv(d.id);
+    case 'protcheck': return protCheck();
+    case 'protagain': return protAgain();
     case 'prot': return protFix(d.id);
     case 'hardenAll': return harden(['rtp', 'sigs', 'pua', 'netprot', 'cloud', 'asr', 'firewall', 'smartscreen'], 'Turn on recommended protection?', ['Real-time protection and fresh virus definitions', 'Block unwanted apps (adware, bundled toolbars)', 'Network protection for every program', 'Cloud protection at a high level', '18 attack blocking rules (Office, scripts, USB, ransomware, password theft…)', 'Firewall for all networks and SmartScreen']);
     case 'harden': return harden([d.id]);
@@ -601,6 +626,7 @@ const FIXTEXT = {
   remove: f => [`Remove ${Math.max(1, (f.persist || []).length)} start-up entr${(f.persist || []).length > 1 ? 'ies' : 'y'} (backed up first)`, 'You can put it back from History'],
   fixsetting: f => ['Change the setting back to the safe value (backed up first)', 'You can undo it from History'],
   defender: f => ['Ask Windows Defender to remove all active threats'],
+  delete: f => [f.pids && f.pids.length ? 'Stop the running program' : '', (f.persist || []).length ? `Remove ${f.persist.length} start-up entr${f.persist.length > 1 ? 'ies' : 'y'}` : '', f.inner ? `The dangerous file is inside an archive, so the whole archive is deleted: ${(f.path || '').split('\\').pop()}` : `Delete ${(f.path || 'the file').split('\\').pop()}`, 'CoreKit does this itself (no Windows Defender)', 'This can\'t be undone. Choose Quarantine if you want to be able to restore it'],
   trust: f => ['Never report this file again', 'You can remove it from Settings › Trusted'],
   uninstall: f => ['Android will ask you to confirm the uninstall'],
   appinfo: f => ['Opens the app\'s settings: tap Disable or Force stop'],
@@ -655,18 +681,96 @@ async function protFix(id) {
   if (id === 'cfa') return harden(['cfa'], 'Turn on the ransomware folder guard?', ['Only trusted apps may change Documents, Pictures, Desktop and Videos', 'If a program you trust is blocked, Windows shows a notification and you can allow it in Windows Security']);
   return harden([map[id] || id]);
 }
+let LASTH = [];
+function protIcon(it) { return it.ok ? ['ok', 'check'] : it.state === 'partial' ? ['mid', 'threat'] : ['bad', 'x']; }
+function protTag(it) { return it.ok ? '<span class="tag green">Confirmed on</span>' : it.state === 'partial' ? '<span class="tag amber">Only partly on</span>' : it.state === 'unknown' ? '<span class="tag">Could not confirm</span>' : '<span class="tag red">Still off</span>'; }
+function protWhy(it) {
+  if (it.ok) return it.detail || '';
+  if (it.err) return it.err + (it.detail ? ' · Windows says: ' + it.detail : '');
+  return it.state === 'unknown' ? 'Windows would not say (' + (it.detail || 'no answer') + ')' : 'Windows still reports it as off' + (it.detail ? ': ' + it.detail : '');
+}
+// show what Windows itself reports, and bring the screen in line with it
+function applyProt(items) {
+  if (!RES) return;
+  (items || []).forEach(it => {
+    const p = (RES.protection || []).find(x => x.fix === it.id || x.id === it.id);
+    if (!p || it.state === 'unknown') return;
+    p.state = it.ok ? 'on' : it.state === 'partial' ? 'warn' : 'off';
+    if (it.id === 'asr' && it.detail) p.detail = it.detail + ' that stop attacks before they run';
+  });
+}
+function protModal(title, items, note, again) {
+  LASTH = items.map(i => i.id);
+  const ok = items.filter(i => i.ok).length;
+  modal(`<h3>${esc(title)}</h3><p style="margin:2px 0 10px">${ok === items.length ? 'Windows confirms all ' + ok + ' are on.' : `Windows confirms <b>${ok} of ${items.length}</b> are on.`} This is read back from Windows, not assumed.</p>${note ? `<div class="note warn" style="margin-bottom:10px">${svg('threat')}<div>${esc(note)}</div></div>` : ''}<div style="max-height:46vh;overflow:auto">${items.map(it => { const [c, ic] = protIcon(it); return `<div class="pr"><span class="pi ${c}">${svg(ic)}</span><div><b>${esc(it.name || it.id)}</b> ${protTag(it)}<small>${esc(protWhy(it))}</small></div></div>`; }).join('')}</div><div class="row" style="margin-top:14px"><button class="btn" data-a="protagain">${svg('undo')}Check again</button><button class="btn pri" data-a="mclose">Done</button></div>`);
+}
+async function protAgain() {
+  const r = await call('protstatus', {ids: LASTH.length ? LASTH : []});
+  if (r.error) return toast(r.error, true);
+  applyProt(r.items); protModal('Protection right now', r.items); render();
+}
+async function protCheck() {
+  modal(`<h3>Checking Windows…</h3><div class="stage"><span class="sp"></span> Asking Windows what is really switched on.</div>`);
+  const r = await call('protstatus', {ids: []});
+  if (r.error) { modal(`<h3>Could not check</h3><p>${esc(r.error)}</p><div class="row"><button class="btn pri" data-a="mclose">Close</button></div>`); return; }
+  applyProt(r.items); protModal('Protection right now', r.items); render();
+}
 function harden(ids, title, lines) {
   const run = async () => {
-    toast('Turning on…');
+    modal(`<h3>Turning on…</h3><div class="stage"><span class="sp"></span> Switching each one on, then asking Windows to confirm. This can take up to a minute.</div>`);
     const r = await call('harden', {ids});
-    if (r.error) return toast(r.error, true);
-    toast(r.msg || 'Done');
-    if (RES) (RES.protection || []).forEach(p => { if (ids.includes(p.fix) && p.fix !== 'tamper') p.state = 'on'; });
-    render();
+    if (r.error) { modal(`<h3>Could not change protection</h3><p>${esc(r.error)}</p><div class="row"><button class="btn pri" data-a="mclose">Close</button></div>`); return; }
+    applyProt(r.items);
+    protModal(r.msg || 'Protection', r.items, r.note);
+    drawNav(); render();
   };
   if (!title) return run();
   modal(`<h3>${esc(title)}</h3><ul>${lines.map(l => `<li>${esc(l)}</li>`).join('')}</ul><div class="row"><button class="btn" data-a="mclose">Cancel</button><button class="btn pri" id="mgo">Turn on</button></div>`);
   $('#mgo').onclick = () => { closeModal(); run(); };
+}
+
+/* ---------- full investigation (what is inside the file) ---------- */
+const INSP = {};
+async function loadRev(f) {
+  const r = INSP[f.id] || (INSP[f.id] = await call('inspect', {id: f.id}));
+  const box = $('#rev'); if (!box || CUR !== f) return;
+  box.innerHTML = revHTML(r, f);
+}
+function kvRows(list) {
+  return `<div class="rvl">${list.map(e => `<div><small style="margin:0 0 2px">${esc(e.k)}</small><b style="font-weight:600">${esc(e.v)}</b>${e.link ? ` <a href="${esc(e.link)}" target="_blank" rel="noopener">open</a>` : ''}</div>`).join('')}</div>`;
+}
+function revHTML(r, f) {
+  if (r.error) return note('warn', esc(r.error));
+  const sevTag = v => `<span class="tag ${v === 'high' ? 'red' : v === 'med' ? 'amber' : 'blue'}">${v === 'high' ? 'Dangerous' : v === 'med' ? 'Suspicious' : 'Note'}</span>`;
+  let s = `<div class="rvs ${r.risk}">${r.exists ? `<b>${esc(r.kindText)}</b> · ${size(r.size)}<br>` : ''}${esc(r.summary)}</div>`;
+  if (r.bad && r.bad.length) s += `<h4>Why this is not good for you</h4><ul class="rvb">${r.bad.map(b => `<li>${esc(b)}</li>`).join('')}</ul>`;
+  if (r.source && r.source.length) s += `<h4>Who brought it here, from where, and when</h4>${kvRows(r.source)}`;
+  if (r.creator && r.creator.length) s += `<h4>Who made it</h4>${kvRows(r.creator)}`;
+  if (r.servers && r.servers.length) s += `<h4>Servers named inside it</h4><div class="rvl">${r.servers.map((v, i) => `<div><b>${esc(v.host)}</b> ${sevTag(v.sev)}<span class="tag">${v.kind === 'ip' ? 'bare address' : 'name'}</span>${v.count > 1 ? `<span class="tag">seen ${v.count}×</span>` : ''}<small>${esc(v.why)}</small>${(v.urls || []).map(u => `<code>${esc(u)}</code>`).join('')}<a href="${esc(v.link)}" target="_blank" rel="noopener">Look up on VirusTotal</a><div class="tr" id="tr_${i}" style="display:none"></div></div>`).join('')}</div><div style="margin-top:10px"><button class="btn sm" data-a="trace" data-id="${f.id}">${svg('globe')}Find out who owns these servers</button><small style="display:block;margin-top:6px;color:var(--muted)">Reads public records only (DNS and registration). CoreKit never connects to the servers.</small></div>`;
+  else if (r.exists) s += `<h4>Servers named inside it</h4><div class="pl"><div>No server names or addresses were found in plain view.</div></div>`;
+  if (r.caps && r.caps.length) s += `<h4>What it can do</h4><div class="rvl">${r.caps.map(c => `<div>${sevTag(c.sev)}<b>${esc(c.t)}</b><small>${esc(c.why)}</small>${c.ev ? `<code>found: ${esc(c.ev)}</code>` : ''}</div>`).join('')}</div>`;
+  if (r.contents && r.contents.length) s += `<h4>Inside the archive</h4><div class="rvl"><div><details><summary>${r.contents.length} item${r.contents.length > 1 ? 's' : ''} listed</summary>${r.contents.map(c => `<code>${esc(c.name)} · ${size(c.size)}${c.flag ? ' · ' + esc(c.flag) : ''}</code>`).join('')}</details></div></div>`;
+  if (r.md5) s += `<h4>Fingerprints</h4><dl class="kv"><dt>SHA-256</dt><dd class="mono">${esc(r.sha256)}</dd><dt>SHA-1</dt><dd class="mono">${esc(r.sha1)}</dd><dt>MD5</dt><dd class="mono">${esc(r.md5)}</dd></dl>`;
+  if (r.notes && r.notes.length) s += `<h4>Other findings</h4><div class="pl">${r.notes.map(n => `<div>${esc(n)}</div>`).join('')}</div>`;
+  return s;
+}
+async function traceSrv(id) {
+  const r = INSP[id]; if (!r) return;
+  r.servers.forEach((_, i) => { const e = $('#tr_' + i); if (e) { e.style.display = 'block'; e.textContent = 'Looking up…'; } });
+  const t = await call('trace', {id});
+  if (t.error) { r.servers.forEach((_, i) => { const e = $('#tr_' + i); if (e) e.textContent = t.error; }); return; }
+  r.servers.forEach((v, i) => {
+    const e = $('#tr_' + i); if (!e) return;
+    const x = (t.items || []).find(y => y.host === v.host);
+    if (!x) { e.style.display = 'none'; return; }
+    const l = [];
+    if (x.ips && x.ips.length) l.push('Points to ' + x.ips.join(', '));
+    if (x.owner) l.push('Address owner: ' + x.owner + (x.country ? ' (' + x.country + ')' : ''));
+    if (x.registrar) l.push('Registered through: ' + x.registrar);
+    if (x.created) l.push('Name registered: ' + x.created + (x.ageDays >= 0 ? ' (' + x.ageDays + ' days ago)' : ''));
+    if (x.note) l.push((x.sev === 'high' ? '⚠ ' : '') + x.note);
+    e.innerHTML = l.length ? l.map(esc).join('<br>') : 'No public record found.';
+  });
 }
 
 /* ---------- all apps ---------- */
@@ -791,7 +895,7 @@ function renderShield() {
       ['cfa', 'Ransomware folder guard', 'Only trusted apps may change Documents, Pictures and Desktop. Unknown apps get blocked; you can allow them in Windows Security.'],
       ['tamper', 'Tamper protection', 'Stops malware switching Defender off. Only Windows Security can turn this on.']
     ];
-    out += `<h2>Block before it runs <span>Windows Defender hardening</span><button class="btn sm pri" data-a="hardenAll">${svg('shieldok')}Turn on recommended</button></h2><div class="card">${rows.map(([id, t, d, rules]) => `<div class="hr"><div><b>${t}</b> ${st(id) === 'on' ? '<span class="tag green">On</span>' : st(id) === 'off' ? '<span class="tag red">Off</span>' : st(id) === 'warn' ? '<span class="tag amber">Partly</span>' : ''}<small>${d}</small>${rules && ASR.length ? `<details class="rules"><summary>The ${ASR.length} rules</summary><ul>${ASR.map(r => `<li>${esc(r.Name)}${r.Mode === 'Warn' ? ' (asks first)' : ''}</li>`).join('')}</ul></details>` : ''}</div><button class="btn sm" data-a="${id === 'cfa' || id === 'tamper' ? 'prot' : 'harden'}" data-id="${id}">${id === 'tamper' ? 'Open' : 'Turn on'}</button></div>`).join('')}</div>`;
+    out += `<h2>Block before it runs <span>Windows Defender hardening</span><button class="btn sm" data-a="protcheck">${svg('eye')}Check what's really on</button><button class="btn sm pri" data-a="hardenAll">${svg('shieldok')}Turn on recommended</button></h2><div class="card">${rows.map(([id, t, d, rules]) => `<div class="hr"><div><b>${t}</b> ${st(id) === 'on' ? '<span class="tag green">On</span>' : st(id) === 'off' ? '<span class="tag red">Off</span>' : st(id) === 'warn' ? '<span class="tag amber">Partly</span>' : ''}<small>${d}</small>${rules && ASR.length ? `<details class="rules"><summary>The ${ASR.length} rules</summary><ul>${ASR.map(r => `<li>${esc(r.Name)}${r.Mode === 'Warn' ? ' (asks first)' : ''}</li>`).join('')}</ul></details>` : ''}</div><button class="btn sm" data-a="${id === 'cfa' || id === 'tamper' ? 'prot' : 'harden'}" data-id="${id}">${id === 'tamper' ? 'Open' : 'Turn on'}</button></div>`).join('')}</div>`;
     out += note('', 'Smart App Control (Windows 11) also blocks untrusted apps before they run, but Windows only lets you switch it on after a fresh install. Its current state is shown on the Overview.');
   }
   $('#inner').innerHTML = out;

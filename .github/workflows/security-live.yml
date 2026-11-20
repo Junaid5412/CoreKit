@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: ["ci-*"]
-    paths: ["desktop/sec*", "desktop/remote*", "desktop/scripts/security*.ps1", ".github/workflows/security-live.yml"]
+    paths: ["desktop/sec*", "desktop/helper.go", "desktop/remote*", "desktop/scripts/security*.ps1", ".github/workflows/security-live.yml"]
 
 jobs:
   live:

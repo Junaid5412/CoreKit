@@ -171,3 +171,105 @@ func TestSecLiveShieldTask(t *testing.T) {
 		t.Error("Live Shield task still registered")
 	}
 }
+
+// Protection is read back from Windows; one item failing must not stop the others.
+func TestSecLiveProtectionReadBack(t *testing.T) {
+	live(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	all, err := secProtStatus(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range all {
+		t.Logf("status %-12s %-8s %s", it.ID, it.State, it.Detail)
+		if it.State != "on" && it.State != "off" && it.State != "partial" && it.State != "unknown" {
+			t.Errorf("odd state %+v", it)
+		}
+	}
+	if len(all) < 8 {
+		t.Fatalf("expected every protection to be reported, got %d", len(all))
+	}
+	// 'sigs' goes first on purpose: it can fail (offline) and must not stop 'pua' or 'rtp'
+	h, err := secHarden(ctx, []string{"sigs", "pua", "rtp"})
+	if err != nil {
+		if strings.Contains(err.Error(), "administrator") {
+			t.Skip("runner is not an administrator")
+		}
+		t.Fatal(err)
+	}
+	if len(h.Items) != 3 {
+		t.Fatalf("every item must be reported: %+v", h.Items)
+	}
+	after, err := secProtStatus(ctx, []string{"pua", "rtp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range after {
+		for _, it := range h.Items {
+			if it.ID == a.ID && it.State != a.State {
+				t.Errorf("%s: harden said %s but Windows says %s", a.ID, it.State, a.State)
+			}
+		}
+	}
+	for _, it := range h.Items {
+		t.Logf("harden %-6s ok=%v state=%s err=%q detail=%q", it.ID, it.OK, it.State, it.Err, it.Detail)
+	}
+}
+
+// Origin: the Mark of the Web written by a browser is read back, the file is read inside, and
+// "Delete it myself" removes it.
+func TestSecLiveInspectAndDelete(t *testing.T) {
+	live(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	// a real signed Windows program
+	exe := filepath.Join(os.Getenv("SystemRoot"), "System32", "notepad.exe")
+	raw, err := secFileInfo(ctx, exe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plat inPlat
+	if err := json.Unmarshal(raw, &plat); err != nil {
+		t.Fatal(err)
+	}
+	if plat.Sig == nil || plat.Sig.Status != "Valid" || plat.Ver == nil || !strings.Contains(plat.Ver.Company, "Microsoft") || plat.Created == 0 {
+		t.Fatalf("file info: %s", raw)
+	}
+	r := inspectFile(exe, plat)
+	if r.Kind != "program" || !strings.Contains(r.KindText, "Windows") || len(r.Creator) < 4 || r.SHA256 == "" {
+		t.Fatalf("inspect: %+v", r)
+	}
+	t.Logf("notepad: %s · risk %s · %d creator facts, %d servers, %d abilities", r.KindText, r.Risk, len(r.Creator), len(r.Servers), len(r.Caps))
+	for _, c := range r.Creator {
+		t.Logf("  creator %s = %s", c.K, c.V)
+	}
+
+	// a downloaded archive with a browser's Mark of the Web
+	dir := t.TempDir()
+	zp := filepath.Join(dir, "Noobspy-master.zip")
+	os.WriteFile(zp, zipBytes(t, "0123456789abcdef0123456789abcdef01234567", map[string][]byte{"Noobspy-master/README.md": []byte("hi https://203.0.113.9/x")}), 0o600)
+	if err := os.WriteFile(zp+":Zone.Identifier", []byte("[ZoneTransfer]\r\nZoneId=3\r\nReferrerUrl=https://github.com/someone/Noobspy\r\nHostUrl=https://codeload.github.com/someone/Noobspy/zip/refs/heads/master\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f := &secFinding{ID: "live1", Kind: "threat", Title: "Trojan:AndroidOS/Test", Path: zp, Inner: `app\base.apk->classes.dex`, Score: 80}
+	rep := secInspect(ctx, f)
+	kv := map[string]string{}
+	for _, e := range rep.Source {
+		kv[e.K] = e.V
+	}
+	if !strings.Contains(kv["Downloaded from"], "codeload.github.com") || kv["GitHub project"] != "someone/Noobspy" || !strings.Contains(kv["Windows marked it as from"], "internet") || kv["Owner account"] == "" {
+		t.Fatalf("source rows: %+v", rep.Source)
+	}
+	if rep.Created == 0 || len(rep.Servers) != 1 {
+		t.Fatalf("report: created=%d servers=%+v", rep.Created, rep.Servers)
+	}
+	f.Actions = actionsFor(f)
+	out := applyFix(ctx, f, "delete")
+	if !out.OK {
+		t.Fatalf("delete: %+v", out)
+	}
+	if _, err := os.Stat(zp); !os.IsNotExist(err) {
+		t.Fatal("archive is still there after Delete it myself")
+	}
+}

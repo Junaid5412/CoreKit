@@ -36,6 +36,7 @@ type helperReq struct {
 	Cands     []string `json:"cands"`
 	IP        string   `json:"ip"`
 	Bypass    string   `json:"bypass"`
+	Path      string   `json:"path"`
 }
 
 // helperClient reaches the internet through the tunnel's HTTP inbound when a port is given.
@@ -96,6 +97,15 @@ func runHelper(cmd string) int {
 		}
 	}
 	switch cmd {
+	case "inspect": // Security › reverse view of one file (Android app)
+		os.Stdout.Write(inspectJSON(r.Path))
+		os.Stdout.Write([]byte("\n"))
+		return 0
+	case "trace": // Security › public registration records for the servers found in a file
+		rep := inspectFile(r.Path, inPlat{})
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+		defer cancel()
+		return helperOut(map[string]any{"items": traceHosts(ctx, rep.Servers)})
 	case "parse":
 		_, kind, name, err := parseProxy(strings.TrimSpace(r.Link))
 		if err != nil {
