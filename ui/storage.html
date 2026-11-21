@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en" style="background:#0a0e13">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Storage & Performance · CoreKit</title>
+<meta name="color-scheme" content="dark">
+<style>
+:root{--bg:#0a0e13;--panel:#10161e;--panel2:#0d131a;--line:#1a2431;--line2:#243142;--acc:#38bdf8;--accd:#0f2838;--white:#f0f6fc;--text:#c9d1d9;--muted:#6b7785;--muted2:#8b98a5;--red:#f87171;--redb:#3a1518;--amber:#fbbf24;--green:#34d399;--font:"Segoe UI",Roboto,system-ui,sans-serif;--fontd:"Segoe UI",Roboto,system-ui,sans-serif}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 var(--font);-webkit-font-smoothing:antialiased}
+body{background:radial-gradient(640px 420px at 50% -10%,rgba(56,189,248,.08),transparent 70%),var(--bg);min-height:100vh}
+svg.i{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+button{font:inherit;color:inherit;cursor:pointer}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px calc(120px + env(safe-area-inset-bottom))}
+/* header */
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;padding:calc(14px + env(safe-area-inset-top)) 4px 12px;background:linear-gradient(180deg,var(--bg) 70%,transparent)}
+.top .ic{width:44px;height:44px;border-radius:13px;background:var(--accd);color:var(--acc);display:grid;place-items:center;flex:none}
+.top h1{margin:0;font:600 19px var(--fontd);color:var(--white)}
+.top p{margin:1px 0 0;color:var(--muted2);font-size:12.5px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:42px;padding:0 16px;border-radius:12px;border:1px solid var(--line2);background:#141c26;color:var(--white);font-weight:600;font-size:13.5px;transition:transform .1s,background .15s}
+.btn:active{transform:scale(.97)}.btn svg{width:17px;height:17px}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#04222f}
+.btn.dng{background:var(--red);border-color:var(--red);color:#1c0b0d}
+.btn.sm{height:34px;padding:0 12px;font-size:12.5px;border-radius:10px}
+.btn.gho{background:transparent}
+.btn[disabled]{opacity:.5;pointer-events:none}
+/* scanning */
+.scan{text-align:center;padding:60px 20px}
+.radar{width:72px;height:72px;margin:0 auto 20px;border-radius:50%;border:3px solid var(--line2);border-top-color:var(--acc);animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scan h2{margin:0 0 6px;color:var(--white);font:600 18px var(--fontd)}
+.scan p{color:var(--muted2);margin:0 auto;max-width:440px}
+.pbar{height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin:20px auto 0;max-width:360px}
+.pbar i{display:block;height:100%;width:0;background:var(--acc);transition:width .3s}
+/* hero */
+.hero{display:flex;flex-wrap:wrap;align-items:center;gap:18px;padding:22px;border-radius:18px;background:var(--panel);border:1px solid var(--line);margin-top:4px}
+.hero .big{font:700 34px/1 var(--fontd);color:var(--white)}
+.hero .big span{font-size:16px;color:var(--muted2);font-weight:500}
+.hero .sub{color:var(--muted2);font-size:13px;margin-top:4px}
+.hero .grow{flex:1;min-width:120px}
+/* tabs */
+.tabs{display:flex;gap:4px;overflow-x:auto;padding:14px 0 10px;position:sticky;top:76px;background:var(--bg);z-index:15}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:none;padding:9px 14px;border-radius:11px;border:1px solid transparent;background:transparent;color:var(--muted2);font-weight:600;font-size:13px;white-space:nowrap}
+.tab.on{background:var(--panel);border-color:var(--line2);color:var(--white)}
+.tab b{color:var(--acc);margin-left:5px}
+/* cards & rows */
+.card{border-radius:16px;background:var(--panel);border:1px solid var(--line);margin-bottom:12px;overflow:hidden}
+.card h3{margin:0;padding:15px 16px 4px;font:600 15px var(--fontd);color:var(--white)}
+.card .cd{padding:0 16px 14px;color:var(--muted2);font-size:12.5px}
+.row{display:flex;align-items:center;gap:13px;padding:12px 16px;border-top:1px solid var(--line)}
+.row:first-of-type{border-top:0}
+.row .tx{flex:1;min-width:0}
+.row .tx b{display:block;color:var(--white);font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .tx small{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .sz{color:var(--white);font-weight:600;font-size:13.5px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ico{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none;background:#131c27;color:var(--muted2)}
+.ico.a{background:var(--accd);color:var(--acc)}.ico.r{background:var(--redb);color:var(--red)}.ico.g{background:#0f2a20;color:var(--green)}.ico.y{background:#2a2410;color:var(--amber)}
+.tag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.3px;padding:2px 7px;border-radius:6px;margin-left:6px;vertical-align:middle;background:#1b2634;color:var(--muted2)}
+.tag.red{background:var(--redb);color:var(--red)}.tag.amber{background:#2a2410;color:var(--amber)}.tag.green{background:#0f2a20;color:var(--green)}.tag.blue{background:var(--accd);color:var(--acc)}
+/* checkbox */
+.ck{width:22px;height:22px;border-radius:7px;border:2px solid var(--line2);flex:none;display:grid;place-items:center;transition:all .12s;background:#0c121a}
+.ck.on{background:var(--acc);border-color:var(--acc)}
+.ck svg{width:13px;height:13px;color:#04222f;opacity:0;stroke-width:3.5}
+.ck.on svg{opacity:1}
+.selrow{cursor:pointer}
+.selrow:active{background:#121a24}
+/* drive bars */
+.dbar{height:14px;border-radius:7px;overflow:hidden;display:flex;background:#0c121a;margin:10px 0 8px}
+.dbar i{height:100%}
+.dlabels{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:11.5px;color:var(--muted2)}
+.dlabels span{display:inline-flex;align-items:center;gap:5px}
+.dot{width:9px;height:9px;border-radius:3px;flex:none}
+/* search + filter */
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.search{flex:1;min-width:150px;display:flex;align-items:center;gap:8px;padding:0 12px;height:40px;border-radius:11px;background:var(--panel);border:1px solid var(--line2)}
+.search input{flex:1;background:0;border:0;outline:0;color:var(--white);font-size:13.5px}
+.search svg{width:16px;height:16px;color:var(--muted)}
+.chip{padding:7px 12px;border-radius:10px;border:1px solid var(--line2);background:transparent;color:var(--muted2);font-size:12.5px;font-weight:600;white-space:nowrap}
+.chip.on{background:var(--accd);border-color:var(--acc);color:var(--acc)}
+/* floating action bar */
+.fab{position:fixed;left:50%;transform:translateX(-50%) translateY(140%);bottom:calc(16px + env(safe-area-inset-bottom));z-index:40;display:flex;align-items:center;gap:14px;padding:11px 12px 11px 18px;border-radius:16px;background:#111a24;border:1px solid var(--line2);box-shadow:0 20px 50px rgba(0,0,0,.55);transition:transform .25s cubic-bezier(.2,.8,.2,1);max-width:calc(100% - 24px)}
+.fab.show{transform:translateX(-50%)}
+.fab .fx{min-width:0}.fab .fx b{display:block;color:var(--white);font-size:14px;white-space:nowrap}.fab .fx small{display:block;color:var(--muted2);font-size:12px;white-space:nowrap}
+/* empty / note */
+.note{display:flex;gap:10px;padding:13px 15px;border-radius:12px;font-size:13px;line-height:1.5;margin-bottom:12px}
+.note.warn{background:#2a2110;border:1px solid #4d3a12;color:#fde68a}
+.note svg{width:18px;height:18px;flex:none;margin-top:1px}
+.empty{text-align:center;color:var(--muted);padding:40px 20px}
+.lead{color:var(--muted2);margin:2px 2px 14px;font-size:13.5px}
+.gr{color:var(--green)}
+/* modal */
+.modal{position:fixed;inset:0;z-index:60;display:none;place-items:center;background:rgba(3,6,9,.82);padding:20px}
+.modal.show{display:grid}
+.dlg{width:430px;max-width:100%;max-height:90vh;overflow:auto;border-radius:18px;background:#0f151d;border:1px solid var(--line2);padding:22px;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.dlg h3{margin:0 0 6px;color:var(--white);font:600 17px var(--fontd)}
+.dlg p{margin:0 0 14px;color:var(--muted2);font-size:13.5px;line-height:1.5}
+.dlg .mlist{max-height:40vh;overflow:auto;margin:0 0 14px;border:1px solid var(--line);border-radius:10px}
+.dlg .mlist .row{padding:9px 12px}
+.dlg .mrow{display:flex;justify-content:space-between;gap:10px;padding:7px 2px;font-size:13px;border-bottom:1px solid var(--line)}
+.dlg .mrow:last-child{border:0}.dlg .mrow span:first-child{color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.dlg .mrow b{color:var(--white)}
+.drow{display:flex;gap:10px;margin-top:8px}.drow .btn{flex:1}
+#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom));transform:translate(-50%,20px);opacity:0;pointer-events:none;background:#16212d;border:1px solid var(--line2);color:var(--white);padding:10px 16px;border-radius:11px;font-size:13px;transition:all .25s;z-index:80;max-width:90vw;text-align:center}
+#toast.show{opacity:1;transform:translate(-50%,0)}
+#toast.bad{border-color:#5a2a31;color:#fecaca}
+.spin{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;display:inline-block;animation:spin .8s linear infinite;vertical-align:-3px}
+@media(max-width:560px){.hero .big{font-size:28px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="ic"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/></svg></div>
+    <div style="flex:1;min-width:0"><h1>Storage &amp; Performance</h1><p id="sub">Free up space and remove what you don't need</p></div>
+    <button class="btn sm gho" id="rescan" style="display:none" data-a="scan"><svg class="i" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 3v6h-6"/></svg>Rescan</button>
+  </div>
+  <div id="inner"></div>
+</div>
+
+<div class="fab" id="fab"><div class="fx"><b id="fabN">0 selected</b><small id="fabS"></small></div><button class="btn gho sm" id="fabClear">Clear</button><button class="btn pri sm" id="fabGo">Remove</button></div>
+<div class="modal" id="modal"><div class="dlg" id="dlg"></div></div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+const TOKEN = location.pathname.split('/')[1];
+const API = '/' + TOKEN + '/api/';
+const N = window.CoreKitNative;
+const ANDROID = !!(N && N.stCall);
+const DEV = ANDROID ? 'phone' : 'PC';
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); }
+
+const IC = {
+  drive:'<rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/>',
+  app:'<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/>',
+  broom:'<path d="M19.4 4.6 15 9M11 7l6 6M3 21l4-1 10-10-3-3L4 17z"/>',
+  trash:'<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+  bulb:'<path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/>',
+  chart:'<path d="M3 3v18h18M7 14l3-3 3 3 5-6"/>',
+  check:'<path d="M5 12l5 5L20 6"/>',
+  chev:'<path d="m9 6 6 6-6 6"/>',
+  search:'<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+  warn:'<path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>',
+  folder:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  file:'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>',
+  store:'<path d="M3 9l1-5h16l1 5M4 9v11h16V9M4 9h16"/>',
+  rocket:'<path d="M5 13c-1.5 1.3-2 5-2 5s3.7-.5 5-2M12 4c3 0 7 4 7 7-2 2-5 5-7 5s-5-3-5-5c0-2 2-7 5-7z"/><circle cx="12" cy="9" r="1.2"/>'
+};
+const icon = (k, cls) => `<svg class="i" viewBox="0 0 24 24">${IC[k] || ''}</svg>`;
+function size(b){ b = +b || 0; if (b >= 1<<30 || b >= 1073741824) return (b/1073741824).toFixed(b >= 10737418240 ? 0 : 1) + ' GB'; if (b >= 1048576) return (b/1048576).toFixed(b >= 10485760 ? 0 : 0) + ' MB'; if (b >= 1024) return (b/1024).toFixed(0) + ' KB'; return b + ' B'; }
+
+let seq = 0; const waits = {};
+window.__stReply = (id, res) => { const w = waits[id]; if (w) { delete waits[id]; w(res); } };
+function call(path, body){
+  if (ANDROID) return new Promise(res => { const id = 't' + (++seq); waits[id] = res; try { N.stCall(id, path, body ? JSON.stringify(body) : ''); } catch (e) { delete waits[id]; res({error:'Not available'}); } });
+  return fetch(API + 'storage/' + path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body || {})}).then(r => r.json()).catch(() => ({error:'CoreKit is not responding'}));
+}
+let toastT;
+function toast(m, bad){ const t = $('#toast'); t.textContent = m; t.classList.toggle('bad', !!bad); t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3200); }
+
+let RES = null, tab = 'overview';
+const sel = { app: new Set(), clean: new Set(), rec: new Set() };
+const dlPick = new Set(); // chosen old-download file paths
+
+/* ---------- scan ---------- */
+function startScan(){
+  sel.app.clear(); sel.clean.clear(); sel.rec.clear(); dlPick.clear();
+  $('#rescan').style.display = 'none';
+  $('#inner').innerHTML = `<div class="scan"><div class="radar"></div><h2 id="sl">Scanning this ${DEV}…</h2><p>Looking at your drives, every installed ${ANDROID ? 'app' : 'program'}, and the space that can be safely freed.</p><div class="pbar"><i id="pb"></i></div></div>`;
+  const es = new EventSource(API + 'storage/scan');
+  es.addEventListener('progress', e => { const m = JSON.parse(e.data); const pb = $('#pb'), sl = $('#sl'); if (pb) pb.style.width = m.pct + '%'; if (sl && m.label) sl.textContent = m.label + '…'; });
+  es.addEventListener('done', e => { es.close(); try { RES = JSON.parse(e.data); } catch (x) { return fail('Could not read the result.'); } render(); });
+  es.addEventListener('fail', e => { es.close(); let m = 'Scan failed.'; try { m = JSON.parse(e.data).error || m; } catch (x) {} fail(m); });
+  es.onerror = () => { es.close(); fail('The scan connection dropped.'); };
+}
+function fail(m){ $('#inner').innerHTML = `<div class="empty"><p>${esc(m)}</p><button class="btn pri" data-a="scan" style="margin-top:12px">Try again</button></div>`; }
+
+/* ---------- render ---------- */
+function render(){
+  $('#rescan').style.display = '';
+  const r = RES;
+  const usedPct = r.total ? Math.round(r.used / r.total * 100) : 0;
+  let h = `<div class="hero">
+    <div><div class="big">${size(r.reclaim)} <span>to free up</span></div><div class="sub">${size(r.free)} free of ${size(r.total)} · ${usedPct}% used${r.note ? ' · ' + esc(r.note) : ''}</div></div>
+    <div class="grow"></div>
+    ${r.reclaim > 0 ? `<button class="btn pri" data-a="freeall"><svg class="i" viewBox="0 0 24 24">${IC.rocket}</svg>Free up ${size(r.reclaim)}</button>` : ''}
+  </div>`;
+  const counts = {apps: r.appCount, clean: r.clean.length, recs: r.recs.length};
+  h += `<div class="tabs">
+    ${tabBtn('overview', 'Overview', '')}
+    ${tabBtn('drives', 'Drives', r.drives.length)}
+    ${tabBtn('apps', ANDROID ? 'Apps' : 'Programs', counts.apps)}
+    ${tabBtn('junk', 'Junk', counts.clean)}
+    ${tabBtn('tips', 'Recommendations', counts.recs)}
+  </div><div id="pane"></div>`;
+  $('#inner').innerHTML = h;
+  paint();
+}
+function tabBtn(id, label, n){ return `<button class="tab ${tab === id ? 'on' : ''}" data-tab="${id}">${label}${n ? `<b>${n}</b>` : ''}</button>`; }
+function paint(){
+  const p = $('#pane'); if (!p) return;
+  p.innerHTML = tab === 'overview' ? overview() : tab === 'drives' ? drives() : tab === 'apps' ? apps() : tab === 'junk' ? junk() : tips();
+  syncFab();
+}
+
+/* ---------- overview ---------- */
+function overview(){
+  const r = RES;
+  let h = '';
+  // drives mini
+  h += `<div class="card"><h3>Drives</h3><div style="padding:4px 16px 14px">`;
+  r.drives.forEach(d => h += driveBar(d, true));
+  h += `</div></div>`;
+  // top recommendations
+  const top = r.recs.slice(0, 6);
+  if (top.length){
+    h += `<div class="card"><h3>Recommended to remove</h3><div class="cd">Safe picks first. Tap to review all in Recommendations.</div>`;
+    top.forEach(x => h += recRow(x));
+    h += `</div>`;
+  } else {
+    h += `<div class="card"><div class="empty">Nothing obvious to clean — your ${DEV} looks tidy.</div></div>`;
+  }
+  return h;
+}
+
+/* ---------- drives ---------- */
+function driveBar(d, mini){
+  const parts = (d.parts && d.parts.length) ? d.parts : [{name:'Used', bytes:d.used, color:'#38bdf8'}];
+  const free = Math.max(0, d.total - parts.reduce((s,p)=>s+p.bytes,0));
+  const seg = parts.map(p => `<i style="width:${d.total? (p.bytes/d.total*100):0}%;background:${p.color}"></i>`).join('') + `<i style="width:${d.total?(free/d.total*100):0}%;background:#0c121a"></i>`;
+  const labels = parts.filter(p=>p.bytes>0).map(p => `<span><i class="dot" style="background:${p.color}"></i>${esc(p.name)} ${size(p.bytes)}</span>`).join('') + `<span><i class="dot" style="background:#283443"></i>Free ${size(free)}</span>`;
+  return `<div style="margin-bottom:${mini?14:18}px">
+    <div style="display:flex;justify-content:space-between;align-items:baseline"><b style="color:var(--white)">${esc(d.name)}${d.label?' · '+esc(d.label):''}${d.kind==='system'?'<span class="tag blue">System</span>':d.kind==='removable'?'<span class="tag">Removable</span>':''}</b><span style="color:var(--muted2);font-size:12.5px">${size(d.used)} / ${size(d.total)}</span></div>
+    <div class="dbar">${seg}</div>
+    <div class="dlabels">${labels}</div>
+  </div>`;
+}
+function drives(){
+  const r = RES;
+  let h = '';
+  r.drives.forEach(d => {
+    const big = r.big.filter(b => b.drive === d.name).slice(0, 10);
+    h += `<div class="card"><div style="padding:14px 16px 2px">${driveBar(d)}</div>`;
+    if (big.length){
+      h += `<h3 style="padding-top:6px">Biggest items on ${esc(d.name)}</h3>`;
+      big.forEach(b => h += `<div class="row"><span class="ico"><svg class="i" viewBox="0 0 24 24">${b.kind==='folder'?IC.folder:IC.file}</svg></span><div class="tx"><b>${esc(b.name)}</b><small>${esc(b.path)}</small></div><span class="sz">${size(b.bytes)}</span>${b.kind==='folder'?`<button class="btn sm gho" data-drill="${esc(b.path)}"><svg class="i" viewBox="0 0 24 24">${IC.chev}</svg></button>`:''}</div>`);
+    }
+    h += `</div>`;
+  });
+  return h || `<div class="empty">No drives found.</div>`;
+}
+
+/* ---------- apps ---------- */
+let appQ = '', appF = 'all';
+function apps(){
+  const r = RES;
+  let h = `<div class="toolbar">
+    <div class="search"><svg class="i" viewBox="0 0 24 24">${IC.search}</svg><input id="appSearch" placeholder="Search ${ANDROID?'apps':'programs'}" value="${esc(appQ)}"></div>
+  </div>
+  <div class="toolbar">
+    ${['all','Bloatware','Store','Programs','System'].map(f => { const id = f==='all'?'all':f.toLowerCase(); return `<button class="chip ${appF===id?'on':''}" data-af="${id}">${f==='all'?'All':f}</button>`; }).join('')}
+    <span style="flex:1"></span>
+    <button class="btn sm gho" data-selvis="app">Select shown</button>
+  </div>`;
+  let list = r.apps.filter(a => {
+    if (appQ && !((a.name+' '+a.pub).toLowerCase().includes(appQ.toLowerCase()))) return false;
+    if (appF === 'bloatware') return a.bloat;
+    if (appF === 'store') return a.source === 'store';
+    if (appF === 'programs') return a.source === 'program';
+    if (appF === 'system') return a.system || !a.removable;
+    return true;
+  });
+  if (!list.length) return h + `<div class="empty">No matching ${ANDROID?'apps':'programs'}.</div>`;
+  h += `<div class="card">` + list.map(a => appRow(a)).join('') + `</div>`;
+  return h;
+}
+function appRow(a){
+  const on = sel.app.has(a.id);
+  const dis = !a.removable;
+  const badges = (a.bloat?'<span class="tag red">Bloatware</span>':'') + (a.source==='store'?'<span class="tag blue">Store</span>':'') + (a.system||!a.removable?'<span class="tag">Built-in</span>':'') + (a.lastUsed?'':'');
+  const meta = [a.pub, a.ver && 'v'+a.ver, a.drive, a.lastUsed?('last used '+ago(a.lastUsed)):''].filter(Boolean).join(' · ');
+  return `<div class="row selrow" data-app="${esc(a.id)}" ${dis?'style="opacity:.55"':''}>
+    <span class="ck ${on?'on':''}">${dis?'':`<svg class="i" viewBox="0 0 24 24">${IC.check}</svg>`}</span>
+    <span class="ico ${a.bloat?'r':'a'}"><svg class="i" viewBox="0 0 24 24">${IC.app}</svg></span>
+    <div class="tx"><b>${esc(a.name)}${badges}</b><small>${esc(meta)}</small></div>
+    <span class="sz">${a.size?size(a.size):'—'}</span>
+  </div>`;
+}
+function ago(ts){ const d = Math.floor((Date.now()/1000 - ts)/86400); if (d<1) return 'today'; if (d<30) return d+'d ago'; if (d<365) return Math.floor(d/30)+'mo ago'; return Math.floor(d/365)+'y ago'; }
+
+/* ---------- junk ---------- */
+function junk(){
+  const r = RES;
+  if (!r.clean.length) return `<div class="empty">No junk found — nothing to clear.</div>`;
+  let h = `<p class="lead">Caches, temporary files and leftovers. Items marked <span class="gr">safe</span> rebuild on their own.</p>
+    <div class="toolbar"><button class="btn sm gho" data-selsafe>Select all safe</button></div><div class="card">`;
+  r.clean.forEach(c => {
+    const on = sel.clean.has(c.id);
+    const isDl = c.id === 'downloads';
+    h += `<div class="row selrow" data-clean="${esc(c.id)}">
+      <span class="ck ${on?'on':''}"><svg class="i" viewBox="0 0 24 24">${IC.check}</svg></span>
+      <span class="ico ${c.safe?'g':'y'}"><svg class="i" viewBox="0 0 24 24">${IC.broom}</svg></span>
+      <div class="tx"><b>${esc(c.name)}${c.safe?'<span class="tag green">Safe</span>':'<span class="tag amber">Review</span>'}</b><small>${esc(c.desc)}</small></div>
+      <span class="sz">${size(c.bytes)}</span>
+      ${isDl?`<button class="btn sm gho" data-dl><svg class="i" viewBox="0 0 24 24">${IC.chev}</svg></button>`:''}
+    </div>`;
+    if (isDl) h += `<div id="dlbox" style="display:none;padding:0 16px 10px"></div>`;
+  });
+  h += `</div>`;
+  return h;
+}
+
+/* ---------- tips ---------- */
+function tips(){
+  const r = RES;
+  if (!r.recs.length) return `<div class="empty">No recommendations — your ${DEV} is in good shape.</div>`;
+  let h = `<p class="lead">Safe-to-remove picks, biggest first. Select what you want and remove it in one go.</p><div class="card">`;
+  r.recs.forEach(x => h += recRow(x, true));
+  h += `</div>`;
+  return h;
+}
+function recRow(x, selectable){
+  const on = sel.rec.has(x.id);
+  const kic = x.kind === 'clean' ? 'broom' : x.kind === 'app-unused' ? 'trash' : 'file';
+  const kcls = x.kind === 'clean' ? 'g' : 'r';
+  return `<div class="row ${selectable?'selrow':''}" ${selectable?`data-rec="${esc(x.id)}"`:''}>
+    ${selectable?`<span class="ck ${on?'on':''}"><svg class="i" viewBox="0 0 24 24">${IC.check}</svg></span>`:''}
+    <span class="ico ${kcls}"><svg class="i" viewBox="0 0 24 24">${IC[kic]}</svg></span>
+    <div class="tx"><b>${esc(x.title)}${x.safe?'<span class="tag green">Safe</span>':''}</b><small>${esc(x.why||'')}</small></div>
+    <span class="sz">${size(x.bytes)}</span>
+  </div>`;
+}
+
+/* ---------- selection + fab ---------- */
+function syncFab(){
+  document.querySelectorAll('[data-app]').forEach(el => el.querySelector('.ck').classList.toggle('on', sel.app.has(el.dataset.app)));
+  document.querySelectorAll('[data-clean]').forEach(el => el.querySelector('.ck').classList.toggle('on', sel.clean.has(el.dataset.clean)));
+  document.querySelectorAll('[data-rec]').forEach(el => el.querySelector('.ck').classList.toggle('on', sel.rec.has(el.dataset.rec)));
+  const n = sel.app.size + sel.clean.size + sel.rec.size;
+  let bytes = 0;
+  RES && RES.apps.forEach(a => { if (sel.app.has(a.id)) bytes += a.size; });
+  RES && RES.clean.forEach(c => { if (sel.clean.has(c.id)) bytes += c.bytes; });
+  RES && RES.recs.forEach(x => { if (sel.rec.has(x.id)) bytes += x.bytes; });
+  const fab = $('#fab');
+  fab.classList.toggle('show', n > 0);
+  $('#fabN').textContent = n + ' selected';
+  $('#fabS').textContent = bytes ? ('about ' + size(bytes)) : '';
+  $('#fabGo').textContent = sel.app.size && !sel.clean.size && !sel.rec.size ? 'Uninstall' : 'Remove';
+}
+function toggle(set, id){ set.has(id) ? set.delete(id) : set.add(id); syncFab(); }
+
+/* ---------- actions ---------- */
+async function doClean(ids, pick){
+  const r = await call('clean', {ids, pick});
+  if (r.error && !(r.log && r.log.length)) { toast(r.error, true); return; }
+  toast('Freed ' + (r.freedText || size(r.freed || 0)));
+  startScan();
+}
+async function doUninstall(ids){
+  const r = await call('uninstall', {ids});
+  const items = r.items || [];
+  const ok = items.filter(i => i.ok).length;
+  toast(ok + ' of ' + items.length + ' removed' + (ANDROID ? ' — confirm each on screen' : ''));
+  startScan();
+}
+function confirmRemove(){
+  const appIds = [...sel.app], cleanIds = [...sel.clean], recIds = [...sel.rec];
+  // map recommendations onto their targets
+  const recClean = [], recApp = [];
+  RES.recs.forEach(x => { if (sel.rec.has(x.id)) { if (x.kind === 'app-unused') recApp.push(x.target); else if (x.kind === 'clean') recClean.push(x.target); } });
+  const allApps = [...new Set([...appIds, ...recApp])];
+  const allClean = [...new Set([...cleanIds, ...recClean])];
+  const pick = {};
+  if (allClean.includes('downloads') && dlPick.size) pick.downloads = [...dlPick];
+  let rows = '', total = 0;
+  const byId = {}; RES.apps.forEach(a => byId[a.id] = a); const cById = {}; RES.clean.forEach(c => cById[c.id] = c);
+  allApps.forEach(id => { const a = byId[id]; if (a){ rows += mrow(a.name, size(a.size)); total += a.size; } });
+  allClean.forEach(id => { const c = cById[id]; if (c){ rows += mrow(c.name, size(id==='downloads'&&dlPick.size?0:c.bytes)); total += c.bytes; } });
+  const danger = allClean.some(id => { const c = cById[id]; return c && !c.safe; }) || allApps.length;
+  modal(`<h3>Remove ${allApps.length + allClean.length} item${allApps.length+allClean.length>1?'s':''}?</h3>
+    <p>${allApps.length?`${allApps.length} ${ANDROID?'app':'program'}${allApps.length>1?'s':''} will be uninstalled. `:''}${allClean.length?`${allClean.length} junk item${allClean.length>1?'s':''} will be cleared. `:''}This frees about <b class="gr">${size(total)}</b>.${danger?' Some items cannot be undone.':''}</p>
+    <div class="mlist">${rows}</div>
+    <div class="drow"><button class="btn gho" data-mclose>Cancel</button><button class="btn dng" id="goRemove"><svg class="i" viewBox="0 0 24 24">${IC.trash}</svg>Remove</button></div>`);
+  $('#goRemove').onclick = async () => {
+    closeModal();
+    $('#fabGo').innerHTML = '<span class="spin"></span>';
+    if (allClean.length) await doCleanNoScan(allClean, pick);
+    if (allApps.length) { await doUninstall(allApps); return; }
+    toast('Freed up space'); startScan();
+  };
+}
+async function doCleanNoScan(ids, pick){ const r = await call('clean', {ids, pick}); if (!r.error || (r.log&&r.log.length)) toast('Freed ' + (r.freedText || size(r.freed||0))); else toast(r.error, true); }
+function mrow(name, sz){ return `<div class="mrow"><span>${esc(name)}</span><b>${sz}</b></div>`; }
+
+/* free everything safe */
+function freeAll(){
+  sel.clean.clear(); sel.rec.clear(); sel.app.clear();
+  RES.clean.forEach(c => { if (c.safe) sel.clean.add(c.id); });
+  RES.recs.forEach(x => { if (x.safe && x.kind === 'clean') { /* already via clean */ } });
+  syncFab();
+  confirmRemove();
+}
+
+/* downloads drill */
+async function toggleDl(){
+  const box = $('#dlbox'); if (!box) return;
+  if (box.style.display === 'block') { box.style.display = 'none'; return; }
+  box.style.display = 'block'; box.innerHTML = '<div style="color:var(--muted);font-size:12.5px;padding:6px 0"><span class="spin"></span> Reading the Downloads folder…</div>';
+  const dl = RES.clean.find(c => c.id === 'downloads');
+  const r = await call('drill', {path: dl ? dl.path : ''});
+  if (r.error || !r.items){ box.innerHTML = `<div style="color:var(--muted)">${esc(r.error||'Nothing to show')}</div>`; return; }
+  const files = r.items.filter(i => i.kind === 'file');
+  box.innerHTML = files.length ? files.map(f => `<label class="mrow" style="cursor:pointer"><span><span class="ck ${dlPick.has(f.path)?'on':''}" data-dlf="${esc(f.path)}" style="display:inline-grid;width:18px;height:18px;vertical-align:-4px;margin-right:8px"><svg class="i" viewBox="0 0 24 24">${IC.check}</svg></span>${esc(f.name)}</span><b>${size(f.bytes)}</b></label>`).join('') : '<div style="color:var(--muted)">No files.</div>';
+}
+
+/* ---------- modal ---------- */
+function modal(html){ $('#dlg').innerHTML = html; $('#modal').classList.add('show'); }
+function closeModal(){ $('#modal').classList.remove('show'); }
+
+/* ---------- events ---------- */
+document.addEventListener('click', async e => {
+  const scanBtn = e.target.closest('[data-a="scan"]'); if (scanBtn) return startScan();
+  const t = e.target.closest('[data-tab]'); if (t) { tab = t.dataset.tab; render(); return; }
+  if (e.target.closest('[data-a="freeall"]')) return freeAll();
+  const af = e.target.closest('[data-af]'); if (af) { appF = af.dataset.af; paint(); return; }
+  const app = e.target.closest('[data-app]'); if (app) { const a = RES.apps.find(x => x.id === app.dataset.app); if (a && a.removable) toggle(sel.app, a.id); return; }
+  const cl = e.target.closest('[data-clean]'); if (cl) { toggle(sel.clean, cl.dataset.clean); return; }
+  const rc = e.target.closest('[data-rec]'); if (rc) { toggle(sel.rec, rc.dataset.rec); return; }
+  if (e.target.closest('[data-selsafe]')) { RES.clean.forEach(c => { if (c.safe) sel.clean.add(c.id); }); syncFab(); return; }
+  const sv = e.target.closest('[data-selvis]'); if (sv) { document.querySelectorAll('[data-app]').forEach(el => { const a = RES.apps.find(x => x.id === el.dataset.app); if (a && a.removable) sel.app.add(a.id); }); syncFab(); return; }
+  if (e.target.closest('[data-dl]')) return toggleDl();
+  const dlf = e.target.closest('[data-dlf]'); if (dlf) { const p = dlf.dataset.dlf; dlPick.has(p) ? dlPick.delete(p) : dlPick.add(p); dlf.classList.toggle('on', dlPick.has(p)); if (!sel.clean.has('downloads')) { sel.clean.add('downloads'); syncFab(); } return; }
+  const drill = e.target.closest('[data-drill]'); if (drill) return showDrill(drill.dataset.drill);
+  if (e.target.closest('[data-mclose]')) return closeModal();
+});
+$('#fabClear').onclick = () => { sel.app.clear(); sel.clean.clear(); sel.rec.clear(); syncFab(); };
+$('#fabGo').onclick = () => { if (sel.app.size + sel.clean.size + sel.rec.size) confirmRemove(); };
+$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+document.addEventListener('input', e => { if (e.target.id === 'appSearch') { appQ = e.target.value; const pane = $('#pane'); const sc = pane.scrollTop; paint(); const inp = $('#appSearch'); if (inp){ inp.focus(); inp.setSelectionRange(appQ.length, appQ.length); } } });
+
+async function showDrill(path){
+  modal(`<h3>Contents</h3><p style="word-break:break-all">${esc(path)}</p><div class="mlist" id="drillList"><div style="padding:12px;color:var(--muted)"><span class="spin"></span> Measuring…</div></div><div class="drow"><button class="btn pri" data-mclose>Close</button></div>`);
+  const r = await call('drill', {path});
+  const el = $('#drillList'); if (!el) return;
+  if (r.error || !r.items){ el.innerHTML = `<div style="padding:12px;color:var(--muted)">${esc(r.error||'Nothing to show')}</div>`; return; }
+  el.innerHTML = r.items.slice(0, 40).map(b => `<div class="mrow"><span><svg class="i" viewBox="0 0 24 24" style="width:14px;height:14px;vertical-align:-2px;margin-right:6px;color:var(--muted)">${b.kind==='folder'?IC.folder:IC.file}</svg>${esc(b.name)}</span><b>${size(b.bytes)}</b></div>`).join('');
+}
+
+startScan();
+</script>
+</body>
+</html>

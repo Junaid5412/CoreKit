@@ -77,6 +77,13 @@ The UIs never know which platform they run on. They talk to the host through:
   out `d`; the page then loads the picture from `remote/frame.jpg` (Android, served from the
   engine's `lastframe`), and falls back to full frames if that fails. Viewer input `{t:"in", k:"lock"}` locks the PC (LockWorkStation — Win+L cannot be injected); `k:"lock", curtain:true` / `k:"unlock"` show and lift CoreKit's full-screen lock curtain, which also lifts itself when the session ends. On Android the screen is captured only once a device connects (no recording indicator while merely waiting).
 
+* **Storage & Performance** – drives and where space goes, every installed program/app (size,
+  source, bloat), reclaimable junk (caches, temp, Recycle Bin, hibernation file, Windows.old, old
+  downloads) and plain recommendations. Routes `storage/scan` (SSE), `storage/clean {ids,pick}`,
+  `storage/uninstall {ids}`, `storage/drill {path}`. Result shape in `desktop/storage.go`
+  (`stResult`); Windows collects in `storage_windows.go` (+ `scripts/storage.ps1`), Android in
+  `StorageScanner.kt`, both producing the same JSON for the one `storage.html`.
+
 * **Virtual Environment** – not part of CoreKit. Its code (engine, page, image tools and
   workflows) is kept on the `virtual-environment` branch for a separate app.
 

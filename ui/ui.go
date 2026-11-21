@@ -21,4 +21,6 @@ var (
 	Remote []byte
 	//go:embed security.html
 	Security []byte
+	//go:embed storage.html
+	Storage []byte
 )
