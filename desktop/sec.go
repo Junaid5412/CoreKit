@@ -67,55 +67,194 @@ type secSettings struct {
 }
 
 type secStore struct {
-	mu   sync.Mutex
-	dir  string
-	set  secSettings
-	hist []secRecord
-	last *secResult
-	byID map[string]*secFinding
+	mu     sync.Mutex
+	dir    string
+	set    secSettings
+	setMod int64 // mtime of settings.json last read, so a change by the other process is noticed
+	last   *secResult
+	byID   map[string]*secFinding
 }
 
 var secDB = &secStore{}
+
+// withFileLock runs fn while holding a simple cross-process lock (an exclusively created lock
+// file). It is advisory and best-effort: a lock older than 10 seconds is treated as stale, and
+// after a few seconds of waiting fn runs anyway, so a crashed process can never deadlock the other.
+func withFileLock(lockPath string, fn func()) {
+	for i := 0; i < 240; i++ {
+		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+		if err == nil {
+			f.Close()
+			defer os.Remove(lockPath)
+			fn()
+			return
+		}
+		if st, e := os.Stat(lockPath); e == nil && time.Since(st.ModTime()) > 10*time.Second {
+			_ = os.Remove(lockPath)
+			continue
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	fn()
+}
 
 func (s *secStore) open() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.dir != "" {
+		s.reloadSetLocked(false)
 		return
 	}
 	s.dir = secDir()
 	_ = os.MkdirAll(filepath.Join(s.dir, "Quarantine"), 0700)
-	if b, err := os.ReadFile(filepath.Join(s.dir, "settings.json")); err == nil {
-		_ = json.Unmarshal(b, &s.set)
+	_ = os.MkdirAll(filepath.Join(s.dir, "history"), 0700)
+	s.reloadSetLocked(true)
+	s.migrateHistoryLocked()
+}
+
+// reloadSetLocked re-reads settings.json when it changed on disk. The app and the Live Shield are
+// separate processes sharing this folder, so each must pick up the other's saved changes (for
+// example a file the user just trusted) instead of trusting a stale in-memory copy.
+func (s *secStore) reloadSetLocked(force bool) {
+	p := filepath.Join(s.dir, "settings.json")
+	st, err := os.Stat(p)
+	if err != nil {
+		return
 	}
-	if b, err := os.ReadFile(filepath.Join(s.dir, "history.json")); err == nil {
-		_ = json.Unmarshal(b, &s.hist)
+	if m := st.ModTime().UnixNano(); force || m != s.setMod {
+		if b, err := os.ReadFile(p); err == nil {
+			var ns secSettings
+			if json.Unmarshal(b, &ns) == nil {
+				s.set, s.setMod = ns, m
+			}
+		}
 	}
 }
 
-func (s *secStore) saveLocked() {
-	b, _ := json.MarshalIndent(s.set, "", " ")
-	_ = os.WriteFile(filepath.Join(s.dir, "settings.json"), b, 0600)
-	if len(s.hist) > 500 {
-		s.hist = s.hist[len(s.hist)-500:]
-	}
-	h, _ := json.MarshalIndent(s.hist, "", " ")
-	_ = os.WriteFile(filepath.Join(s.dir, "history.json"), h, 0600)
+// updateSettings changes settings.json safely across both processes: a lock file serialises them
+// and the newest copy is re-read before the change, so neither process overwrites the other's.
+func (s *secStore) updateSettings(fn func(*secSettings)) {
+	s.open()
+	withFileLock(filepath.Join(s.dir, "settings.lock"), func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.reloadSetLocked(true)
+		fn(&s.set)
+		b, _ := json.MarshalIndent(s.set, "", " ")
+		p := filepath.Join(s.dir, "settings.json")
+		if os.WriteFile(p, b, 0600) == nil {
+			if st, err := os.Stat(p); err == nil {
+				s.setMod = st.ModTime().UnixNano()
+			}
+		}
+	})
 }
 
+// addRecord appends one history record as its own file. Because each record is a separate file,
+// the app and the Live Shield can both write at once without overwriting each other's history
+// (the old single-file store silently lost whichever record was written second).
 func (s *secStore) addRecord(r secRecord) secRecord {
 	s.open()
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if r.ID == "" {
 		r.ID = "r" + randToken()[:10]
 	}
 	if r.T == 0 {
 		r.T = time.Now().Unix()
 	}
-	s.hist = append(s.hist, r)
-	s.saveLocked()
+	b, _ := json.Marshal(r)
+	fn := filepath.Join(s.dir, "history", fmt.Sprintf("%020d-%s.json", time.Now().UnixNano(), r.ID))
+	_ = os.WriteFile(fn, b, 0600)
+	s.pruneHistory()
 	return r
+}
+
+// history reads every record file, newest first.
+func (s *secStore) history() []secRecord {
+	s.open()
+	dir := filepath.Join(s.dir, "history")
+	ents, _ := os.ReadDir(dir)
+	recs := make([]secRecord, 0, len(ents))
+	for _, e := range ents {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		if b, err := os.ReadFile(filepath.Join(dir, e.Name())); err == nil {
+			var r secRecord
+			if json.Unmarshal(b, &r) == nil {
+				recs = append(recs, r)
+			}
+		}
+	}
+	sort.Slice(recs, func(i, j int) bool { return recs[i].T > recs[j].T })
+	return recs
+}
+
+// updateRecord changes one stored record in place (for example to mark it restored).
+func (s *secStore) updateRecord(id string, fn func(*secRecord)) bool {
+	s.open()
+	dir := filepath.Join(s.dir, "history")
+	ents, _ := os.ReadDir(dir)
+	for _, e := range ents {
+		if !strings.HasSuffix(e.Name(), "-"+id+".json") {
+			continue
+		}
+		p := filepath.Join(dir, e.Name())
+		b, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		var r secRecord
+		if json.Unmarshal(b, &r) != nil {
+			continue
+		}
+		fn(&r)
+		nb, _ := json.Marshal(r)
+		return os.WriteFile(p, nb, 0600) == nil
+	}
+	return false
+}
+
+// pruneHistory keeps the newest 1000 records.
+func (s *secStore) pruneHistory() {
+	dir := filepath.Join(s.dir, "history")
+	ents, _ := os.ReadDir(dir)
+	if len(ents) <= 1000 {
+		return
+	}
+	names := make([]string, 0, len(ents))
+	for _, e := range ents {
+		if strings.HasSuffix(e.Name(), ".json") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names) // the UnixNano prefix sorts oldest first
+	for i := 0; i < len(names)-1000; i++ {
+		_ = os.Remove(filepath.Join(dir, names[i]))
+	}
+}
+
+// migrateHistoryLocked moves the old single history.json into the per-record folder once. The
+// rename claims the file atomically, so if both processes start together only one migrates it.
+func (s *secStore) migrateHistoryLocked() {
+	old := filepath.Join(s.dir, "history.json")
+	claim := old + ".migrating"
+	if os.Rename(old, claim) != nil {
+		return
+	}
+	if b, err := os.ReadFile(claim); err == nil {
+		var recs []secRecord
+		if json.Unmarshal(b, &recs) == nil {
+			for i, r := range recs {
+				if r.ID == "" {
+					r.ID = "r" + randToken()[:10]
+				}
+				nb, _ := json.Marshal(r)
+				fn := filepath.Join(s.dir, "history", fmt.Sprintf("%020d-%s.json", r.T*int64(time.Second)+int64(i), r.ID))
+				_ = os.WriteFile(fn, nb, 0600)
+			}
+		}
+	}
+	_ = os.Rename(claim, old+".migrated")
 }
 
 func (s *secStore) trustedFn() func(string) bool {
@@ -315,7 +454,7 @@ func (c *intelCache) save() {
 var mbEndpoint = "https://mb-api.abuse.ch/api/v1/"
 
 // lookupHashes asks MalwareBazaar about SHA-256 hashes (only the hashes leave the device).
-func lookupHashes(ctx context.Context, key string, hashes []string, cl *http.Client) (map[string]secIntel, int, error) {
+func lookupHashes(ctx context.Context, key string, hashes []string, cl *http.Client) (map[string]secIntel, int, int, error) {
 	secDB.open()
 	intelC.mu.Lock()
 	intelC.load()
@@ -335,7 +474,7 @@ func lookupHashes(ctx context.Context, key string, hashes []string, cl *http.Cli
 	}
 	intelC.mu.Unlock()
 	if key == "" || len(todo) == 0 {
-		return out, 0, nil
+		return out, 0, 0, nil
 	}
 	if len(todo) > 120 {
 		todo = todo[:120]
@@ -345,7 +484,7 @@ func lookupHashes(ctx context.Context, key string, hashes []string, cl *http.Cli
 	}
 	var mu sync.Mutex
 	var firstErr error
-	n := 0
+	n, failed := 0, 0
 	sem := make(chan struct{}, 6)
 	var wg sync.WaitGroup
 	for _, h := range todo {
@@ -361,6 +500,7 @@ func lookupHashes(ctx context.Context, key string, hashes []string, cl *http.Cli
 				if firstErr == nil {
 					firstErr = err
 				}
+				failed++
 				return
 			}
 			n++
@@ -374,10 +514,12 @@ func lookupHashes(ctx context.Context, key string, hashes []string, cl *http.Cli
 	intelC.mu.Lock()
 	intelC.save()
 	intelC.mu.Unlock()
+	// All lookups failed: a hard error. Some failed: not an error, but report how many could not
+	// be checked so the result is never shown as a clean pass when part of it never completed.
 	if n == 0 && firstErr != nil {
-		return out, 0, firstErr
+		return out, 0, failed, firstErr
 	}
-	return out, n, nil
+	return out, n, failed, nil
 }
 
 func mbLookup(ctx context.Context, cl *http.Client, key, h string) (secIntel, error) {
@@ -458,17 +600,21 @@ func runSecScan(ctx context.Context, progress func(int, string)) (*secResult, er
 				hs = append(hs, f.SHA)
 			}
 		}
-		var n int
-		intel, n, err = lookupHashes(ctx, key, hs, nil)
-		if err != nil {
+		var n, failed int
+		intel, n, failed, err = lookupHashes(ctx, key, hs, nil)
+		switch {
+		case err != nil:
 			intelState = "error: " + shortErr(err)
 			logLine("!", "Online check: "+shortErr(err))
-		} else {
+		case failed > 0:
+			intelState = fmt.Sprintf("incomplete: %d checked, %d could not be reached", n, failed)
+			logLine("!", fmt.Sprintf("Online check incomplete: %d of %d files could not be reached", failed, n+failed))
+		default:
 			intelState = "on"
 		}
 		logLine("+", fmt.Sprintf("Checked %d file fingerprints online", n))
 	} else {
-		intel, _, _ = lookupHashes(ctx, "", nil, nil)
+		intel, _, _, _ = lookupHashes(ctx, "", nil, nil)
 	}
 	progress(88, "Scoring what was found")
 	res := analyzeSec(&r, time.Now().Unix(), secDB.trustedFn(), intel)
@@ -608,16 +754,13 @@ func applyFix(ctx context.Context, f *secFinding, action string) fixOutcome {
 		_, err := secRunFix(ctx, map[string]any{"op": "defender-remove"})
 		note(err == nil, "Windows Defender removed the threat", err)
 	case "trust":
-		secDB.open()
-		secDB.mu.Lock()
-		if f.SHA != "" {
-			secDB.set.Trusted = append(secDB.set.Trusted, lc(f.SHA))
-		} else if f.Path != "" {
-			secDB.set.Trusted = append(secDB.set.Trusted, lc(f.Path))
-		}
-		secDB.set.Trusted = dedupe(secDB.set.Trusted)
-		secDB.saveLocked()
-		secDB.mu.Unlock()
+		secDB.updateSettings(func(set *secSettings) {
+			if f.SHA != "" {
+				set.Trusted = dedupe(append(set.Trusted, lc(f.SHA)))
+			} else if f.Path != "" {
+				set.Trusted = dedupe(append(set.Trusted, lc(f.Path)))
+			}
+		})
 		note(true, "Marked as trusted: it won't be reported again", nil)
 	default:
 		return fixOutcome{false, "Unknown action.", rec}
@@ -648,23 +791,20 @@ func dedupeInts(a []int) []int {
 
 func undoRecord(ctx context.Context, id string) (string, error) {
 	secDB.open()
-	secDB.mu.Lock()
-	var rec *secRecord
-	for i := range secDB.hist {
-		if secDB.hist[i].ID == id {
-			rec = &secDB.hist[i]
+	var r secRecord
+	found := false
+	for _, h := range secDB.history() {
+		if h.ID == id {
+			r, found = h, true
+			break
 		}
 	}
-	if rec == nil {
-		secDB.mu.Unlock()
+	if !found {
 		return "", errors.New("record not found")
 	}
-	if rec.Restored > 0 {
-		secDB.mu.Unlock()
+	if r.Restored > 0 {
 		return "", errors.New("already restored")
 	}
-	r := *rec
-	secDB.mu.Unlock()
 	msgs := []string{}
 	if r.QID != "" {
 		p, err := restoreQuarantine(r.QID)
@@ -680,14 +820,7 @@ func undoRecord(ctx context.Context, id string) (string, error) {
 			msgs = append(msgs, "Setting restored")
 		}
 	}
-	secDB.mu.Lock()
-	for i := range secDB.hist {
-		if secDB.hist[i].ID == id {
-			secDB.hist[i].Restored = time.Now().Unix()
-		}
-	}
-	secDB.saveLocked()
-	secDB.mu.Unlock()
+	secDB.updateRecord(id, func(rr *secRecord) { rr.Restored = time.Now().Unix() })
 	return strings.Join(msgs, " · "), nil
 }
 
@@ -738,12 +871,7 @@ func mountSecurity(mux *http.ServeMux, base string, in *inspector) {
 		return map[string]any{"results": out}
 	}))
 	mux.HandleFunc(base+"history", func(w http.ResponseWriter, r *http.Request) {
-		secDB.open()
-		secDB.mu.Lock()
-		h := append([]secRecord{}, secDB.hist...)
-		secDB.mu.Unlock()
-		sort.SliceStable(h, func(i, j int) bool { return h[i].T > h[j].T })
-		writeJSON(w, map[string]any{"items": h, "quarantine": listQuarantine()})
+		writeJSON(w, map[string]any{"items": secDB.history(), "quarantine": listQuarantine()})
 	})
 	mux.HandleFunc(base+"undo", secPost(func(r *http.Request, b []byte) any {
 		var q struct{ ID string }
@@ -806,26 +934,22 @@ func mountSecurity(mux *http.ServeMux, base string, in *inspector) {
 					}
 					enc = base64.StdEncoding.EncodeToString(b)
 				}
-				secDB.mu.Lock()
-				secDB.set.KeyEnc = enc
-				secDB.saveLocked()
-				secDB.mu.Unlock()
+				secDB.updateSettings(func(set *secSettings) { set.KeyEnc = enc })
 			}
 			if len(q.Untrust) > 0 {
-				secDB.mu.Lock()
 				drop := map[string]bool{}
 				for _, u := range q.Untrust {
 					drop[lc(u)] = true
 				}
-				keep := []string{}
-				for _, t := range secDB.set.Trusted {
-					if !drop[lc(t)] {
-						keep = append(keep, t)
+				secDB.updateSettings(func(set *secSettings) {
+					keep := []string{}
+					for _, t := range set.Trusted {
+						if !drop[lc(t)] {
+							keep = append(keep, t)
+						}
 					}
-				}
-				secDB.set.Trusted = keep
-				secDB.saveLocked()
-				secDB.mu.Unlock()
+					set.Trusted = keep
+				})
 			}
 		}
 		secDB.mu.Lock()
@@ -842,11 +966,7 @@ func mountSecurity(mux *http.ServeMux, base string, in *inspector) {
 		if err := secShieldSet(q.On); err != nil {
 			return map[string]any{"error": err.Error(), "shield": secShieldStatus()}
 		}
-		secDB.open()
-		secDB.mu.Lock()
-		secDB.set.Shield = q.On
-		secDB.saveLocked()
-		secDB.mu.Unlock()
+		secDB.updateSettings(func(set *secSettings) { set.Shield = q.On })
 		return map[string]any{"shield": secShieldStatus()}
 	}))
 	mux.HandleFunc(base+"harden", secPost(func(r *http.Request, b []byte) any {
@@ -1008,7 +1128,7 @@ func mountSecurity(mux *http.ServeMux, base string, in *inspector) {
 		}
 		if f.SHA != "" {
 			if k := secDB.apiKey(); k != "" {
-				m, _, err := lookupHashes(ctx, k, []string{f.SHA}, nil)
+				m, _, _, err := lookupHashes(ctx, k, []string{f.SHA}, nil)
 				switch {
 				case err != nil:
 					out["bazaar"] = "Could not check: " + shortErr(err)

@@ -135,7 +135,7 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke
 .feats{margin-top:20px}
 
 /* ---------- approval ---------- */
-.modal{position:fixed;inset:0;z-index:50;display:none;place-items:center;background:rgba(3,6,9,.72);backdrop-filter:blur(4px);padding:20px}
+.modal{position:fixed;inset:0;z-index:50;display:none;place-items:center;background:rgba(3,6,9,.86);padding:20px}
 .modal.show{display:grid;animation:fade .2s ease both}
 @keyframes fade{from{opacity:0}}
 .dlg{width:420px;max-width:100%;border-radius:20px;background:#0f151d;border:1px solid var(--line2);padding:26px 24px 22px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.6);animation:pop .25s cubic-bezier(.2,.8,.2,1) both}
@@ -148,6 +148,7 @@ svg.i{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke
 .dlg p{margin:0 0 6px;color:var(--muted2);font-size:13.5px}
 .dlg .sub{color:var(--muted);font-size:12.5px;margin-bottom:18px}
 .dlg .row .btn{height:46px}
+.dlg .btn,.dlg [data-a]{touch-action:manipulation}
 
 /* ---------- viewer ---------- */
 #viewer{position:fixed;inset:0;background:#05080b;z-index:20;display:none}
@@ -418,7 +419,7 @@ window.__ckStatus = () => refreshAndroid();
 let gotState = false;
 function onEvent(m) {
   switch (m.t) {
-    case 'state': S = m; gotState = true; $('#engErr').classList.add('hidden'); render(); break;
+    case 'state': S = m; gotState = true; $('#engErr').classList.add('hidden'); render(); keepAlive(); break;
     case 'request': showAsk(m); break;
     case 'connfail': connErr = m.msg; connBusy = false; renderConn(); break;
     case 'waiting': waitPeer = m.peer; renderConn(); break;
@@ -584,7 +585,9 @@ function showAsk(m) {
   try { navigator.vibrate && navigator.vibrate([120, 80, 120]); } catch (e) {}
 }
 function hideAsk() { askId = ''; clearInterval(askTimer); $('#ask').classList.remove('show'); }
-function answer(allow) { if (askId) cmd({t:'answer', id:askId, allow}); hideAsk(); }
+function answer(allow) { const id = askId; hideAsk(); if (id) cmd({t:'answer', id, allow}); }
+// belt-and-braces: the approval buttons also respond directly, not only via the page-wide handler
+$('#ask').addEventListener('click', e => { const b = e.target.closest('[data-a]'); if (b) answer(b.dataset.a === 'allow'); });
 
 /* ---------- viewer ---------- */
 const cv = $('#scr'), cx = cv.getContext('2d');
@@ -617,7 +620,7 @@ function phoneView(on) { if (ANDROID && N.viewer) { try { N.viewer(on, on && lan
 // Android: keep the session (and a call) running when CoreKit is in the background
 function keepAlive() {
   if (!ANDROID || !N.sessionKeep) return;
-  const on = viewerOpen || !!call;
+  const on = viewerOpen || !!call || !!(S.session && S.session.role === 'viewer');
   try { N.sessionKeep(JSON.stringify({on, peer: peerName(), viewing: viewerOpen, call: !!call, video: !!(call && call.video)})); } catch (e) {}
 }
 // what the viewer knows while no picture is shown yet (instead of an empty screen)
@@ -839,11 +842,18 @@ $('#handle').addEventListener('click', () => { showBar(); hideBarSoon(); });
 ['pointerdown', 'mousedown'].forEach(ev => { ['#tbar', '#qMenu', '#kMenu'].forEach(id => $(id).addEventListener(ev, e => { if (e.target.closest('button')) e.preventDefault(); })); $('#handle').addEventListener(ev, e => e.preventDefault()); });
 $('#viewer').addEventListener('pointermove', e => { if (e.pointerType === 'mouse' && e.clientY < 90) showBar(); });
 $('#edge').addEventListener('pointerdown', showBar);
-const KEYS = [['Windows key', 'Meta'], ['Alt + Tab', 'Alt+Tab'], ['Task Manager', 'Control+Shift+Escape'], ['Show desktop', 'Meta+d'], ['Lock screen', 'Meta+l'], ['Copy', 'Control+c'], ['Paste', 'Control+v'], ['Undo', 'Control+z']];
+const KEYS = [['Windows key', 'Meta'], ['Alt + Tab', 'Alt+Tab'], ['Task Manager', 'Control+Shift+Escape'], ['Show desktop', 'Meta+d'], ['Lock screen (Windows)', '__lock'], ['Custom lock (CoreKit)', '__curtain'], ['Lift custom lock', '__unlock'], ['Copy', 'Control+c'], ['Paste', 'Control+v'], ['Undo', 'Control+z']];
 $('#kMenu').innerHTML = '<div class="mh">SEND KEYS</div>' + KEYS.map(([l, k]) => `<button data-combo="${k}">${l}</button>`).join('');
 function barClick(e) {
   const q = e.target.closest('[data-q]'); if (q) { quality = q.dataset.q; cmd({t:'quality', q:quality}); closeMenus(); toast('Quality: ' + q.textContent); return; }
-  const k = e.target.closest('[data-combo]'); if (k) { send({k:'combo', keys:k.dataset.combo}); closeMenus(); return; }
+  const k = e.target.closest('[data-combo]'); if (k) {
+    const c = k.dataset.combo;
+    if (c === '__lock') { send({k:'lock'}); toast('Locking the PC…'); }
+    else if (c === '__curtain') { send({k:'lock', curtain:true}); toast('Custom lock on'); }
+    else if (c === '__unlock') { send({k:'unlock'}); toast('Custom lock lifted'); }
+    else send({k:'combo', keys:c});
+    closeMenus(); return;
+  }
   const b = e.target.closest('[data-v]'); if (!b) return;
   const v = b.dataset.v;
   if (v.startsWith('nav:')) send({k:'nav', a:v.slice(4)});

@@ -339,6 +339,15 @@ func rInject(e *rEngine, m map[string]any) {
 		btn = 0
 	}
 	switch k {
+	case "lock":
+		// Win+L cannot be injected (Windows reserves it); use the real APIs instead
+		if cur, _ := m["curtain"].(bool); cur {
+			rCurtain(e, true)
+		} else {
+			rLockWindows()
+		}
+	case "unlock": // lift CoreKit's custom curtain (the Windows lock needs the user's password)
+		rCurtain(e, false)
 	case "move":
 		sendMouse(mMove|mAbsolute, x, y, 0)
 	case "down":

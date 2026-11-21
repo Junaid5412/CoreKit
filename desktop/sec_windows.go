@@ -723,7 +723,7 @@ func runShield() int {
 			writeState()
 			lastBeat = now
 		}
-		if now.Sub(lastReload) > 30*time.Second {
+		if now.Sub(lastReload) > 8*time.Second {
 			trusted, key, lastReload = secDB.trustedFn(), secDB.apiKey(), now
 			if len(sigCache) > 4000 {
 				sigCache = map[string]string{}
@@ -792,12 +792,12 @@ func shieldCheck(p procInfo, byPID map[int]procInfo, sigCache map[string]string,
 				uw, _ := userWritable(p.Path)
 				if key != "" && (uw || quick >= 40) {
 					ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-					m, _, _ := lookupHashes(ctx, key, []string{sha}, nil)
+					m, _, _, _ := lookupHashes(ctx, key, []string{sha}, nil)
 					cancel()
 					if it, ok := m[sha]; ok {
 						ev.Intel = &it
 					}
-				} else if m, _, _ := lookupHashes(context.Background(), "", []string{sha}, nil); m[sha].Verdict == "malicious" {
+				} else if m, _, _, _ := lookupHashes(context.Background(), "", []string{sha}, nil); m[sha].Verdict == "malicious" {
 					it := m[sha]
 					ev.Intel = &it
 				}
@@ -903,7 +903,7 @@ func shieldDownloads(dl string, seen map[string]int64, trusted func(string) bool
 		}
 		if key != "" && sha != "" && ev.Signed != "valid" {
 			ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
-			m, _, _ := lookupHashes(ctx, key, []string{sha}, nil)
+			m, _, _, _ := lookupHashes(ctx, key, []string{sha}, nil)
 			cancel()
 			if it, ok := m[sha]; ok {
 				ev.Intel = &it

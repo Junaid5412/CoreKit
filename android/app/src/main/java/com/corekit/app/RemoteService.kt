@@ -97,8 +97,10 @@ class RemoteService : Service() {
         mp.registerCallback(object : MediaProjection.Callback() {
             override fun onStop() { main.post { stopAll() } }
         }, main)
-        createDisplay()
+        // The screen is NOT captured yet: the virtual display (and so Android's recording
+        // indicator) is created only once a device actually connects. See ensureDisplay().
         running = true
+        awake(true) // keep the engine running through a screen lock, even while just waiting
         try {
             val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
             mlock = wm.createMulticastLock("corekit-remote").apply { setReferenceCounted(false); acquire() }
@@ -119,6 +121,21 @@ class RemoteService : Service() {
         val d = (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).getDisplay(Display.DEFAULT_DISPLAY)
         @Suppress("DEPRECATION") d.getRealMetrics(dm)
         return Triple(dm.widthPixels, dm.heightPixels, dm.densityDpi)
+    }
+
+    // ensureDisplay starts the actual screen capture the first time it is needed (a viewer has
+    // connected). teardownDisplay stops it again between sessions, so the system's screen-cast
+    // timer only shows while a device is really connected, not the whole time we are "ready".
+    @Volatile private var hasDisplay = false
+    private fun ensureDisplay() { handler.post { if (!hasDisplay && projection != null) { try { createDisplay(); hasDisplay = true } catch (_: Throwable) {} } } }
+    private fun teardownDisplay() {
+        capturing = false
+        handler.post {
+            hasDisplay = false
+            try { display?.release() } catch (_: Throwable) {}
+            try { reader?.close() } catch (_: Throwable) {}
+            display = null; reader = null; bmp?.recycle(); bmp = null
+        }
     }
 
     private fun createDisplay() {
@@ -143,7 +160,7 @@ class RemoteService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        if (projection == null) return
+        if (projection == null || !hasDisplay) return
         val (rw, rh, _) = realSize()
         if ((rw > rh) != landscape) handler.post { try { createDisplay() } catch (_: Throwable) {} }
     }
@@ -194,6 +211,7 @@ class RemoteService : Service() {
         val m = try { JSONObject(raw) } catch (_: Throwable) { return }
         when (m.optString("t")) {
             "capture" -> {
+                if (m.optBoolean("on")) ensureDisplay()
                 capturing = m.optBoolean("on")
                 when (m.optString("q")) { "fast" -> { jpegQ = 45; everyMs = 70 }; "sharp" -> { jpegQ = 80; everyMs = 140 }; "auto" -> { jpegQ = 60; everyMs = 100 } }
                 lastAt = 0
@@ -207,7 +225,8 @@ class RemoteService : Service() {
                 val p = m.optJSONObject("peer")
                 peerName = p?.optString("name").orEmpty()
                 (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).cancel(NID_ASK)
-                awake(p != null)
+                if (p != null) ensureDisplay() else teardownDisplay() // stop capturing between sessions
+                awake(true)
                 update(if (p != null) "$peerName is controlling this phone" else "Sharing this phone",
                     if (p != null) "Tap Stop to end the session at once." else "Waiting for a connection. Tap to open CoreKit.")
             }
@@ -275,6 +294,7 @@ class RemoteService : Service() {
             .setDefaults(Notification.DEFAULT_ALL)
             .setTimeoutAfter(60_000)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setFullScreenIntent(openApp(), true)
         if (id.isNotEmpty()) {
             b.addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Deny", answerIntent(id, false)).build())
             b.addAction(Notification.Action.Builder(null as android.graphics.drawable.Icon?, "Allow", answerIntent(id, true)).build())

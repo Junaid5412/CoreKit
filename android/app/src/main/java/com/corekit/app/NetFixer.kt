@@ -49,10 +49,38 @@ class NetFixer(private val act: MainActivity) {
                 true to "Copied \"$name\". In Private DNS choose \"Private DNS provider hostname\" and paste it."
             }
             a.startsWith("open:") -> { open(a.removePrefix("open:")); true to "Settings opened." }
-            a == "flushdns" -> true to "Android refreshes its DNS cache automatically."
+            a == "flushdns" -> flushDns()
             else -> false to "Not available on Android."
         }
     }
 
     private fun open(what: String) = act.runOnUiThread { HostSettings.open(act, what) }
+
+    // Android keeps the phone-wide DNS cache private to the system and only root can clear it.
+    // What an app CAN do, and this does: stop caching lookups, clear CoreKit's own address cache
+    // so its next tests are fresh, and ask the system to re-check the connection.
+    private fun flushDns(): Pair<Boolean, String> {
+        try {
+            java.security.Security.setProperty("networkaddress.cache.ttl", "0")
+            java.security.Security.setProperty("networkaddress.cache.negative.ttl", "0")
+        } catch (_: Throwable) {}
+        var cleared = false
+        for (field in arrayOf("addressCache", "negativeCache", "cache")) {
+            try {
+                val f = java.net.InetAddress::class.java.getDeclaredField(field)
+                f.isAccessible = true
+                val c = f.get(null) ?: continue
+                c.javaClass.getMethod("clear").invoke(c)
+                cleared = true
+            } catch (_: Throwable) {}
+        }
+        try {
+            val cm = act.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+            cm.activeNetwork?.let { cm.reportNetworkConnectivity(it, true) }
+        } catch (_: Throwable) {}
+        return true to if (cleared)
+            "Cleared CoreKit's DNS cache and re-checked the connection. The phone-wide cache is kept private by Android — turn Airplane mode on for a second to clear that too."
+        else
+            "Re-checked the connection. Android doesn't let apps clear the phone-wide DNS cache — turn Airplane mode on for a second to clear it."
+    }
 }

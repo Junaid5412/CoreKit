@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -256,16 +258,127 @@ func TestLookupUsesKeyAndCache(t *testing.T) {
 	old := mbEndpoint
 	mbEndpoint = srv.URL
 	defer func() { mbEndpoint = old }()
-	m, n, err := lookupHashes(context.Background(), "KEY123456789012345678901", []string{strings.Repeat("f", 64), strings.Repeat("1", 64)}, srv.Client())
-	if err != nil || n != 2 || m[strings.Repeat("f", 64)].Family != "RedLine" {
-		t.Fatalf("%v %d %+v", err, n, m)
+	m, n, failed, err := lookupHashes(context.Background(), "KEY123456789012345678901", []string{strings.Repeat("f", 64), strings.Repeat("1", 64)}, srv.Client())
+	if err != nil || n != 2 || failed != 0 || m[strings.Repeat("f", 64)].Family != "RedLine" {
+		t.Fatalf("%v %d %d %+v", err, n, failed, m)
 	}
 	before := calls
-	m, _, _ = lookupHashes(context.Background(), "KEY123456789012345678901", []string{strings.Repeat("f", 64)}, srv.Client())
+	m, _, _, _ = lookupHashes(context.Background(), "KEY123456789012345678901", []string{strings.Repeat("f", 64)}, srv.Client())
 	if calls != before || m[strings.Repeat("f", 64)].Verdict != "malicious" {
 		t.Fatal("cache not used")
 	}
-	if _, _, err := lookupHashes(context.Background(), "WRONGKEY0000000000000000", []string{strings.Repeat("2", 64)}, srv.Client()); err == nil {
+	if _, _, _, err := lookupHashes(context.Background(), "WRONGKEY0000000000000000", []string{strings.Repeat("2", 64)}, srv.Client()); err == nil {
 		t.Fatal("refused key not reported")
+	}
+	// one hash succeeds, one network-fails: not a hard error, but reported as incomplete
+	mbad := mbEndpoint
+	mix := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.ParseForm()
+		if r.Form.Get("hash") == strings.Repeat("a", 64) {
+			w.Write([]byte(`{"query_status":"ok","data":[{"sha256_hash":"` + strings.Repeat("a", 64) + `","signature":"Agent"}]}`))
+			return
+		}
+		hj, _, _ := w.(http.Hijacker).Hijack()
+		hj.Close() // abort the other request so it errors
+	}))
+	defer mix.Close()
+	mbEndpoint = mix.URL
+	intelC = &intelCache{}
+	_, gotN, gotFailed, gotErr := lookupHashes(context.Background(), "KEY123456789012345678901", []string{strings.Repeat("a", 64), strings.Repeat("b", 64)}, mix.Client())
+	mbEndpoint = mbad
+	if gotErr != nil || gotN != 1 || gotFailed != 1 {
+		t.Fatalf("partial result not reported: n=%d failed=%d err=%v", gotN, gotFailed, gotErr)
+	}
+}
+
+// The Live Shield runs as a second process against the same folder. These tests use two
+// independent secStore values pointed at one directory to stand in for the two processes.
+
+// Bug 1: trusting a file in the app must be seen by the already-running shield (fresh reads).
+func TestStoreTrustSeenByOtherProcess(t *testing.T) {
+	dir := t.TempDir()
+	app := &secStore{}
+	shield := &secStore{}
+	for _, s := range []*secStore{app, shield} {
+		s.dir = dir
+		_ = os.MkdirAll(filepath.Join(dir, "history"), 0700)
+	}
+	sha := strings.Repeat("a", 64)
+	// the shield has already built its trusted check once (nothing trusted yet)
+	if shield.trustedFn()(sha) {
+		t.Fatal("nothing should be trusted yet")
+	}
+	// the app trusts the file
+	app.updateSettings(func(set *secSettings) { set.Trusted = dedupe(append(set.Trusted, sha)) })
+	// the shield, on its next reload, must now see it without a restart
+	if !shield.trustedFn()(sha) {
+		t.Fatal("shield did not pick up the newly trusted file from disk")
+	}
+}
+
+// Bug 2: the app and the shield writing history at the same time must not lose records.
+func TestStoreHistoryNoClobber(t *testing.T) {
+	dir := t.TempDir()
+	app := &secStore{dir: dir}
+	shield := &secStore{dir: dir}
+	_ = os.MkdirAll(filepath.Join(dir, "history"), 0700)
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(2)
+		go func(n int) { defer wg.Done(); app.addRecord(secRecord{Source: "fix", Title: fmt.Sprintf("app-%d", n)}) }(i)
+		go func(n int) {
+			defer wg.Done()
+			shield.addRecord(secRecord{Source: "shield", Title: fmt.Sprintf("shield-%d", n)})
+		}(i)
+	}
+	wg.Wait()
+	h := (&secStore{dir: dir}).history()
+	if len(h) != 100 {
+		t.Fatalf("expected 100 records kept, got %d", len(h))
+	}
+	app2, shield2 := 0, 0
+	for _, r := range h {
+		if r.Source == "fix" {
+			app2++
+		} else {
+			shield2++
+		}
+	}
+	if app2 != 50 || shield2 != 50 {
+		t.Fatalf("records lost: %d app, %d shield", app2, shield2)
+	}
+}
+
+// Marking a record restored must survive and be readable afterwards.
+func TestStoreUpdateRecord(t *testing.T) {
+	dir := t.TempDir()
+	s := &secStore{dir: dir}
+	_ = os.MkdirAll(filepath.Join(dir, "history"), 0700)
+	r := s.addRecord(secRecord{Source: "fix", Title: "x", QID: "q1"})
+	if !s.updateRecord(r.ID, func(rr *secRecord) { rr.Restored = 123 }) {
+		t.Fatal("update failed")
+	}
+	for _, h := range s.history() {
+		if h.ID == r.ID && h.Restored != 123 {
+			t.Fatal("restore flag not persisted")
+		}
+	}
+}
+
+// The old single history.json is migrated into the per-record folder once.
+func TestStoreHistoryMigration(t *testing.T) {
+	dir := t.TempDir()
+	old := []secRecord{{ID: "r1", Source: "fix", Title: "old1", T: 100}, {ID: "r2", Source: "shield", Title: "old2", T: 200}}
+	b, _ := json.Marshal(old)
+	os.WriteFile(filepath.Join(dir, "history.json"), b, 0600)
+	s := &secStore{}
+	t.Setenv("CK_SEC_DIR", dir)
+	s.open()
+	h := s.history()
+	if len(h) != 2 || h[0].ID != "r2" {
+		t.Fatalf("migration failed: %+v", h)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "history.json")); !os.IsNotExist(err) {
+		t.Fatal("old history.json should have been renamed")
 	}
 }
