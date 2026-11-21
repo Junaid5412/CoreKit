@@ -31,15 +31,18 @@ main{padding:6px 16px calc(28px + env(safe-area-inset-bottom))}
 .dev{padding:14px 16px;border-radius:16px;background:var(--panel);border:1px solid var(--line);display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12.5px;animation:in .45s .05s ease both}
 .dev span:nth-child(odd){color:var(--muted)}.dev span:nth-child(even){color:var(--white);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 h2{margin:22px 4px 10px;font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--muted)}
-.mods{display:grid;grid-template-columns:1fr;gap:10px}
-.mod{display:flex;align-items:center;gap:14px;padding:15px;border-radius:16px;background:var(--panel);border:1px solid var(--line);color:inherit;text-decoration:none;transition:transform .12s,border-color .15s;animation:in .45s ease both;min-width:0}
-.mod:active{transform:scale(.98);border-color:#2a3c50}
-.mod .ic{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;flex:none;background:#10262a;color:var(--acc)}
-.mod .t{flex:1;min-width:0}
-.mod .t b{display:block;color:var(--white);font-size:15px;font-weight:600}
-.mod .t small{display:block;color:var(--muted2);font-size:12.5px;overflow:hidden;text-overflow:ellipsis}
-.mod .go{color:#3c4a59}
-@media (min-width:620px){.mods{grid-template-columns:1fr 1fr}main{max-width:900px;margin:0 auto}}
+.mods{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mod{position:relative;display:flex;flex-direction:column;padding:16px 15px 14px;border-radius:18px;background:var(--panel);border:1px solid var(--line);color:inherit;text-decoration:none;overflow:hidden;transition:transform .12s,border-color .15s;animation:in .45s ease both;min-height:142px}
+.mod::before{content:"";position:absolute;left:0;right:0;top:0;height:120px;background:radial-gradient(120px 90px at 22% 0,var(--c,transparent),transparent 70%);opacity:.14;pointer-events:none}
+.mod:active{transform:scale(.97);border-color:var(--c,#2a3c50)}
+.mod .ic{width:48px;height:48px;border-radius:14px;display:grid;place-items:center;flex:none;background:var(--cb,#10262a);color:var(--c,var(--acc));margin-bottom:auto}
+.mod .t{margin-top:12px;min-width:0}
+.mod .t b{display:block;color:var(--white);font-size:14.5px;font-weight:600;line-height:1.25}
+.mod .t small{display:block;color:var(--muted2);font-size:11.5px;margin-top:4px;line-height:1.35}
+.mod .go{position:absolute;top:16px;right:13px;width:18px;height:18px;color:#39485a}
+.mod.wide{grid-column:1 / -1;flex-direction:row;align-items:center;min-height:0;gap:15px;padding:15px}
+.mod.wide .ic{margin:0}.mod.wide .t{margin:0;flex:1}.mod.wide .t small{font-size:12px}
+@media (min-width:620px){.mods{grid-template-columns:1fr 1fr 1fr}.mod.wide{grid-column:auto;flex-direction:column;align-items:stretch}main{max-width:960px;margin:0 auto}}
 .ft{text-align:center;color:#3c4652;font-size:11.5px;margin-top:22px}
 @keyframes in{from{opacity:0;transform:translateY(8px)}}
 
@@ -99,7 +102,7 @@ h2{margin:22px 4px 10px;font-size:11px;letter-spacing:1.6px;text-transform:upper
 </header>
 
 <main>
-  <div class="hello"><h1 id="greet">Welcome</h1><p>Pick a tool to get started.</p></div>
+  <div class="hello"><h1 id="greet">Welcome</h1><p id="heltx">Your device, checked and protected.</p></div>
   <div class="dev" id="dev"></div>
   <h2>Modules</h2>
   <div class="mods" id="mods"></div>
@@ -143,16 +146,16 @@ let info = {model: "This device", android: "", api: 0, version: "", shield: true
 try { if (N) info = JSON.parse(N.info()); } catch (e) {}
 
 const MODS = [
-  {href: "health", t: "Health Inspector", d: "Battery, storage, memory, CPU, sensors + score", ic: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'},
-  {href: "net", t: "Internet Troubleshooter", d: "Wi-Fi, DNS, HTTPS problems + speed test", ic: '<path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/>'},
-  {href: "browser", t: "Safe Browser", d: "Private profiles + proxy / VPN, leak-checked", ic: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'},
-  {href: "security", t: "Security", d: "Malware & spyware scan, bloatware, Live Shield", ic: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>'},
-  {href: "logs", t: "Activity Log", d: "Apps opened & unlocks while you were away", ic: '<path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/>'},
-  {href: "remote", t: "Remote Access", d: "Control your PC from this phone, or share it · calls", ic: '<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="m10 9 2 2 3-3"/>'},
+  {href: "security", t: "Security", d: "Malware & spyware scan, bloatware, Live Shield", c: "#2dd4bf", cb: "#10262a", wide: true, ic: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/>'},
+  {href: "health", t: "Health Inspector", d: "Battery, storage, memory, sensors", c: "#f87171", cb: "#2a1619", ic: '<path d="M22 12h-4l-3 9L9 3l-3 9H2"/>'},
+  {href: "net", t: "Internet Fixer", d: "Wi-Fi, DNS, HTTPS + speed test", c: "#38bdf8", cb: "#102430", ic: '<path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/>'},
+  {href: "browser", t: "Safe Browser", d: "Private profiles + proxy, leak-checked", c: "#a78bfa", cb: "#1c1830", ic: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'},
+  {href: "logs", t: "Activity Log", d: "Apps opened & unlocks while away", c: "#fbbf24", cb: "#2a2410", ic: '<path d="M12 8v4l3 2"/><circle cx="12" cy="12" r="9"/>'},
+  {href: "remote", t: "Remote Access", d: "Control your PC, or share this phone · calls", c: "#34d399", cb: "#0f2a20", wide: true, ic: '<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="m10 9 2 2 3-3"/>'},
 ];
 const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c]));
 const icon = p => `<svg class="i" viewBox="0 0 24 24">${p}</svg>`;
-$("#mods").innerHTML = MODS.map((m, i) => `<a class="mod" href="${m.href}" data-mod="${m.href}" style="animation-delay:${.08 + i * .04}s"><span class="ic">${icon(m.ic)}</span><span class="t"><b>${esc(m.t)}</b><small>${esc(m.d)}</small></span><svg class="i go" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></a>`).join("");
+$("#mods").innerHTML = MODS.map((m, i) => `<a class="mod${m.wide ? " wide" : ""}" href="${m.href}" data-mod="${m.href}" style="--c:${m.c};--cb:${m.cb};animation-delay:${.08 + i * .04}s"><span class="ic">${icon(m.ic)}</span><span class="t"><b>${esc(m.t)}</b><small>${esc(m.d)}</small></span><svg class="i go" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></a>`).join("");
 $("#sideMods").innerHTML = MODS.map(m => `<a class="it" href="${m.href}" data-mod="${m.href}">${icon(m.ic)}<span class="tx"><b>${esc(m.t)}</b></span></a>`).join("");
 
 const h = new Date().getHours();
