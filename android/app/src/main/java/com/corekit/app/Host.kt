@@ -44,7 +44,7 @@ class Host(private val act: MainActivity, private val web: WebView) {
     companion object {
         const val ORIGIN = "https://appassets.androidplatform.net"
         const val BASE = "$ORIGIN/ck/"
-        private val PAGES = mapOf("home" to "mobile/home.html", "health" to "health.html", "net" to "net.html", "logs" to "logs.html", "remote" to "remote.html", "security" to "security.html")
+        private val PAGES = mapOf("home" to "mobile/home.html", "health" to "health.html", "net" to "net.html", "logs" to "logs.html", "remote" to "remote.html", "security" to "security.html", "storage" to "storage.html")
     }
 
     val client = object : WebViewClient() {
@@ -106,6 +106,9 @@ class Host(private val act: MainActivity, private val web: WebView) {
         "open" -> { openSettings(u.getQueryParameter("what") ?: ""); text("", 204) }
         "sec/scan" -> stream { out ->
             out.event("done", SecurityScanner.scan(act) { pct, label -> out.event("progress", JSONObject().put("pct", pct).put("label", label)) })
+        }
+        "storage/scan" -> stream { out ->
+            out.event("done", StorageScanner.scan(act) { pct, label -> out.event("progress", JSONObject().put("pct", pct).put("label", label)) })
         }
         "remote/frame.jpg" -> RemoteEngine.lastFrame()?.let {
             WebResourceResponse("image/jpeg", null, 200, "OK", mapOf("Cache-Control" to "no-store"), java.io.ByteArrayInputStream(it))
@@ -423,6 +426,15 @@ class Host(private val act: MainActivity, private val web: WebView) {
             }
         }
 
+        /** Storage & Performance: clean / uninstall / drill, answered asynchronously. */
+        @JavascriptInterface fun stCall(id: String, path: String, body: String) {
+            pool.execute {
+                val res = try { stRoute(path, if (body.isBlank()) JSONObject() else JSONObject(body)) }
+                    catch (e: Throwable) { JSONObject().put("error", e.message ?: "failed") }
+                act.runOnUiThread { web.evaluateJavascript("window.__stReply&&__stReply(${JSONObject.quote(id)},$res)", null) }
+            }
+        }
+
         /** No Recycle Bin on Android; the usage log never offers restore. */
         @JavascriptInterface fun restoreFile(token: String): String = JSONObject().put("error", "Not available on Android").toString()
 
@@ -483,6 +495,24 @@ class Host(private val act: MainActivity, private val web: WebView) {
                 if ((!ok || act.hasWindowFocus()) && installed(pkg)) openSec("appinfo", pkg)
             }, 1500)
         }
+    }
+
+    private fun stRoute(path: String, b: JSONObject): JSONObject = when (path) {
+        "clean" -> {
+            val ids = b.optJSONArray("ids")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+            val pickObj = b.optJSONObject("pick")
+            val pick = HashMap<String, List<String>>()
+            pickObj?.keys()?.forEach { k -> pickObj.optJSONArray(k)?.let { a -> pick[k] = (0 until a.length()).map { a.getString(it) } } }
+            StorageScanner.clean(act, ids, pick)
+        }
+        "uninstall" -> {
+            val ids = b.optJSONArray("ids")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+            val items = JSONArray()
+            for (pkg in ids) { uninstall(pkg); items.put(JSONObject().put("id", pkg).put("ok", true).put("msg", "Confirm the removal on screen.")) }
+            JSONObject().put("items", items)
+        }
+        "drill" -> StorageScanner.drill(act, b.optString("path"))
+        else -> JSONObject().put("error", "unknown")
     }
 
     private fun secSettings(): JSONObject = JSONObject().put("keySet", SecurityScanner.apiKey(act).isNotEmpty())
