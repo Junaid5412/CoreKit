@@ -87,7 +87,7 @@ func (l *rLink) send(typ byte, body []byte) error {
 func (l *rLink) sendJSON(v any) error { b, _ := json.Marshal(v); return l.send('J', b) }
 
 func (l *rLink) recv() (byte, []byte, error) {
-	l.c.SetReadDeadline(time.Now().Add(25 * time.Second))
+	l.c.SetReadDeadline(time.Now().Add(45 * time.Second))
 	t, b, err := readFrame(l.r)
 	if err != nil {
 		return 0, nil, err
@@ -907,7 +907,7 @@ func (e *rEngine) cancelConnect() {
 func (e *rEngine) readLoop(s *rSession) {
 	why := ""
 	go func() { // keep-alive, and fresh counters for the pages
-		t := time.NewTicker(3 * time.Second)
+		t := time.NewTicker(2 * time.Second)
 		defer t.Stop()
 		for {
 			select {

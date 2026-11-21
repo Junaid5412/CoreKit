@@ -38,6 +38,8 @@ var (
 	rpSetStretchBltMode  = gdi32.NewProc("SetStretchBltMode")
 	rpSetBrushOrgEx      = gdi32.NewProc("SetBrushOrgEx")
 	rpGetDIBits          = gdi32.NewProc("GetDIBits")
+	rpCreateDIBSection   = gdi32.NewProc("CreateDIBSection")
+	rpGdiFlush           = gdi32.NewProc("GdiFlush")
 	rpDeleteObject       = gdi32.NewProc("DeleteObject")
 	rpDeleteDC           = gdi32.NewProc("DeleteDC")
 )
@@ -85,6 +87,8 @@ func rPrepareHost() {
 
 type winCap struct {
 	memDC, bmp uintptr
+	oldBmp     uintptr // what the memory DC held before our bitmap (restored on close)
+	bits       uintptr // pixels of the DIB section (BGRA, top-down); 0 if we fell back to GetDIBits
 	w, h       int
 	buf        []byte
 	img        *image.RGBA
@@ -98,11 +102,25 @@ func rNewCapturer(e *rEngine) rCapturer {
 }
 
 func (c *winCap) close() {
+	if c.memDC != 0 && c.oldBmp != 0 {
+		rpSelectObject.Call(c.memDC, c.oldBmp)
+	}
 	if c.bmp != 0 {
 		rpDeleteObject.Call(c.bmp)
 	}
 	if c.memDC != 0 {
 		rpDeleteDC.Call(c.memDC)
+	}
+}
+
+func (c *winCap) freeBitmap() {
+	if c.bmp != 0 {
+		if c.memDC != 0 && c.oldBmp != 0 {
+			rpSelectObject.Call(c.memDC, c.oldBmp)
+			c.oldBmp = 0
+		}
+		rpDeleteObject.Call(c.bmp)
+		c.bmp, c.bits = 0, 0
 	}
 }
 
@@ -129,19 +147,34 @@ func (c *winCap) grab(q rQuality) ([]byte, int, int, error) {
 	}
 	defer rpReleaseDC.Call(0, scr)
 	if c.bmp == 0 || c.w != tw || c.h != th {
-		if c.bmp != 0 {
-			rpDeleteObject.Call(c.bmp)
+		c.freeBitmap()
+		// A DIB section is a bitmap whose pixels live in memory we can read directly. StretchBlt
+		// writes straight into it, so there is no GetDIBits step — that step fails on some real
+		// graphics drivers ("could not read the captured screen"), which a DIB section avoids.
+		var bi [40]byte
+		binary.LittleEndian.PutUint32(bi[0:], 40)
+		binary.LittleEndian.PutUint32(bi[4:], uint32(int32(tw)))
+		binary.LittleEndian.PutUint32(bi[8:], uint32(int32(-th))) // negative = top-down
+		binary.LittleEndian.PutUint16(bi[12:], 1)
+		binary.LittleEndian.PutUint16(bi[14:], 32)
+		var bits uintptr
+		c.bmp, _, _ = rpCreateDIBSection.Call(c.memDC, uintptr(unsafe.Pointer(&bi[0])), 0 /* DIB_RGB_COLORS */, uintptr(unsafe.Pointer(&bits)), 0, 0)
+		c.bits = bits
+		if c.bmp == 0 { // very rare: fall back to a plain bitmap read with GetDIBits
+			c.bits = 0
+			c.bmp, _, _ = rpCreateCompatBitmap.Call(scr, uintptr(tw), uintptr(th))
+			if c.bmp == 0 {
+				c.w, c.h = 0, 0
+				return nil, 0, 0, errors.New("could not create the capture picture (out of graphics memory?)")
+			}
 		}
-		c.bmp, _, _ = rpCreateCompatBitmap.Call(scr, uintptr(tw), uintptr(th))
-		if c.bmp == 0 {
-			c.w, c.h = 0, 0
-			return nil, 0, 0, errors.New("could not create the capture picture (out of graphics memory?)")
+		if o, _, _ := rpSelectObject.Call(c.memDC, c.bmp); c.oldBmp == 0 {
+			c.oldBmp = o
 		}
 		c.w, c.h = tw, th
 		c.buf = make([]byte, tw*th*4)
 		c.img = image.NewRGBA(image.Rect(0, 0, tw, th))
 	}
-	old, _, _ := rpSelectObject.Call(c.memDC, c.bmp)
 	rpSetStretchBltMode.Call(c.memDC, 4) // HALFTONE: smooth downscale
 	rpSetBrushOrgEx.Call(c.memDC, 0, 0, 0)
 	ok, _, _ := rpStretchBlt.Call(c.memDC, 0, 0, uintptr(tw), uintptr(th), scr, 0, 0, uintptr(sw), uintptr(sh), 0x00CC0020|0x40000000) // SRCCOPY|CAPTUREBLT
@@ -149,26 +182,31 @@ func (c *winCap) grab(q rQuality) ([]byte, int, int, error) {
 		ok, _, _ = rpStretchBlt.Call(c.memDC, 0, 0, uintptr(tw), uintptr(th), scr, 0, 0, uintptr(sw), uintptr(sh), 0x00CC0020)
 	}
 	if ok == 0 {
-		rpSelectObject.Call(c.memDC, old)
 		return nil, 0, 0, errors.New("Windows refused to copy the screen (a security prompt or the lock screen may be showing)")
 	}
 	c.drawCursor(sw, sh, tw, th)
-	rpSelectObject.Call(c.memDC, old)
 
-	// BITMAPINFOHEADER: top-down 32-bit
-	var bi [40]byte
-	binary.LittleEndian.PutUint32(bi[0:], 40)
-	binary.LittleEndian.PutUint32(bi[4:], uint32(int32(tw)))
-	binary.LittleEndian.PutUint32(bi[8:], uint32(int32(-th)))
-	binary.LittleEndian.PutUint16(bi[12:], 1)
-	binary.LittleEndian.PutUint16(bi[14:], 32)
-	if r, _, _ := rpGetDIBits.Call(c.memDC, c.bmp, 0, uintptr(th), uintptr(unsafe.Pointer(&c.buf[0])), uintptr(unsafe.Pointer(&bi[0])), 0); r == 0 {
-		return nil, 0, 0, errors.New("could not read the captured screen")
+	// read the captured pixels (BGRA, top-down)
+	var src []byte
+	if c.bits != 0 {
+		rpGdiFlush.Call() // make sure GDI finished writing into the DIB memory
+		src = unsafe.Slice((*byte)(unsafe.Pointer(c.bits)), tw*th*4)
+	} else {
+		var bi [40]byte
+		binary.LittleEndian.PutUint32(bi[0:], 40)
+		binary.LittleEndian.PutUint32(bi[4:], uint32(int32(tw)))
+		binary.LittleEndian.PutUint32(bi[8:], uint32(int32(-th)))
+		binary.LittleEndian.PutUint16(bi[12:], 1)
+		binary.LittleEndian.PutUint16(bi[14:], 32)
+		if r, _, _ := rpGetDIBits.Call(scr, c.bmp, 0, uintptr(th), uintptr(unsafe.Pointer(&c.buf[0])), uintptr(unsafe.Pointer(&bi[0])), 0); r == 0 {
+			return nil, 0, 0, errors.New("could not read the captured screen")
+		}
+		src = c.buf
 	}
 	// skip unchanged screens (but refresh every 2 s)
 	h := fnv.New64a()
-	for i := 0; i < len(c.buf); i += 4 * 61 {
-		h.Write(c.buf[i : i+3])
+	for i := 0; i+3 < len(src); i += 4 * 61 {
+		h.Write(src[i : i+3])
 	}
 	sum := h.Sum64()
 	if sum == c.last && time.Since(c.lastAt) < 2*time.Second {
@@ -176,8 +214,8 @@ func (c *winCap) grab(q rQuality) ([]byte, int, int, error) {
 	}
 	c.last, c.lastAt = sum, time.Now()
 	px := c.img.Pix
-	for i := 0; i+3 < len(c.buf); i += 4 { // BGRA → RGBA
-		px[i], px[i+1], px[i+2], px[i+3] = c.buf[i+2], c.buf[i+1], c.buf[i], 255
+	for i := 0; i+3 < len(src) && i+3 < len(px); i += 4 { // BGRA → RGBA
+		px[i], px[i+1], px[i+2], px[i+3] = src[i+2], src[i+1], src[i], 255
 	}
 	var out bytes.Buffer
 	if err := jpeg.Encode(&out, c.img, &jpeg.Options{Quality: q.jpegQ}); err != nil {
