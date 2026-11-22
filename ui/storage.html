@@ -255,13 +255,14 @@ let toastT;
 function toast(m, bad){ const t = $('#toast'); t.textContent = m; t.classList.toggle('bad', !!bad); t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3600); }
 
 let RES = null, tab = new URLSearchParams(location.search).get('tab') || 'overview', pendingUsage = false;
-const sel = { app: new Set(), clean: new Set(), rec: new Set() };
+const sel = { app: new Set(), clean: new Set(), rec: new Set(), file: new Set() };
+const appOpen = new Set();
 const dlPick = new Set(), dlSizes = {};
 let dlFiles = null;
 
 /* ---------- scan ---------- */
 function startScan(){
-  sel.app.clear(); sel.clean.clear(); sel.rec.clear(); dlPick.clear(); dlFiles = null; appLimit = 150;
+  sel.app.clear(); sel.clean.clear(); sel.rec.clear(); sel.file.clear(); dlPick.clear(); dlFiles = null; appLimit = 150; fileLimit = 100;
   $('#rescan').style.display = 'none';
   syncFab();
   $('#inner').innerHTML = `<div class="scan"><div class="radar"><i></i><i></i><i></i><b></b></div><h2 id="sl">Scanning this ${DEV}…</h2><p>Reading every drive, ${ANDROID ? 'app' : 'program'} and folder so nothing is missed.</p><div class="pbar"><i id="pb"></i></div><small id="pp">0%</small></div>`;
@@ -294,6 +295,9 @@ function render(){
   if ((r.needs || []).includes('usage')) {
     h += `<div class="note warn"><svg class="i" viewBox="0 0 24 24">${IC.warn}</svg><div class="grow"><b>Some details are hidden.</b> Allow Usage access to see exact app sizes, photos, videos and when each app was last used.</div><button class="btn sm pri" data-a="usage">Allow access</button></div>`;
   }
+  if ((r.needs || []).includes('media')) {
+    h += `<div class="note warn"><svg class="i" viewBox="0 0 24 24">${IC.warn}</svg><div class="grow"><b>Photos, videos and audio are hidden.</b> Allow access so CoreKit can list them, show how much space they use and let you delete them.</div><button class="btn sm pri" data-a="media">Allow access</button></div>`;
+  }
   h += `<div class="hero">
     <div class="ring"><svg viewBox="0 0 140 140"><circle cx="70" cy="70" r="58" fill="none" stroke="#1a2431" stroke-width="13"/><circle cx="70" cy="70" r="58" fill="none" stroke="${col}" stroke-width="13" stroke-linecap="round" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/></svg><div class="c"><b>${usedPct}%</b><span>used</span></div></div>
     <div class="stats">
@@ -307,16 +311,17 @@ function render(){
     ${tabBtn('overview', 'Overview', '')}
     ${tabBtn('drives', ANDROID ? 'Storage' : 'Drives', r.drives.length)}
     ${tabBtn('apps', ANDROID ? 'Apps' : 'Programs', r.appCount)}
+    ${tabBtn('files', 'Files', (r.cats || []).reduce((n, c) => n + c.count, 0) ? 'all' : '')}
     ${tabBtn('junk', 'Junk', r.clean.length)}
     ${tabBtn('tips', 'Advice', r.recs.length)}
   </div><div id="pane"></div>`;
   $('#inner').innerHTML = h;
   paint();
 }
-function tabBtn(id, label, n){ return `<button class="tab ${tab === id ? 'on' : ''}" data-tab="${id}">${label}${n ? `<em>${n}</em>` : ''}</button>`; }
+function tabBtn(id, label, n){ return `<button class="tab ${tab === id ? 'on' : ''}" data-tab="${id}">${label}${n && n !== 'all' ? `<em>${n}</em>` : ''}</button>`; }
 function paint(){
   const p = $('#pane'); if (!p) return;
-  p.innerHTML = tab === 'overview' ? overview() : tab === 'drives' ? drives() : tab === 'apps' ? apps() : tab === 'junk' ? junk() : tips();
+  p.innerHTML = tab === 'overview' ? overview() : tab === 'drives' ? drives() : tab === 'apps' ? apps() : tab === 'files' ? files() : tab === 'junk' ? junk() : tips();
   syncFab();
 }
 
@@ -434,7 +439,62 @@ function appRow(a, max){
     ${avatar(a.name)}
     <div class="tx"><b>${esc(a.name)}${badges}</b><small>${esc(meta)}</small></div>
     <div class="sz"><b class="num">${a.size ? (a.approx ? '~' : '') + size(a.size) : '—'}</b>${a.size ? bar(a.size, max, a.bloat ? 'r' : '') : ''}</div>
+    ${(a.code || a.data || a.ext) ? `<button class="btn sm gho" data-appx="${esc(a.id)}" aria-label="Details">${ico(appOpen.has(a.id) ? 'back' : 'chev').replace('class="i"', 'class="i" style="transform:rotate(' + (appOpen.has(a.id) ? '90' : '0') + 'deg)"')}</button>` : ''}
+  </div>${appOpen.has(a.id) ? appDetail(a) : ''}`;
+}
+function appDetail(a){
+  const rows = [['App itself', a.code, '#38bdf8'], ['Saved data and game files', Math.max(0, (a.data || 0) - (a.cache || 0)), '#a78bfa'], ['Cache (safe to clear)', a.cache, '#34d399'], ['Game files and other files on shared storage', a.ext, '#fbbf24']].filter(x => x[1] > 0);
+  const tot = Math.max(a.size, 1);
+  return `<div class="pickbar" style="display:block;padding:12px 18px 14px">
+    <div class="dbar" style="height:10px;margin:0 0 10px">${rows.map(x => `<i style="width:${pctOf(x[1], tot)}%;background:${x[2]}"></i>`).join('')}</div>
+    <div class="legend" style="grid-template-columns:1fr">${rows.map(x => `<div><i class="dot" style="background:${x[2]}"></i><span class="n" style="white-space:normal">${x[0]}</span><b class="num">${size(x[1])}</b></div>`).join('')}</div>
+    <div style="margin-top:10px;color:var(--muted);font-size:12px">${esc(a.id)}</div>
   </div>`;
+}
+
+
+/* ---------- files: photos, videos, audio, documents ---------- */
+const CAT = { photo:['Photos','#34d399','file'], video:['Videos','#a78bfa','file'], audio:['Audio','#fbbf24','file'], doc:['Documents','#38bdf8','file'], archive:['Archives and installers','#fb923c','file'], other:['Other files','#64748b','file'] };
+let fileF = 'all', fileS = 'size', fileQ = '', fileLimit = 100, dirsAll = false;
+function fileList(){
+  const q = fileQ.toLowerCase();
+  const l = RES.files.filter(f => (fileF === 'all' || f.cat === fileF) && (!q || (f.name + ' ' + f.dir).toLowerCase().includes(q)));
+  const by = { size:(x, y) => y.bytes - x.bytes, new:(x, y) => (y.mod || 0) - (x.mod || 0), old:(x, y) => (x.mod || 9e12) - (y.mod || 9e12) };
+  return l.sort(by[fileS]);
+}
+function files(){
+  const r = RES, cats = r.cats || [];
+  if (!cats.length && !r.files.length) {
+    const need = (r.needs || []).includes('media');
+    return `<div class="empty"><p>${need ? 'Allow access to photos, videos and audio to see them here.' : 'No files found.'}</p>${need ? `<button class="btn pri" data-a="media" style="margin-top:12px">Allow access</button>` : ''}</div>`;
+  }
+  const tot = cats.reduce((s, c) => s + c.bytes, 0);
+  let h = `<div class="card"><div class="ch"><h3>Your files</h3><small>${size(tot)} · ${cats.reduce((n, c) => n + c.count, 0).toLocaleString()} files</small></div><div style="padding:6px 18px 16px">
+    <div class="dbar">${cats.map(c => `<i style="width:${pctOf(c.bytes, tot)}%;background:${(CAT[c.cat] || CAT.other)[1]}" title="${esc((CAT[c.cat] || CAT.other)[0])}"></i>`).join('')}</div>
+    <div class="legend">${cats.map(c => { const m = CAT[c.cat] || CAT.other; return `<div><i class="dot" style="background:${m[1]}"></i><span class="n">${m[0]} · ${c.count.toLocaleString()}</span><b class="num">${size(c.bytes)}</b></div>`; }).join('')}</div></div></div>`;
+  if (r.dirs && r.dirs.length) {
+    const n = dirsAll ? r.dirs.length : 8, max = r.dirs[0].bytes;
+    h += `<div class="card"><div class="ch"><h3>Folders using the most space</h3><small>${r.dirs.length} shown</small></div>${r.dirs.slice(0, n).map(d => `<div class="row"><span class="ico">${ico('folder')}</span><div class="tx"><b>${esc(d.path || '(root)')}</b><small>${d.count.toLocaleString()} files</small></div><div class="sz"><b class="num">${size(d.bytes)}</b>${bar(d.bytes, max)}</div></div>`).join('')}${r.dirs.length > n ? `<div class="pickbar"><span>${r.dirs.length - n} more</span><button class="btn sm gho" data-dirsall>Show all</button></div>` : ''}</div>`;
+  }
+  h += `<div class="toolbar"><div class="search"><svg class="i" viewBox="0 0 24 24">${IC.search}</svg><input id="fileSearch" placeholder="Search files" value="${esc(fileQ)}" autocomplete="off"></div>
+    <select class="sel" id="fileSort" aria-label="Sort"><option value="size">Biggest first</option><option value="new">Newest</option><option value="old">Oldest</option></select></div>
+    <div class="toolbar"><div class="chips"><button class="chip ${fileF === 'all' ? 'on' : ''}" data-ff="all">All<em>${r.files.length}</em></button>${cats.map(c => `<button class="chip ${fileF === c.cat ? 'on' : ''}" data-ff="${c.cat}">${(CAT[c.cat] || CAT.other)[0]}<em>${r.files.filter(f => f.cat === c.cat).length}</em></button>`).join('')}</div></div>
+    <div id="filelist"></div>`;
+  setTimeout(() => { const s = $('#fileSort'); if (s) s.value = fileS; paintFiles(); }, 0);
+  return h;
+}
+function paintFiles(){
+  const box = $('#filelist'); if (!box) return;
+  const list = fileList();
+  if (!list.length) { box.innerHTML = '<div class="empty">No matching files.</div>'; return; }
+  const shown = list.slice(0, fileLimit), max = Math.max(...shown.map(f => f.bytes), 1);
+  box.innerHTML = `<div class="toolbar" style="justify-content:space-between"><span class="count" style="margin:0">The ${shown.length} biggest of ${list.length} listed · ${size(list.reduce((s, f) => s + f.bytes, 0))}${RES.note ? ' · ' + esc(RES.note) : ''}</span><span><button class="btn sm gho" data-selfiles>Select shown</button></span></div>
+    <div class="card">${shown.map(f => fileRow(f, max)).join('')}${list.length > shown.length ? `<div class="pickbar"><span>${list.length - shown.length} more</span><button class="btn sm gho" data-morefiles>Show more</button></div>` : ''}</div>`;
+  syncFab();
+}
+function fileRow(f, max){
+  const m = CAT[f.cat] || CAT.other, on = sel.file.has(f.id);
+  return `<div class="row selrow" data-file="${esc(f.id)}"><span class="ck ${on ? 'on' : ''}">${ico('check')}</span><span class="ico" style="background:${m[1]}22;color:${m[1]}">${ico('file')}</span><div class="tx"><b>${esc(f.name)}</b><small>${esc([m[0], f.dir, f.mod ? ago(f.mod) : ''].filter(Boolean).join(' · '))}</small></div><div class="sz"><b class="num">${size(f.bytes)}</b>${bar(f.bytes, max)}</div></div>`;
 }
 
 /* ---------- junk ---------- */
@@ -505,19 +565,22 @@ function plan(){
   const A = [...apps].filter(id => byId[id] && byId[id].removable).map(id => byId[id]);
   const C = [...cleans].filter(id => cById[id] && id !== 'downloads' && id !== 'allcache').map(id => cById[id]);
   const D = [...dlPick];
-  const bytes = A.reduce((s, a) => s + a.size, 0) + C.reduce((s, c) => s + c.bytes, 0) + D.reduce((s, p) => s + (dlSizes[p] || 0), 0);
-  return { A, C, D, n: A.length + C.length + D.length, bytes };
+  const fById = {}; RES.files.forEach(f => fById[f.id] = f);
+  const F = [...sel.file].filter(id => fById[id]).map(id => fById[id]);
+  const bytes = A.reduce((s, a) => s + a.size, 0) + C.reduce((s, c) => s + c.bytes, 0) + D.reduce((s, p) => s + (dlSizes[p] || 0), 0) + F.reduce((s, f) => s + f.bytes, 0);
+  return { A, C, D, F, n: A.length + C.length + D.length + F.length, bytes };
 }
 function syncFab(){
   if (!RES) return;
   document.querySelectorAll('[data-app]').forEach(el => { const c = el.querySelector('.ck'); if (c && !c.classList.contains('lock')) c.classList.toggle('on', sel.app.has(el.dataset.app)); });
   document.querySelectorAll('[data-clean]').forEach(el => { const c = el.querySelector('.ck'); if (c) c.classList.toggle('on', el.dataset.clean === 'downloads' ? dlPick.size > 0 : sel.clean.has(el.dataset.clean)); });
   document.querySelectorAll('[data-rec]').forEach(el => el.querySelector('.ck').classList.toggle('on', sel.rec.has(el.dataset.rec)));
+  document.querySelectorAll('[data-file]').forEach(el => el.querySelector('.ck').classList.toggle('on', sel.file.has(el.dataset.file)));
   const p = plan();
   $('#fab').classList.toggle('show', p.n > 0);
   $('#fabN').textContent = p.n + ' selected';
   $('#fabS').textContent = p.bytes ? ('frees about ' + size(p.bytes)) : '';
-  $('#fabGo').textContent = p.A.length && !p.C.length && !p.D.length ? 'Uninstall' : 'Remove';
+  $('#fabGo').textContent = p.A.length && !p.C.length && !p.D.length && !p.F.length ? 'Uninstall' : 'Remove';
 }
 function toggle(set, id){ set.has(id) ? set.delete(id) : set.add(id); syncFab(); }
 
@@ -530,11 +593,13 @@ function confirmRemove(){
   p.A.forEach(a => rows += mrow(a.name, a.size ? size(a.size) : '—'));
   p.C.forEach(c => rows += mrow(c.name, size(c.bytes)));
   if (p.D.length) rows += mrow(p.D.length + ' item' + (p.D.length > 1 ? 's' : '') + ' from Downloads', size(p.D.reduce((s, x) => s + (dlSizes[x] || 0), 0)));
+  if (p.F.length) rows += mrow(p.F.length + ' file' + (p.F.length > 1 ? 's' : '') + ' (photos, videos, documents…)', size(p.F.reduce((s, f) => s + f.bytes, 0)));
   const parts = [];
+  if (p.F.length) parts.push(`${p.F.length} file${p.F.length > 1 ? 's' : ''} will be deleted${ANDROID ? '' : ' (sent to the Recycle Bin)'}`);
   if (p.A.length) parts.push(`${p.A.length} ${ANDROID ? 'app' : 'program'}${p.A.length > 1 ? 's' : ''} will be uninstalled`);
   if (p.C.length) parts.push(`${p.C.length} junk item${p.C.length > 1 ? 's' : ''} will be cleared`);
   if (p.D.length) parts.push(`${p.D.length} download${p.D.length > 1 ? 's' : ''} will be deleted`);
-  const risky = p.A.length || p.D.length || p.C.some(c => !c.safe);
+  const risky = p.A.length || p.D.length || (p.F.length && ANDROID) || p.C.some(c => !c.safe);
   modal(`<h3>Remove ${p.n} item${p.n > 1 ? 's' : ''}?</h3>
     <p>${parts.join('. ')}. This frees about <b class="gr">${size(p.bytes)}</b>.${risky ? ' Some of this cannot be undone.' : ''}</p>
     <div class="mlist">${rows}</div>
@@ -548,6 +613,12 @@ function confirmRemove(){
     if (ids.length) {
       const r = await call('clean', {ids, pick: p.D.length ? {downloads: p.D} : {}});
       if (r.error && !(r.log && r.log.length)) toast(r.error, true); else msgs.push('Freed ' + (r.freedText || size(r.freed || 0)));
+    }
+    if (p.F.length) {
+      const r = await call('delete', {ids: p.F.map(f => f.id)});
+      if (r.error) toast(r.error, true);
+      else if (r.pending) { waitingDelete = true; return; } // Android: the system asks you to confirm
+      else msgs.push(r.count + ' file(s) moved to the Recycle Bin');
     }
     if (p.A.length) {
       const r = await call('uninstall', {ids: p.A.map(a => a.id)});
@@ -590,7 +661,9 @@ function paintDl(){
 }
 
 /* ---------- folder browser ---------- */
-let trail = [];
+let trail = [], waitingDelete = false;
+window.__stMediaDeleted = ok => { if (!waitingDelete) return; waitingDelete = false; toast(ok ? 'Deleted.' : 'Nothing was deleted.', !ok); startScan(); };
+window.__stMediaGranted = () => startScan();
 const SEP = p => p.indexOf('\\') >= 0 ? '\\' : '/';
 async function showDrill(path, push){
   if (push !== false) trail.push(path);
@@ -614,6 +687,13 @@ document.addEventListener('click', async e => {
   const t = T('[data-tab]'); if (t) { tab = t.dataset.tab; render(); window.scrollTo(0, 0); return; }
   if (T('[data-a="freeall"]')) return freeAll();
   if (T('[data-freeup]')) { e.stopPropagation(); await call('freeup'); return; }
+  if (T('[data-a="media"]')) { await call('media'); return; }
+  const ax = T('[data-appx]'); if (ax) { e.stopPropagation(); const id = ax.dataset.appx; appOpen.has(id) ? appOpen.delete(id) : appOpen.add(id); paintApps(); return; }
+  const ff = T('[data-ff]'); if (ff) { fileF = ff.dataset.ff; fileLimit = 100; paint(); return; }
+  const fl = T('[data-file]'); if (fl) { toggle(sel.file, fl.dataset.file); return; }
+  if (T('[data-selfiles]')) { fileList().slice(0, fileLimit).forEach(f => sel.file.add(f.id)); paintFiles(); return; }
+  if (T('[data-morefiles]')) { fileLimit += 150; paintFiles(); return; }
+  if (T('[data-dirsall]')) { dirsAll = true; paint(); return; }
   const af = T('[data-af]'); if (af) { appF = af.dataset.af; appLimit = 150; paint(); return; }
   if (T('[data-more]')) { appLimit += 200; paintApps(); return; }
   const sa = T('[data-showall]'); if (sa) { showAll[sa.dataset.showall] = true; paint(); return; }
@@ -632,11 +712,12 @@ document.addEventListener('click', async e => {
   const drill = T('[data-drill]'); if (drill) { trail = []; return showDrill(drill.dataset.drill); }
   if (T('[data-mclose]')) return closeModal();
 });
-$('#fabClear').onclick = () => { sel.app.clear(); sel.clean.clear(); sel.rec.clear(); dlPick.clear(); if (RES) { paint(); if (dlFiles) paintDl(); } };
+$('#fabClear').onclick = () => { sel.app.clear(); sel.clean.clear(); sel.rec.clear(); sel.file.clear(); dlPick.clear(); if (RES) { paint(); if (dlFiles) paintDl(); } };
 $('#fabGo').onclick = () => confirmRemove();
 $('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
-document.addEventListener('input', e => { if (e.target.id === 'appSearch') { appQ = e.target.value; appLimit = 150; paintApps(); } });
+document.addEventListener('input', e => { if (e.target.id === 'fileSearch') { fileQ = e.target.value; fileLimit = 100; paintFiles(); } if (e.target.id === 'appSearch') { appQ = e.target.value; appLimit = 150; paintApps(); } });
 document.addEventListener('change', e => {
+  if (e.target.id === 'fileSort') { fileS = e.target.value; paintFiles(); }
   if (e.target.id === 'appSort') { appS = e.target.value; paintApps(); }
   if (e.target.id === 'appDrive') { appD = e.target.value; appLimit = 150; paint(); }
 });

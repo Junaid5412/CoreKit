@@ -42,6 +42,12 @@ func TestStorageLiveScan(t *testing.T) {
 	for _, c := range res.Clean {
 		t.Logf("  clean %-22s %s safe=%v", c.Name, fmtSize(c.Bytes), c.Safe)
 	}
+	t.Logf("files listed: %d, kinds: %+v", len(res.Files), res.Cats)
+	for _, f := range res.Files {
+		if f.ID == "" || f.Cat == "" || f.Bytes <= 0 {
+			t.Fatalf("bad file entry: %+v", f)
+		}
+	}
 	// every app we list must carry the fields the UI needs
 	for i, a := range res.Apps {
 		if a.ID == "" || a.Name == "" {

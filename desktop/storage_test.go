@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -97,4 +98,32 @@ func jsonOf(t *testing.T, v any) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+func TestTopFilesKeepsEachKind(t *testing.T) {
+	tf := newTopFiles(2)
+	for i := 1; i <= 10; i++ {
+		tf.add(stFile{ID: fmt.Sprint("v", i), Name: "a.mp4", Bytes: int64(i) << 20, Cat: catOfName("a.mp4")})
+		tf.add(stFile{ID: fmt.Sprint("p", i), Name: "a.jpg", Bytes: int64(i) << 20, Cat: catOfName("a.JPG")})
+	}
+	tf.add(stFile{ID: "tiny", Name: "b.mp3", Bytes: 10, Cat: "audio"})
+	files, cats := tf.result()
+	if len(files) != 4 {
+		t.Fatalf("want the 2 biggest of each of 2 kinds = 4 files, got %d", len(files))
+	}
+	if files[0].Bytes != 10<<20 {
+		t.Fatalf("biggest first, got %d", files[0].Bytes)
+	}
+	var audio *stCat
+	for i := range cats {
+		if cats[i].Cat == "audio" {
+			audio = &cats[i]
+		}
+	}
+	if audio == nil || audio.Count != 1 {
+		t.Fatal("small files must still count in the totals")
+	}
+	if catOfName("x.WEBM") != "video" || catOfName("x.unknown") != "other" {
+		t.Fatal("wrong kind for an extension")
+	}
 }

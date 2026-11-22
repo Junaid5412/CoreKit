@@ -512,6 +512,15 @@ class Host(private val act: MainActivity, private val web: WebView) {
             JSONObject().put("items", items)
         }
         "drill" -> StorageScanner.drill(act, b.optString("path"))
+        "media" -> { act.runOnUiThread { act.requestMediaAccess() }; JSONObject().put("ok", true) }
+        "delete" -> {
+            val ids = b.optJSONArray("ids")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
+            val uris = ids.mapNotNull { StorageScanner.mediaUri(it) }
+            var ok = false
+            act.runOnUiThread { ok = act.deleteMedia(uris) }
+            Thread.sleep(150)
+            JSONObject().put("pending", true).put("count", uris.size)
+        }
         "usage" -> JSONObject().put("ok", startSafe(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)))
         "freeup" -> JSONObject().put("ok", startSafe(Intent(android.os.storage.StorageManager.ACTION_MANAGE_STORAGE), Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)))
         else -> JSONObject().put("error", "unknown")

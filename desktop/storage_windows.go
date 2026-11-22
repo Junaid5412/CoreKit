@@ -487,6 +487,13 @@ func storageScan(ctx context.Context, progress func(int, string)) (*stResult, er
 	}
 	res.Big = all
 
+	progress(86, "Finding photos, videos and big files")
+	var partial bool
+	res.Files, res.Cats, partial = scanFiles(ctx, res.Drives, 75*time.Second)
+	if partial {
+		res.Note = "Some folders were too large to list fully."
+	}
+
 	progress(94, "Working out recommendations")
 	finishStorage(res, time.Now().Unix())
 	res.Ms = time.Since(start).Milliseconds()
