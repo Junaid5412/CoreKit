@@ -50,7 +50,7 @@ class RemoteService : Service() {
         private const val CH = "remote"
         private const val CH_ASK = "remote_ask"
         private const val NID = 41
-        private const val NID_ASK = 42
+        const val NID_ASK = 42
         @Volatile var running = false; private set
     }
 
@@ -248,8 +248,9 @@ class RemoteService : Service() {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-    private fun answerIntent(id: String, allow: Boolean): PendingIntent = PendingIntent.getService(this, if (allow) 3 else 4,
-        Intent(this, RemoteService::class.java).setAction(ACTION_ANSWER).putExtra(EXTRA_ID, id).putExtra(EXTRA_ALLOW, allow),
+    private fun answerIntent(id: String, allow: Boolean): PendingIntent = PendingIntent.getBroadcast(this, (id.hashCode() * 31) + (if (allow) 3 else 4),
+        Intent(this, AskReceiver::class.java).setAction(ACTION_ANSWER).setData(android.net.Uri.parse("corekit://ask/$id/" + (if (allow) "allow" else "deny")))
+            .putExtra(EXTRA_ID, id).putExtra(EXTRA_ALLOW, allow),
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
     private fun answer(id: String, allow: Boolean) {

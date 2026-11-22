@@ -51,7 +51,8 @@ type stApp struct {
 	Bloat     bool   `json:"bloat"`
 	BloatWhy  string `json:"bloatWhy,omitempty"`
 	Removable bool   `json:"removable"`
-	Uninstall string `json:"-"` // kept on the host only, never sent to the page
+	Approx    bool   `json:"approx,omitempty"` // size is an estimate (no exact figure available)
+	Uninstall string `json:"-"`                // kept on the host only, never sent to the page
 	Quiet     bool   `json:"-"`
 	Family    string `json:"-"`
 }
@@ -64,14 +65,16 @@ type stClean struct {
 	Count int    `json:"count"`
 	Safe  bool   `json:"safe"`
 	Path  string `json:"path,omitempty"`
+	Group string `json:"group,omitempty"` // Browsers | Windows | Apps | Your files
 }
 
 type stBig struct {
 	Path  string `json:"path"`
 	Name  string `json:"name"`
 	Bytes int64  `json:"bytes"`
-	Kind  string `json:"kind"` // folder | file
+	Kind  string `json:"kind"` // folder | file | app
 	Drive string `json:"drive,omitempty"`
+	Mod   int64  `json:"mod,omitempty"` // last modified (unix seconds), 0 if unknown
 }
 
 type stRec struct {
@@ -98,6 +101,7 @@ type stResult struct {
 	AppCount int       `json:"appCount"`
 	Ms       int64     `json:"ms"`
 	Note     string    `json:"note,omitempty"`
+	Needs    []string  `json:"needs,omitempty"` // permissions the page should offer, e.g. "usage" (Android)
 }
 
 // ---------------------------------------------------------------- store (maps ids to actions)
@@ -199,8 +203,8 @@ func finishStorage(res *stResult, now int64) {
 		}
 		return res.Recs[i].Bytes > res.Recs[j].Bytes
 	})
-	if len(res.Recs) > 60 {
-		res.Recs = res.Recs[:60]
+	if len(res.Recs) > 120 {
+		res.Recs = res.Recs[:120]
 	}
 	res.Reclaim = reclaim
 	if res.Clean == nil {

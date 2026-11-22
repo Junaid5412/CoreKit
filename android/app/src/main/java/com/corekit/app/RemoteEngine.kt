@@ -90,6 +90,18 @@ object RemoteEngine {
     }
 
     /** Sends one command (JSON) to the engine, off the calling thread. */
+    /** Same as [cmd] but answers on the calling thread (used where the process may be torn down). */
+    fun cmdNow(ctx: Context, json: String): Boolean {
+        if (!ensure(ctx)) return false
+        return try {
+            val c = open("cmd", "POST")
+            c.doOutput = true; c.readTimeout = 5000
+            c.setRequestProperty("Content-Type", "application/json")
+            c.outputStream.use { it.write(json.toByteArray()) }
+            val ok = c.responseCode in 200..299; c.disconnect(); ok
+        } catch (_: Throwable) { false }
+    }
+
     fun cmd(ctx: Context, json: String) {
         io.execute {
             if (!ensure(ctx)) return@execute

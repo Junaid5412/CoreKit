@@ -512,6 +512,8 @@ class Host(private val act: MainActivity, private val web: WebView) {
             JSONObject().put("items", items)
         }
         "drill" -> StorageScanner.drill(act, b.optString("path"))
+        "usage" -> JSONObject().put("ok", startSafe(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)))
+        "freeup" -> JSONObject().put("ok", startSafe(Intent(android.os.storage.StorageManager.ACTION_MANAGE_STORAGE), Intent(Settings.ACTION_INTERNAL_STORAGE_SETTINGS)))
         else -> JSONObject().put("error", "unknown")
     }
 
