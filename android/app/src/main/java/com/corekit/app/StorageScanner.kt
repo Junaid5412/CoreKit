@@ -256,6 +256,20 @@ object StorageScanner {
         mode == AppOpsManager.MODE_ALLOWED
     } catch (_: Throwable) { false }
 
+    private fun downloadsInfo(dir: File): Pair<Long, Int> {
+        if (!dir.isDirectory) return 0L to 0
+        val kids = dir.listFiles() ?: return 0L to 0
+        var t = 0L
+        for (k in kids) t += dirSize(k)
+        return t to kids.size
+    }
+
+    private fun apkBytes(ai: ApplicationInfo): Long {
+        var t = File(ai.sourceDir ?: "").length()
+        for (p in ai.splitSourceDirs ?: emptyArray<String>()) t += File(p).length()
+        return t
+    }
+
     private fun dirSize(f: File?): Long {
         if (f == null || !f.exists()) return 0
         if (f.isFile) return f.length()
