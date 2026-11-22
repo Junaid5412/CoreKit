@@ -82,7 +82,16 @@ The UIs never know which platform they run on. They talk to the host through:
   downloads) and plain recommendations. Routes `storage/scan` (SSE), `storage/clean {ids,pick}`,
   `storage/uninstall {ids}`, `storage/drill {path}`. Result shape in `desktop/storage.go`
   (`stResult`); Windows collects in `storage_windows.go` (+ `scripts/storage.ps1`), Android in
-  `StorageScanner.kt`, both producing the same JSON for the one `storage.html`.
+  `StorageScanner.kt`, both producing the same JSON for the one `storage.html`. Every drive is
+  measured top-level folder by folder (parallel, per-folder limits) so the "where did it go" bar
+  adds up; programs with no recorded size are measured from their folder. Fields beyond the
+  basics: `clean[].group` (Browsers | Windows | Apps | Your files), `big[].mod` and `big[].kind`
+  (`folder|file|app`), `apps[].approx` (size is only the package size), and `needs: ["usage"]`
+  (Android: the page offers to open Usage access, which unlocks exact app sizes, photo/video/audio
+  totals and last-used dates; no media permissions are requested). Routes `storage/usage` and
+  `storage/freeup` (Android only) open the matching system screens. Downloads deletes are
+  restricted to paths inside the Downloads folder on both platforms. The remote "wants to connect"
+  notification buttons go through `AskReceiver` (a broadcast), not the service.
 
 * **Virtual Environment** – not part of CoreKit. Its code (engine, page, image tools and
   workflows) is kept on the `virtual-environment` branch for a separate app.

@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -66,3 +67,32 @@ func TestStorageLiveScan(t *testing.T) {
 }
 
 func testingLiveOff() bool { return os.Getenv("CK_LIVE") != "1" }
+
+// Only files inside Downloads may be deleted, whatever paths the page sends.
+func TestStorageLiveDownloadsGuard(t *testing.T) {
+	if testingLiveOff() {
+		t.Skip("set CK_LIVE=1 to run against this PC")
+	}
+	home := t.TempDir()
+	t.Setenv("USERPROFILE", home)
+	dl := downloadsDir()
+	_ = os.MkdirAll(filepath.Join(dl, "sub"), 0o755)
+	inside := filepath.Join(dl, "a.zip")
+	folder := filepath.Join(dl, "sub")
+	outside := filepath.Join(home, "keep.txt")
+	for _, p := range []string{inside, filepath.Join(folder, "b.bin"), outside} {
+		if err := os.WriteFile(p, []byte("12345"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, b := removeDownloads([]string{inside, folder, outside, dl, filepath.Join(dl, "..", "keep.txt")})
+	if n != 2 || b != 10 {
+		t.Fatalf("removed %d items, %d bytes; want 2 items, 10 bytes", n, b)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatal("a file outside Downloads was deleted")
+	}
+	if _, err := os.Stat(dl); err != nil {
+		t.Fatal("the Downloads folder itself was deleted")
+	}
+}

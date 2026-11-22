@@ -24,8 +24,8 @@ func storageScan(ctx context.Context, progress func(int, string)) (*stResult, er
 		{ID: "a2", Name: "Old Game Trial", Pub: "Games Inc", Ver: "2.3", Size: 2 << 30, Source: "program", Kind: "exe", Removable: true, Bloat: true, BloatWhy: "A pre-installed game trial.", Drive: "/"},
 	}
 	res.Clean = []stClean{
-		{ID: "temp-user", Name: "Temporary files", Desc: "Leftover temp files.", Bytes: 1200 << 20, Safe: true},
-		{ID: "cache", Name: "App caches", Desc: "Rebuilt automatically.", Bytes: 800 << 20, Safe: true},
+		{ID: "temp-user", Name: "Temporary files", Desc: "Leftover temp files.", Bytes: 1200 << 20, Safe: true, Group: "Windows"},
+		{ID: "cache", Name: "App caches", Desc: "Rebuilt automatically.", Bytes: 800 << 20, Safe: true, Group: "Apps"},
 	}
 	progress(90, "Working out recommendations")
 	finishStorage(res, time.Now().Unix())

@@ -11,7 +11,6 @@ import android.os.Environment
 import android.os.Process
 import android.os.StatFs
 import android.os.storage.StorageManager
-import android.provider.MediaStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -30,113 +29,150 @@ object StorageScanner {
         val pm = ctx.packageManager
         val res = JSONObject()
         res.put("platform", "android")
+        val usageOk = hasUsageAccess(ctx)
+        val ssm = if (Build.VERSION.SDK_INT >= 26) ctx.getSystemService(Context.STORAGE_STATS_SERVICE) as? StorageStatsManager else null
+        val exact = ssm != null && usageOk
+        val needs = JSONArray()
+        if (!exact) needs.put("usage")
+        res.put("needs", needs)
 
-        // ---- drive (internal storage) with a category breakdown ----
-        val dataDir = Environment.getDataDirectory()
-        val st = StatFs(dataDir.path)
-        val total = st.totalBytes
-        val free = st.availableBytes
-        val used = total - free
-
-        progress(25, "Measuring photos, videos and files")
-        val media = mediaSizes(ctx)
-        val appsBytes = appBytesTotal(ctx)
-        val known = media.values.sum() + appsBytes
-        val other = (used - known).coerceAtLeast(0)
-        val parts = JSONArray()
-        fun part(n: String, b: Long, c: String) { if (b > 0) parts.put(JSONObject().put("name", n).put("bytes", b).put("color", c)) }
-        part("Apps", appsBytes, "#38bdf8")
-        part("Photos", media["images"] ?: 0, "#34d399")
-        part("Videos", media["video"] ?: 0, "#a78bfa")
-        part("Audio", media["audio"] ?: 0, "#fbbf24")
-        part("Downloads", media["downloads"] ?: 0, "#f87171")
-        part("Other", other, "#64748b")
-        val drive = JSONObject().put("name", "Internal storage").put("label", "")
-            .put("total", total).put("free", free).put("used", used).put("kind", "system").put("parts", parts)
-        res.put("drives", JSONArray().put(drive))
+        // ---- totals (the size on the box, as Settings shows it) ----
+        val st = StatFs(Environment.getDataDirectory().path)
+        var total = st.totalBytes
+        var free = st.availableBytes
+        if (ssm != null) try {
+            total = ssm.getTotalBytes(StorageManager.UUID_DEFAULT)
+            free = ssm.getFreeBytes(StorageManager.UUID_DEFAULT)
+        } catch (_: Throwable) {}
+        val used = (total - free).coerceAtLeast(0)
 
         // ---- apps ----
-        progress(50, "Listing apps")
+        progress(20, "Listing apps")
         val usage = lastUsedMap(ctx)
-        val ssm = if (Build.VERSION.SDK_INT >= 26) ctx.getSystemService(Context.STORAGE_STATS_SERVICE) as? StorageStatsManager else null
-        val uuid = if (Build.VERSION.SDK_INT >= 26) StorageManager.UUID_DEFAULT else null
         val apps = JSONArray()
         var cacheAll = 0L
+        var appsBytes = 0L
         for (ai in pm.getInstalledApplications(0)) {
             if (ai.packageName == ctx.packageName) continue
             val system = ai.flags and ApplicationInfo.FLAG_SYSTEM != 0
             val updatedSystem = ai.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP != 0
             var size = 0L
-            var cache = 0L
-            if (ssm != null && uuid != null) {
+            var approx = false
+            if (exact && ssm != null) {
                 try {
-                    val s = ssm.queryStatsForPackage(uuid, ai.packageName, Process.myUserHandle())
-                    size = s.appBytes + s.dataBytes
-                    cache = s.cacheBytes
-                    cacheAll += cache
+                    val q = ssm.queryStatsForPackage(StorageManager.UUID_DEFAULT, ai.packageName, Process.myUserHandle())
+                    size = q.appBytes + q.dataBytes
+                    cacheAll += q.cacheBytes
                 } catch (_: Throwable) {}
             }
-            if (size == 0L) size = File(ai.sourceDir ?: "").length() // floor when usage access isn't granted
-            val src = sourceOf(pm, ai.packageName, system, updatedSystem)
-            val removable = !system || updatedSystem
-            val (bloat, why) = bloatOf(ai.packageName, label(pm, ai), system)
-            apps.put(JSONObject()
+            if (size == 0L) { size = apkBytes(ai); approx = true } // only the installed package size is known
+            else appsBytes += size
+            val pi = try { pm.getPackageInfo(ai.packageName, 0) } catch (_: Throwable) { null }
+            val name = label(pm, ai)
+            val (bloat, why) = bloatOf(ai.packageName, name, system)
+            val o = JSONObject()
                 .put("id", ai.packageName)
-                .put("name", label(pm, ai))
-                .put("pub", "")
-                .put("ver", verOf(pm, ai.packageName))
+                .put("name", name)
+                .put("pub", ai.packageName)
+                .put("ver", pi?.versionName ?: "")
                 .put("size", size)
-                .put("installed", 0)
+                .put("installed", (pi?.firstInstallTime ?: 0L) / 1000)
                 .put("lastUsed", usage[ai.packageName] ?: 0L)
                 .put("loc", ai.packageName)
                 .put("drive", "Internal storage")
-                .put("source", src)
+                .put("source", sourceOf(pm, ai.packageName, system, updatedSystem))
                 .put("kind", "apk")
                 .put("system", system && !updatedSystem)
                 .put("bloat", bloat)
                 .put("bloatWhy", why)
-                .put("removable", removable))
+                .put("removable", !system || updatedSystem)
+            if (approx) o.put("approx", true)
+            apps.put(o)
         }
         res.put("apps", apps)
         res.put("appCount", apps.length())
+
+        // ---- where the space went ----
+        progress(50, "Measuring photos, videos and audio")
+        var img = 0L; var vid = 0L; var aud = 0L
+        if (exact && ssm != null) try {
+            val e = ssm.queryExternalStatsForUser(StorageManager.UUID_DEFAULT, Process.myUserHandle())
+            img = e.imageBytes; vid = e.videoBytes; aud = e.audioBytes
+        } catch (_: Throwable) {}
+        val parts = JSONArray()
+        fun part(n: String, b: Long, c: String) { if (b > 0) parts.put(JSONObject().put("name", n).put("bytes", b).put("color", c)) }
+        if (exact) {
+            part("Apps & app data", appsBytes, "#38bdf8")
+            part("Photos", img, "#34d399")
+            part("Videos", vid, "#a78bfa")
+            part("Audio", aud, "#fbbf24")
+            part("Other files & system", (used - appsBytes - img - vid - aud).coerceAtLeast(0), "#64748b")
+        } else part("Used", used, "#38bdf8")
+        val drives = JSONArray()
+        drives.put(JSONObject().put("name", "Internal storage").put("label", "").put("total", total).put("free", free)
+            .put("used", used).put("kind", "system").put("parts", parts))
+        // SD card / USB storage, if any
+        try {
+            for (d in ctx.getExternalFilesDirs(null).drop(1)) {
+                if (d == null) continue
+                val s2 = StatFs(d.path)
+                val rem = try { Environment.isExternalStorageRemovable(d) } catch (_: Throwable) { true }
+                val u2 = (s2.totalBytes - s2.availableBytes).coerceAtLeast(0)
+                drives.put(JSONObject().put("name", if (rem) "SD card" else "Extra storage").put("label", "")
+                    .put("total", s2.totalBytes).put("free", s2.availableBytes).put("used", u2)
+                    .put("kind", if (rem) "removable" else "fixed")
+                    .put("parts", JSONArray().put(JSONObject().put("name", "Used").put("bytes", u2).put("color", "#38bdf8"))))
+            }
+        } catch (_: Throwable) {}
+        res.put("drives", drives)
 
         // ---- cleanables ----
         progress(75, "Checking caches and downloads")
         val clean = JSONArray()
         val ownCache = dirSize(ctx.cacheDir) + dirSize(ctx.codeCacheDir) + (ctx.externalCacheDir?.let { dirSize(it) } ?: 0)
-        if (ownCache > 0) clean.put(JSONObject().put("id", "owncache").put("name", "CoreKit cache").put("desc", "CoreKit's own temporary files — safe to clear.").put("bytes", ownCache).put("safe", true))
-        if (cacheAll > 0) clean.put(JSONObject().put("id", "allcache").put("name", "App caches").put("desc", "Temporary files across your apps. Android clears these from its own Free-up-space screen.").put("bytes", cacheAll).put("safe", true))
+        if (ownCache > 0) clean.put(JSONObject().put("id", "owncache").put("name", "CoreKit cache").put("desc", "CoreKit's own temporary files — safe to clear.").put("bytes", ownCache).put("safe", true).put("group", "Apps"))
+        if (cacheAll > 0) clean.put(JSONObject().put("id", "allcache").put("name", "Cache of all your apps").put("desc", "Temporary files across your apps. Android clears these from its own Free-up-space screen.").put("bytes", cacheAll).put("safe", true).put("group", "Apps"))
         val dl = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-        val (dlBytes, dlCount) = oldDownloads(dl)
-        if (dlBytes > 0) clean.put(JSONObject().put("id", "downloads").put("name", "Old downloads").put("desc", "$dlCount file(s) over two weeks old in Downloads. Review before deleting.").put("bytes", dlBytes).put("safe", false).put("path", dl.absolutePath))
+        val (dlBytes, dlCount) = downloadsInfo(dl)
+        if (dlBytes > 0) clean.put(JSONObject().put("id", "downloads").put("name", "Downloads folder").put("desc", "$dlCount item(s) in your Downloads folder. Open it and choose what to delete.").put("bytes", dlBytes).put("count", dlCount).put("safe", false).put("path", dl.absolutePath).put("group", "Your files"))
         res.put("clean", clean)
 
-        // biggest folders aren't walked on Android (scoped storage); leave empty
-        res.put("big", JSONArray())
+        // Android does not let an app list other files, so the biggest things we can show are apps
+        val bigList = ArrayList<JSONObject>()
+        for (i in 0 until apps.length()) {
+            val a = apps.getJSONObject(i)
+            if (a.optLong("size") >= 50L * 1024 * 1024)
+                bigList.add(JSONObject().put("path", a.optString("id")).put("name", a.optString("name")).put("bytes", a.optLong("size")).put("kind", "app").put("drive", "Internal storage"))
+        }
+        bigList.sortByDescending { it.optLong("bytes") }
+        val big = JSONArray()
+        bigList.take(30).forEach { big.put(it) }
+        res.put("big", big)
 
         progress(92, "Working out recommendations")
         res.put("total", total).put("free", free).put("used", used)
-        // recommendations: bloat, big unused apps, old downloads
-        val recs = JSONArray()
+        val recList = ArrayList<JSONObject>()
         var reclaim = 0L
         for (i in 0 until clean.length()) {
             val c = clean.getJSONObject(i)
-            if (c.optBoolean("safe") && c.optString("id") != "allcache") { reclaim += c.optLong("bytes") }
-            if (c.optString("id") == "owncache") recs.put(JSONObject().put("id", "c-owncache").put("title", "Clear CoreKit cache").put("why", c.optString("desc")).put("bytes", c.optLong("bytes")).put("kind", "clean").put("target", "owncache").put("safe", true))
+            if (c.optBoolean("safe") && c.optString("id") != "allcache") reclaim += c.optLong("bytes")
+            if (c.optString("id") == "owncache") recList.add(JSONObject().put("id", "c-owncache").put("title", "Clear CoreKit cache").put("why", c.optString("desc")).put("bytes", c.optLong("bytes")).put("kind", "clean").put("target", "owncache").put("safe", true))
         }
         val now = System.currentTimeMillis() / 1000
         for (i in 0 until apps.length()) {
             val a = apps.getJSONObject(i)
             if (a.optBoolean("bloat") && a.optBoolean("removable")) {
-                recs.put(JSONObject().put("id", "b-" + a.optString("id")).put("title", "Remove " + a.optString("name")).put("why", a.optString("bloatWhy")).put("bytes", a.optLong("size")).put("kind", "app-unused").put("target", a.optString("id")).put("safe", false))
+                recList.add(JSONObject().put("id", "b-" + a.optString("id")).put("title", "Remove " + a.optString("name")).put("why", a.optString("bloatWhy")).put("bytes", a.optLong("size")).put("kind", "app-unused").put("target", a.optString("id")).put("safe", false))
             } else if (a.optBoolean("removable") && !a.optBoolean("system") && a.optLong("lastUsed") > 0 && a.optLong("size") > 50L * 1024 * 1024) {
                 val days = (now - a.optLong("lastUsed")) / 86400
-                if (days >= 60) recs.put(JSONObject().put("id", "a-" + a.optString("id")).put("title", "Uninstall " + a.optString("name")).put("why", "Not opened in $days days and using " + human(a.optLong("size")) + ".").put("bytes", a.optLong("size")).put("kind", "app-unused").put("target", a.optString("id")).put("safe", false))
+                if (days >= 60) recList.add(JSONObject().put("id", "a-" + a.optString("id")).put("title", "Uninstall " + a.optString("name")).put("why", "Not opened in $days days and using " + human(a.optLong("size")) + ".").put("bytes", a.optLong("size")).put("kind", "app-unused").put("target", a.optString("id")).put("safe", false))
             }
         }
+        recList.sortWith(compareBy<JSONObject>({ if (it.optString("kind") == "clean") 0 else 1 }, { -it.optLong("bytes") }))
+        val recs = JSONArray()
+        recList.take(120).forEach { recs.put(it) }
         res.put("recs", recs)
         res.put("reclaim", reclaim)
-        if (ssm == null || !hasUsageAccess(ctx)) res.put("note", "Grant Usage access for exact app sizes")
         return res
     }
 
@@ -157,13 +193,15 @@ object StorageScanner {
             "allcache" -> log.put("Open Android Settings › Storage › Free up space to clear other apps' caches (Android doesn't let an app clear them directly).")
             "downloads" -> {
                 var n = 0; var b = 0L
+                val root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS).canonicalFile
                 for (p in pick["downloads"].orEmpty()) {
-                    val f = File(p)
-                    val len = f.length()
-                    if (runCatching { f.delete() }.getOrDefault(false)) { n++; b += len }
+                    val f = runCatching { File(p).canonicalFile }.getOrNull() ?: continue
+                    if (f == root || !f.path.startsWith(root.path + File.separator)) continue // only inside Downloads
+                    val len = dirSize(f)
+                    if (runCatching { if (f.isDirectory) f.deleteRecursively() else f.delete() }.getOrDefault(false)) { n++; b += len }
                 }
                 freed += b
-                log.put("Deleted $n old download(s) (" + human(b) + ")")
+                log.put("Deleted $n item(s) from Downloads (" + human(b) + ")")
             }
         }
         return JSONObject().put("freed", freed).put("freedText", human(freed)).put("log", log)
@@ -173,9 +211,10 @@ object StorageScanner {
         val dir = File(path)
         if (!dir.isDirectory) return JSONObject().put("error", "That folder isn't available.")
         val items = JSONArray()
-        (dir.listFiles() ?: emptyArray()).sortedByDescending { if (it.isDirectory) 0L else it.length() }.take(60).forEach {
-            items.put(JSONObject().put("name", it.name).put("path", it.absolutePath).put("bytes", if (it.isDirectory) 0L else it.length()).put("kind", if (it.isDirectory) "folder" else "file"))
-        }
+        (dir.listFiles() ?: emptyArray()).map { it to (if (it.isDirectory) dirSize(it) else it.length()) }
+            .sortedByDescending { it.second }.take(300).forEach { (f, sz) ->
+                items.put(JSONObject().put("name", f.name).put("path", f.absolutePath).put("bytes", sz).put("mod", f.lastModified() / 1000).put("kind", if (f.isDirectory) "folder" else "file"))
+            }
         return JSONObject().put("items", items).put("path", path)
     }
 
@@ -216,47 +255,6 @@ object StorageScanner {
         else @Suppress("DEPRECATION") ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), ctx.packageName)
         mode == AppOpsManager.MODE_ALLOWED
     } catch (_: Throwable) { false }
-
-    private fun appBytesTotal(ctx: Context): Long {
-        if (Build.VERSION.SDK_INT < 26 || !hasUsageAccess(ctx)) return 0
-        val ssm = ctx.getSystemService(Context.STORAGE_STATS_SERVICE) as StorageStatsManager
-        var total = 0L
-        for (ai in ctx.packageManager.getInstalledApplications(0)) {
-            try { val s = ssm.queryStatsForPackage(StorageManager.UUID_DEFAULT, ai.packageName, Process.myUserHandle()); total += s.appBytes + s.dataBytes } catch (_: Throwable) {}
-        }
-        return total
-    }
-
-    private fun mediaSizes(ctx: Context): Map<String, Long> {
-        val out = HashMap<String, Long>()
-        val cr = ctx.contentResolver
-        fun sum(uri: android.net.Uri): Long {
-            var t = 0L
-            try {
-                cr.query(uri, arrayOf(MediaStore.MediaColumns.SIZE), null, null, null)?.use { c ->
-                    val idx = c.getColumnIndex(MediaStore.MediaColumns.SIZE)
-                    if (idx >= 0) while (c.moveToNext()) t += c.getLong(idx)
-                }
-            } catch (_: Throwable) {}
-            return t
-        }
-        out["images"] = sum(MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
-        out["video"] = sum(MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
-        out["audio"] = sum(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
-        out["downloads"] = if (Build.VERSION.SDK_INT >= 29) sum(MediaStore.Downloads.EXTERNAL_CONTENT_URI) else dirSize(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS))
-        return out
-    }
-
-    private fun oldDownloads(dir: File): Pair<Long, Int> {
-        if (!dir.isDirectory) return 0L to 0
-        val cut = System.currentTimeMillis() - 14L * 86400_000
-        var b = 0L; var n = 0
-        (dir.listFiles() ?: emptyArray()).forEach {
-            val ext = it.extension.lowercase()
-            if (it.isFile && it.lastModified() < cut && ext in setOf("apk", "zip", "rar", "7z", "iso", "exe", "dmg")) { b += it.length(); n++ }
-        }
-        return b to n
-    }
 
     private fun dirSize(f: File?): Long {
         if (f == null || !f.exists()) return 0

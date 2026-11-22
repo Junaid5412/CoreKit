@@ -6,6 +6,23 @@ $ProgressPreference = 'SilentlyContinue'
 
 function U($d) { if ($d) { try { return [int64]([DateTimeOffset]$d).ToUnixTimeSeconds() } catch { return 0 } } return 0 }
 
+# Where a classic program lives: its recorded folder, else the folder of its icon/uninstaller.
+function LocFrom($e) {
+    $l = ([string]$e.InstallLocation).Trim().Trim('"')
+    if ($l) { return $l.TrimEnd('\') }
+    foreach ($s in @([string]$e.DisplayIcon, [string]$e.UninstallString)) {
+        if (-not $s) { continue }
+        $t = $s.Trim()
+        if ($t -match '^"([^"]+)"') { $t = $Matches[1] }
+        elseif ($t -match '^([A-Za-z]:\\[^,]*?\.(exe|ico|dll))') { $t = $Matches[1] }
+        $t = ($t -split ',')[0].Trim('"')
+        if ($t -match '^[A-Za-z]:\\' -and $t -notmatch '(?i)\\Windows\\(Installer|System32)|msiexec') {
+            try { return (Split-Path $t -Parent) } catch {}
+        }
+    }
+    return ''
+}
+
 $apps = New-Object System.Collections.ArrayList
 $seen = @{}
 
@@ -19,7 +36,7 @@ foreach ($k in $keys) {
     foreach ($e in Get-ItemProperty $k) {
         $name = [string]$e.DisplayName
         if (-not $name) { continue }
-        if ([int]$e.SystemComponent -eq 1) { continue }               # hidden system pieces
+        $sysc = ([int]$e.SystemComponent -eq 1)                        # hidden system pieces: listed, never removable
         if ($e.ParentKeyName -or $e.ParentDisplayName) { continue }    # updates/sub-entries
         if ($e.ReleaseType -match 'Update|Hotfix|Security Update') { continue }
         if ($name -match '^(KB\d{6,}|Update for|Security Update|Hotfix)') { continue }
@@ -38,7 +55,8 @@ foreach ($k in $keys) {
                 ver       = [string]$e.DisplayVersion
                 size      = [int64]([int64]$e.EstimatedSize * 1024)   # EstimatedSize is in KB
                 installed = $(if ($e.InstallDate -match '^\d{8}$') { U ([datetime]::ParseExact($e.InstallDate, 'yyyyMMdd', $null)) } else { 0 })
-                loc       = [string]$e.InstallLocation
+                loc       = (LocFrom $e)
+                system    = $sysc
                 uninstall = $uninst
                 quiet     = $quiet
                 source    = 'program'
@@ -49,7 +67,6 @@ foreach ($k in $keys) {
 
 # --- Microsoft Store / UWP apps (so they can be listed and removed too) ---
 foreach ($p in Get-AppxPackage) {
-    if ($p.IsFramework -or $p.SignatureKind -eq 'System' -and $p.NonRemovable) { }
     $nm = [string]$p.Name
     if (-not $nm) { continue }
     $loc = [string]$p.InstallLocation
@@ -68,6 +85,7 @@ foreach ($p in Get-AppxPackage) {
             kind      = 'appx'
             family    = [string]$p.PackageFamilyName
             nonremovable = [bool]$p.NonRemovable
+            system    = ([bool]$p.IsFramework -or [string]$p.SignatureKind -eq 'System')
         })
 }
 

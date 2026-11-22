@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 	"unsafe"
@@ -36,7 +37,7 @@ var (
 
 var errStop = fmt.Errorf("stop")
 
-// ---------------------------------------------------------------- folder sizing (bounded)
+// ---------------------------------------------------------------- folder sizing
 
 func stDirSize(ctx context.Context, root string, deadline time.Time) int64 {
 	var total int64
@@ -68,38 +69,76 @@ func fileSize(p string) int64 {
 	return 0
 }
 
-// childSizes lists the immediate children of a folder with their sizes, largest first.
-func childSizes(ctx context.Context, root string, budget time.Duration) []stBig {
+// sizeMany measures several folders at once (disks like parallel reads), each with its own limit.
+func sizeMany(ctx context.Context, paths []string, per time.Duration) []int64 {
+	out := make([]int64, len(paths))
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for i, p := range paths {
+		if p == "" {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, p string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			out[i] = stDirSize(ctx, p, time.Now().Add(per))
+		}(i, p)
+	}
+	wg.Wait()
+	return out
+}
+
+// childSizes lists the immediate children of a folder with their sizes, largest first. Folders
+// are measured in parallel, each with its own time limit, so big drives are covered fully.
+func childSizes(ctx context.Context, root string, per time.Duration) []stBig {
 	ents, err := os.ReadDir(root)
 	if err != nil {
 		return nil
 	}
-	deadline := time.Now().Add(budget)
-	var out []stBig
-	for _, e := range ents {
-		if ctx.Err() != nil || time.Now().After(deadline) {
-			break
-		}
+	out := make([]stBig, len(ents))
+	sem := make(chan struct{}, 8)
+	var wg sync.WaitGroup
+	for i, e := range ents {
 		full := filepath.Join(root, e.Name())
 		b := stBig{Path: full, Name: e.Name(), Kind: "file"}
+		info, ierr := e.Info()
+		if ierr == nil {
+			b.Mod = info.ModTime().Unix()
+		}
 		if e.IsDir() {
 			b.Kind = "folder"
-			b.Bytes = stDirSize(ctx, full, time.Now().Add(budget/3))
-		} else if info, err := e.Info(); err == nil {
+			wg.Add(1)
+			sem <- struct{}{}
+			go func(i int, b stBig) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				b.Bytes = stDirSize(ctx, b.Path, time.Now().Add(per))
+				out[i] = b
+			}(i, b)
+			continue
+		}
+		if ierr == nil {
 			b.Bytes = info.Size()
 		}
-		if b.Bytes > 0 {
-			out = append(out, b)
+		out[i] = b
+	}
+	wg.Wait()
+	res := out[:0]
+	for _, b := range out {
+		if b.Path != "" && b.Bytes > 0 {
+			res = append(res, b)
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Bytes > out[j].Bytes })
-	return out
+	sort.SliceStable(res, func(i, j int) bool { return res[i].Bytes > res[j].Bytes })
+	return res
 }
 
 // ---------------------------------------------------------------- drives
 
 func listDrives() []stDrive {
-	buf := make([]uint16, 256)
+	buf := make([]uint16, 512)
 	n, _, _ := spGetLogicalDrives.Call(uintptr(len(buf)), uintptr(unsafe.Pointer(&buf[0])))
 	if n == 0 {
 		return nil
@@ -140,63 +179,155 @@ func listDrives() []stDrive {
 	return drives
 }
 
-// driveParts gives a rough "where the space went" breakdown for the system drive.
-func driveParts(ctx context.Context, d *stDrive) {
-	if d.Kind == "removable" {
-		return
-	}
-	root := d.Name + `\`
-	budget := 6 * time.Second
+var partColors = []string{"#38bdf8", "#a78bfa", "#2dd4bf", "#fbbf24", "#f472b6", "#fb923c"}
+
+// scanDrive measures every top-level item of a drive (in parallel), turns them into the
+// "where did the space go" bar, and returns the big items for the list under it.
+func scanDrive(ctx context.Context, d *stDrive) []stBig {
+	kids := childSizes(ctx, d.Name+`\`, 40*time.Second)
 	var parts []stPart
+	var counted int64
 	add := func(name, color string, bytes int64) {
 		if bytes > 0 {
 			parts = append(parts, stPart{Name: name, Bytes: bytes, Color: color})
+			counted += bytes
 		}
 	}
-	if strings.EqualFold(d.Name, os.Getenv("SystemDrive")) {
-		apps := stDirSize(ctx, os.Getenv("ProgramFiles"), time.Now().Add(budget)) + stDirSize(ctx, os.Getenv("ProgramFiles(x86)"), time.Now().Add(budget))
-		win := stDirSize(ctx, filepath.Join(root, "Windows"), time.Now().Add(budget))
-		users := stDirSize(ctx, filepath.Join(root, "Users"), time.Now().Add(2*budget))
-		add("Programs", "#38bdf8", apps)
+	if d.Kind == "system" {
+		var progs, win, users, data, sysf int64
+		var rest []stBig
+		for _, k := range kids {
+			switch strings.ToLower(k.Name) {
+			case "windows":
+				win += k.Bytes
+			case "program files", "program files (x86)":
+				progs += k.Bytes
+			case "users":
+				users += k.Bytes
+			case "programdata":
+				data += k.Bytes
+			default:
+				if k.Kind == "file" {
+					sysf += k.Bytes // pagefile, hiberfil, swapfile ...
+				} else {
+					rest = append(rest, k)
+				}
+			}
+		}
+		var restSum int64
+		for _, k := range rest {
+			restSum += k.Bytes
+		}
+		add("Programs", "#38bdf8", progs)
 		add("Windows", "#a78bfa", win)
-		add("Users & data", "#2dd4bf", users)
-		other := d.Used - apps - win - users
-		add("Other", "#64748b", other)
+		add("Users & files", "#2dd4bf", users)
+		add("App data", "#fbbf24", data)
+		add("System files", "#f472b6", sysf)
+		add("Other folders", "#fb923c", restSum)
 	} else {
-		add("Used", "#38bdf8", d.Used)
+		for i, k := range kids {
+			if i < 5 {
+				add(k.Name, partColors[i%len(partColors)], k.Bytes)
+			}
+		}
+		var more int64
+		for i, k := range kids {
+			if i >= 5 {
+				more += k.Bytes
+			}
+		}
+		add("Other", "#64748b", more)
+	}
+	if rest := d.Used - counted; rest > 0 {
+		add("Not measured / protected", "#475569", rest)
+	}
+	if len(parts) == 0 {
+		parts = []stPart{{Name: "Used", Bytes: d.Used, Color: "#38bdf8"}}
 	}
 	d.Parts = parts
+	var big []stBig
+	for _, k := range kids {
+		if k.Bytes >= 50<<20 && len(big) < 30 {
+			k.Drive = d.Name
+			big = append(big, k)
+		}
+	}
+	return big
 }
 
 // ---------------------------------------------------------------- cleanables
 
 type cleanDef struct {
-	id, name, desc string
-	safe           bool
-	paths          []string // folders whose contents are cleared (or a file to delete)
-	whole          bool     // delete the folder itself (not just its contents)
+	id, name, desc, group string
+	safe                  bool
+	paths                 []string // folders whose contents are cleared (or a file to delete)
+	whole                 bool     // delete the folder itself (not just its contents)
+}
+
+// expand turns wildcard patterns (browser profiles, GPU caches) into the folders that exist.
+func expand(patterns ...string) []string {
+	var out []string
+	for _, p := range patterns {
+		if p == "" {
+			continue
+		}
+		if strings.ContainsAny(p, "*?[") {
+			m, _ := filepath.Glob(p)
+			out = append(out, m...)
+		} else {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func cleanDefs(hiberOn bool) []cleanDef {
 	local := os.Getenv("LOCALAPPDATA")
-	win := filepath.Join(os.Getenv("SystemDrive")+`\`, "Windows")
+	roam := os.Getenv("APPDATA")
+	pdata := os.Getenv("ProgramData")
+	sd := os.Getenv("SystemDrive") + `\`
+	win := filepath.Join(sd, "Windows")
+	j := filepath.Join
+	chromium := func(vendor string) []string {
+		ud := j(local, vendor, "User Data")
+		return expand(j(ud, "*", "Cache"), j(ud, "*", "Code Cache"), j(ud, "*", "GPUCache"), j(ud, "ShaderCache"), j(ud, "GrShaderCache"))
+	}
 	defs := []cleanDef{
-		{id: "temp-user", name: "Temporary files", desc: "Leftover files in your temp folders.", safe: true, paths: []string{os.Getenv("TEMP"), filepath.Join(win, "Temp")}},
-		{id: "update", name: "Windows Update cache", desc: "Installer files Windows keeps after updating.", safe: true, paths: []string{filepath.Join(win, "SoftwareDistribution", "Download")}},
-		{id: "delivery", name: "Delivery Optimization", desc: "Update pieces shared with other PCs.", safe: true, paths: []string{filepath.Join(win, "SoftwareDistribution", "DeliveryOptimization")}},
-		{id: "prefetch", name: "Prefetch", desc: "Startup hints Windows rebuilds automatically.", safe: true, paths: []string{filepath.Join(win, "Prefetch")}},
-		{id: "thumbs", name: "Thumbnail cache", desc: "Preview images Windows rebuilds when needed.", safe: true, paths: []string{filepath.Join(local, "Microsoft", "Windows", "Explorer")}},
-		{id: "wer", name: "Error reports", desc: "Saved crash reports.", safe: true, paths: []string{filepath.Join(local, "Microsoft", "Windows", "WER"), filepath.Join(os.Getenv("ProgramData"), "Microsoft", "Windows", "WER")}},
-		{id: "dumps", name: "Crash dumps", desc: "Memory dumps from crashes.", safe: true, paths: []string{filepath.Join(local, "CrashDumps"), filepath.Join(win, "Minidump")}},
-		{id: "chrome", name: "Chrome cache", desc: "Chrome's temporary web files.", safe: true, paths: []string{filepath.Join(local, "Google", "Chrome", "User Data", "Default", "Cache")}},
-		{id: "edge", name: "Edge cache", desc: "Edge's temporary web files.", safe: true, paths: []string{filepath.Join(local, "Microsoft", "Edge", "User Data", "Default", "Cache")}},
-		{id: "recyclebin", name: "Recycle Bin", desc: "Files you already deleted.", safe: true},
+		// browsers
+		{id: "chrome", group: "Browsers", name: "Chrome cache", desc: "Chrome's temporary web files, every profile.", safe: true, paths: chromium(j("Google", "Chrome"))},
+		{id: "edge", group: "Browsers", name: "Edge cache", desc: "Edge's temporary web files, every profile.", safe: true, paths: chromium(j("Microsoft", "Edge"))},
+		{id: "brave", group: "Browsers", name: "Brave cache", desc: "Brave's temporary web files, every profile.", safe: true, paths: chromium(j("BraveSoftware", "Brave-Browser"))},
+		{id: "firefox", group: "Browsers", name: "Firefox cache", desc: "Firefox's temporary web files, every profile.", safe: true, paths: expand(j(local, "Mozilla", "Firefox", "Profiles", "*", "cache2"))},
+		// Windows
+		{id: "temp-user", group: "Windows", name: "Temporary files", desc: "Leftover files in your temp folders.", safe: true, paths: []string{os.Getenv("TEMP"), j(win, "Temp")}},
+		{id: "update", group: "Windows", name: "Windows Update cache", desc: "Installer files Windows keeps after updating.", safe: true, paths: []string{j(win, "SoftwareDistribution", "Download")}},
+		{id: "delivery", group: "Windows", name: "Delivery Optimization", desc: "Update pieces shared with other PCs.", safe: true, paths: []string{j(win, "SoftwareDistribution", "DeliveryOptimization")}},
+		{id: "prefetch", group: "Windows", name: "Prefetch", desc: "Startup hints Windows rebuilds automatically.", safe: true, paths: []string{j(win, "Prefetch")}},
+		{id: "thumbs", group: "Windows", name: "Thumbnail cache", desc: "Preview images Windows rebuilds when needed.", safe: true, paths: []string{j(local, "Microsoft", "Windows", "Explorer")}},
+		{id: "wer", group: "Windows", name: "Error reports", desc: "Saved crash reports.", safe: true, paths: []string{j(local, "Microsoft", "Windows", "WER"), j(pdata, "Microsoft", "Windows", "WER")}},
+		{id: "dumps", group: "Windows", name: "Crash dumps", desc: "Memory dumps from crashes.", safe: true, paths: []string{j(local, "CrashDumps"), j(win, "Minidump"), j(win, "LiveKernelReports"), j(win, "MEMORY.DMP")}},
+		{id: "winlogs", group: "Windows", name: "Windows logs", desc: "Setup and servicing logs.", safe: true, paths: []string{j(win, "Logs", "CBS"), j(win, "Logs", "DISM")}},
+		{id: "recyclebin", group: "Windows", name: "Recycle Bin", desc: "Files you already deleted.", safe: true},
+		// apps & developer tools
+		{id: "gpu", group: "Apps", name: "Graphics shader caches", desc: "DirectX, NVIDIA and AMD caches; games rebuild them.", safe: true, paths: expand(j(local, "D3DSCache"), j(local, "NVIDIA", "DXCache"), j(local, "NVIDIA", "GLCache"), j(local, "AMD", "DxCache"), j(local, "AMD", "GLCache"))},
+		{id: "chat", group: "Apps", name: "Chat app caches", desc: "Discord, Slack and Teams temporary files.", safe: true, paths: expand(j(roam, "discord", "Cache"), j(roam, "discord", "Code Cache"), j(roam, "discord", "GPUCache"), j(roam, "Slack", "Cache"), j(roam, "Slack", "Code Cache"), j(roam, "Microsoft", "Teams", "Cache"), j(roam, "Microsoft", "Teams", "tmp"))},
+		{id: "spotify", group: "Apps", name: "Spotify cache", desc: "Songs saved for offline playback; they download again when needed.", safe: true, paths: expand(j(local, "Spotify", "Storage"), j(local, "Spotify", "Data"))},
+		{id: "devcache", group: "Apps", name: "Developer caches", desc: "npm, pip and NuGet download caches.", safe: true, paths: expand(j(local, "npm-cache"), j(local, "pip", "Cache"), j(local, "NuGet", "v3-cache"))},
 	}
-	if hiberFile := os.Getenv("SystemDrive") + `\hiberfil.sys`; hiberOn && fileSize(hiberFile) > 0 {
-		defs = append(defs, cleanDef{id: "hibernation", name: "Hibernation file", desc: "Frees space by turning off hibernate (you can turn it back on).", safe: false, paths: []string{hiberFile}})
+	if hiberFile := sd + "hiberfil.sys"; hiberOn && fileSize(hiberFile) > 0 {
+		defs = append(defs, cleanDef{id: "hibernation", group: "Windows", name: "Hibernation file", desc: "Frees space by turning off hibernate (you can turn it back on).", safe: false, paths: []string{hiberFile}})
 	}
-	if wo := os.Getenv("SystemDrive") + `\Windows.old`; dirExists(wo) {
-		defs = append(defs, cleanDef{id: "windowsold", name: "Previous Windows (Windows.old)", desc: "Your old Windows kept after an upgrade. Removing it means you can't roll back.", safe: false, paths: []string{wo}, whole: true})
+	if wo := sd + "Windows.old"; dirExists(wo) {
+		defs = append(defs, cleanDef{id: "windowsold", group: "Windows", name: "Previous Windows (Windows.old)", desc: "Your old Windows kept after an upgrade. Removing it means you can't roll back.", safe: false, paths: []string{wo}, whole: true})
+	}
+	var setup []string
+	for _, n := range []string{`$Windows.~BT`, `$Windows.~WS`} {
+		if dirExists(sd + n) {
+			setup = append(setup, sd+n)
+		}
+	}
+	if len(setup) > 0 {
+		defs = append(defs, cleanDef{id: "winsetup", group: "Windows", name: "Windows upgrade leftovers", desc: "Files from a Windows upgrade that was downloaded or started.", safe: false, paths: setup, whole: true})
 	}
 	return defs
 }
@@ -207,15 +338,20 @@ func dirExists(p string) bool {
 }
 
 func recycleSize(ctx context.Context, drives []stDrive) int64 {
-	var total int64
+	var paths []string
 	for _, d := range drives {
-		if d.Kind == "removable" {
-			continue
+		if d.Kind != "removable" {
+			paths = append(paths, filepath.Join(d.Name+`\`, "$Recycle.Bin"))
 		}
-		total += stDirSize(ctx, filepath.Join(d.Name+`\`, "$Recycle.Bin"), time.Now().Add(4*time.Second))
+	}
+	var total int64
+	for _, n := range sizeMany(ctx, paths, 10*time.Second) {
+		total += n
 	}
 	return total
 }
+
+func downloadsDir() string { return filepath.Join(os.Getenv("USERPROFILE"), "Downloads") }
 
 // ---------------------------------------------------------------- the scan
 
@@ -223,16 +359,16 @@ func storageScan(ctx context.Context, progress func(int, string)) (*stResult, er
 	start := time.Now()
 	res := &stResult{Platform: "windows"}
 
-	progress(5, "Reading drives")
+	progress(4, "Reading drives")
 	res.Drives = listDrives()
 
-	progress(15, "Listing installed programs")
+	progress(10, "Listing installed programs")
 	raw, err := runPS(ctx, storagePS, nil, func(_, _, _ string) {})
 	var pr struct {
 		Apps []struct {
 			ID, Name, Pub, Ver, Loc, Uninstall, Source, Kind, Family string
 			Size, Installed                                          int64
-			Quiet, NonRemovable                                      bool
+			Quiet, NonRemovable, System                              bool
 		} `json:"apps"`
 		HiberOn bool   `json:"hiberOn"`
 		OsDrive string `json:"osDrive"`
@@ -240,24 +376,59 @@ func storageScan(ctx context.Context, progress func(int, string)) (*stResult, er
 	if err == nil {
 		_ = json.Unmarshal(raw, &pr)
 	}
+	sysDrive := strings.ToUpper(os.Getenv("SystemDrive"))
 	for _, a := range pr.Apps {
 		drive := driveOf(a.Loc)
+		if drive == "" {
+			if exe, _ := parseCommand(a.Uninstall); exe != "" {
+				drive = driveOf(exe)
+			}
+		}
+		if drive == "" {
+			drive = sysDrive
+		}
 		bloat, why := isWinBloat(a.Name, a.Pub)
-		removable := true
-		src := a.Source
-		if a.Source == "store" {
+		var removable, system bool
+		switch a.Source {
+		case "store":
 			removable = !a.NonRemovable
+			system = a.System || a.NonRemovable
+		default:
+			system = a.System
+			removable = !a.System && a.Uninstall != ""
 		}
 		res.Apps = append(res.Apps, stApp{
 			ID: a.ID, Name: a.Name, Pub: a.Pub, Ver: a.Ver, Size: a.Size, Installed: a.Installed,
-			Loc: a.Loc, Drive: drive, Source: src, Kind: a.Kind, Removable: removable,
-			Bloat: bloat, BloatWhy: why, Uninstall: a.Uninstall, Quiet: a.Quiet, Family: a.Family,
+			Loc: a.Loc, Drive: drive, Source: a.Source, Kind: a.Kind, Removable: removable, System: system,
+			Bloat: bloat && !system, BloatWhy: why, Uninstall: a.Uninstall, Quiet: a.Quiet, Family: a.Family,
 		})
 	}
 
-	progress(45, "Measuring reclaimable space")
+	// many programs record no size; measure their folder so the list is complete
+	progress(24, "Measuring program sizes")
+	{
+		var idx []int
+		var paths []string
+		pf := []string{strings.ToLower(os.Getenv("ProgramFiles")), strings.ToLower(os.Getenv("ProgramFiles(x86)")), strings.ToLower(os.Getenv("SystemRoot"))}
+		for i, a := range res.Apps {
+			if a.Size > 0 || a.Loc == "" || !dirExists(a.Loc) || filepath.Dir(a.Loc) == a.Loc {
+				continue
+			}
+			l := strings.ToLower(strings.TrimRight(a.Loc, `\`))
+			if l == pf[0] || l == pf[1] || l == pf[2] {
+				continue
+			}
+			idx = append(idx, i)
+			paths = append(paths, a.Loc)
+		}
+		for k, n := range sizeMany(ctx, paths, 6*time.Second) {
+			res.Apps[idx[k]].Size = n
+		}
+	}
+
+	progress(38, "Measuring reclaimable space")
 	for _, def := range cleanDefs(pr.HiberOn) {
-		c := stClean{ID: def.id, Name: def.name, Desc: def.desc, Safe: def.safe}
+		c := stClean{ID: def.id, Name: def.name, Desc: def.desc, Safe: def.safe, Group: def.group}
 		switch def.id {
 		case "recyclebin":
 			c.Bytes = recycleSize(ctx, res.Drives)
@@ -265,15 +436,19 @@ func storageScan(ctx context.Context, progress func(int, string)) (*stResult, er
 			c.Bytes = fileSize(def.paths[0])
 			c.Path = def.paths[0]
 		default:
+			var dirs []string
 			for _, p := range def.paths {
 				if p == "" {
 					continue
 				}
-				if def.whole {
-					c.Bytes += stDirSize(ctx, p, time.Now().Add(8*time.Second))
-				} else if dirExists(p) {
-					c.Bytes += stDirSize(ctx, p, time.Now().Add(4*time.Second))
+				if def.whole || dirExists(p) {
+					dirs = append(dirs, p)
+				} else {
+					c.Bytes += fileSize(p) // a single file such as MEMORY.DMP
 				}
+			}
+			for _, n := range sizeMany(ctx, dirs, 15*time.Second) {
+				c.Bytes += n
 			}
 		}
 		if c.Bytes > 0 {
@@ -281,47 +456,38 @@ func storageScan(ctx context.Context, progress func(int, string)) (*stResult, er
 		}
 	}
 
-	// Downloads clutter: old installers/archives
-	progress(65, "Checking the Downloads folder")
-	if dl := filepath.Join(os.Getenv("USERPROFILE"), "Downloads"); dirExists(dl) {
+	// the whole Downloads folder, so anything in it can be picked and deleted
+	progress(52, "Checking the Downloads folder")
+	if dl := downloadsDir(); dirExists(dl) {
 		var bytes int64
 		var n int
-		cut := time.Now().AddDate(0, 0, -14)
 		_ = filepath.WalkDir(dl, func(p string, d fs.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return nil
 			}
-			ext := strings.ToLower(filepath.Ext(p))
-			if ext == ".exe" || ext == ".msi" || ext == ".zip" || ext == ".iso" || ext == ".rar" || ext == ".7z" || ext == ".dmg" {
-				if info, e := d.Info(); e == nil && info.ModTime().Before(cut) {
-					bytes += info.Size()
-					n++
-				}
+			if info, e := d.Info(); e == nil {
+				bytes += info.Size()
+				n++
 			}
 			return nil
 		})
 		if bytes > 0 {
-			res.Clean = append(res.Clean, stClean{ID: "downloads", Name: "Old downloads", Desc: fmt.Sprintf("%d installer/archive files over two weeks old in your Downloads folder. Review before deleting.", n), Bytes: bytes, Count: n, Safe: false, Path: dl})
+			res.Clean = append(res.Clean, stClean{ID: "downloads", Group: "Your files", Name: "Downloads folder", Desc: fmt.Sprintf("%d files in your Downloads folder. Open it and choose what to delete.", n), Bytes: bytes, Count: n, Safe: false, Path: dl})
 		}
 	}
 
-	progress(75, "Finding the biggest folders")
-	seen := map[string]bool{}
+	// every drive, fully measured
+	var all []stBig
 	for i := range res.Drives {
 		if ctx.Err() != nil {
 			break
 		}
-		driveParts(ctx, &res.Drives[i])
-		for _, b := range childSizes(ctx, res.Drives[i].Name+`\`, 8*time.Second) {
-			if b.Bytes >= 500<<20 && !seen[b.Path] {
-				seen[b.Path] = true
-				b.Drive = res.Drives[i].Name
-				res.Big = append(res.Big, b)
-			}
-		}
+		progress(60+i*30/max(1, len(res.Drives)), "Measuring "+res.Drives[i].Name)
+		all = append(all, scanDrive(ctx, &res.Drives[i])...)
 	}
+	res.Big = all
 
-	progress(92, "Working out recommendations")
+	progress(94, "Working out recommendations")
 	finishStorage(res, time.Now().Unix())
 	res.Ms = time.Since(start).Milliseconds()
 	return res, nil
@@ -330,7 +496,7 @@ func storageScan(ctx context.Context, progress func(int, string)) (*stResult, er
 var reDrive = regexp.MustCompile(`^([A-Za-z]):`)
 
 func driveOf(path string) string {
-	if m := reDrive.FindStringSubmatch(path); m != nil {
+	if m := reDrive.FindStringSubmatch(strings.Trim(path, `" `)); m != nil {
 		return strings.ToUpper(m[1]) + ":"
 	}
 	return ""
@@ -381,9 +547,9 @@ func storageClean(ctx context.Context, ids []string, pick map[string][]string) (
 				log = append(log, "Could not fully remove Windows.old (administrator needed)")
 			}
 		case "downloads":
-			n, b := removeFiles(pick["downloads"])
+			n, b := removeDownloads(pick["downloads"])
 			freed += b
-			log = append(log, fmt.Sprintf("Deleted %d old download(s) (%s)", n, fmtSize(b)))
+			log = append(log, fmt.Sprintf("Deleted %d item(s) from Downloads (%s)", n, fmtSize(b)))
 		default:
 			def, ok := defsByID[id]
 			if !ok {
@@ -391,8 +557,18 @@ func storageClean(ctx context.Context, ids []string, pick map[string][]string) (
 			}
 			var cf int64
 			for _, p := range def.paths {
-				if p != "" {
+				if p == "" {
+					continue
+				}
+				if def.whole {
+					f := stDirSize(ctx, p, time.Now().Add(20*time.Second))
+					if removeWindowsOld(ctx, p) {
+						cf += f
+					}
+				} else if dirExists(p) {
 					cf += clearContents(ctx, p)
+				} else if sz := fileSize(p); sz > 0 && os.Remove(p) == nil {
+					cf += sz
 				}
 			}
 			freed += cf
@@ -425,14 +601,30 @@ func clearContents(ctx context.Context, root string) int64 {
 	return freed
 }
 
-func removeFiles(paths []string) (int, int64) {
+// removeDownloads deletes the chosen files or folders, but only ones inside the Downloads folder.
+func removeDownloads(paths []string) (int, int64) {
 	var n int
 	var b int64
+	dl := filepath.Clean(downloadsDir())
 	for _, p := range paths {
-		s := fileSize(p)
-		if os.Remove(p) == nil {
+		p = filepath.Clean(p)
+		rel, err := filepath.Rel(dl, p)
+		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		st, err := os.Lstat(p)
+		if err != nil {
+			continue
+		}
+		if st.IsDir() {
+			s := stDirSize(context.Background(), p, time.Now().Add(30*time.Second))
+			if os.RemoveAll(p) == nil {
+				n++
+				b += s
+			}
+		} else if os.Remove(p) == nil {
 			n++
-			b += s
+			b += st.Size()
 		}
 	}
 	return n, b
@@ -544,5 +736,9 @@ func storageDrill(ctx context.Context, path string) ([]stBig, error) {
 	if path == "" || !dirExists(path) {
 		return nil, fmt.Errorf("that folder is not available")
 	}
-	return childSizes(ctx, path, 20*time.Second), nil
+	items := childSizes(ctx, path, 30*time.Second)
+	if len(items) > 300 {
+		items = items[:300]
+	}
+	return items, nil
 }
