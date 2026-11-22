@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -52,6 +53,10 @@ type stApp struct {
 	BloatWhy  string `json:"bloatWhy,omitempty"`
 	Removable bool   `json:"removable"`
 	Approx    bool   `json:"approx,omitempty"` // size is an estimate (no exact figure available)
+	CodeB     int64  `json:"code,omitempty"`   // the app itself
+	DataB     int64  `json:"data,omitempty"`   // its saved data (includes cache)
+	CacheB    int64  `json:"cache,omitempty"`  // part of data that is only cache
+	ExtB      int64  `json:"ext,omitempty"`    // game files / OBB / media kept outside the app (Android)
 	Uninstall string `json:"-"`                // kept on the host only, never sent to the page
 	Quiet     bool   `json:"-"`
 	Family    string `json:"-"`
@@ -87,6 +92,31 @@ type stRec struct {
 	Safe   bool   `json:"safe"`
 }
 
+// stFile is one file worth showing: a photo, video, song, document, archive or big file.
+type stFile struct {
+	ID    string `json:"id"` // what the delete route takes (a path on PC, a media id on Android)
+	Path  string `json:"path"`
+	Name  string `json:"name"`
+	Dir   string `json:"dir"`
+	Bytes int64  `json:"bytes"`
+	Mod   int64  `json:"mod,omitempty"`
+	Cat   string `json:"cat"` // photo | video | audio | doc | archive | other
+}
+
+// stCat is the total of one kind of file across the device.
+type stCat struct {
+	Cat   string `json:"cat"`
+	Bytes int64  `json:"bytes"`
+	Count int    `json:"count"`
+}
+
+// stDir is a folder and the files in it (Android: which folders hold the media).
+type stDir struct {
+	Path  string `json:"path"`
+	Bytes int64  `json:"bytes"`
+	Count int    `json:"count"`
+}
+
 type stResult struct {
 	Platform string    `json:"platform"`
 	Drives   []stDrive `json:"drives"`
@@ -94,6 +124,9 @@ type stResult struct {
 	Clean    []stClean `json:"clean"`
 	Big      []stBig   `json:"big"`
 	Recs     []stRec   `json:"recs"`
+	Files    []stFile  `json:"files"`
+	Cats     []stCat   `json:"cats"`
+	Dirs     []stDir   `json:"dirs"`
 	Total    int64     `json:"total"`
 	Free     int64     `json:"free"`
 	Used     int64     `json:"used"`
@@ -111,9 +144,10 @@ type storageStore struct {
 	last *stResult
 	apps map[string]*stApp   // id -> app (for uninstall)
 	cln  map[string]*stClean // id -> cleanable
+	fls  map[string]*stFile  // id -> file (only files from the last scan can be deleted)
 }
 
-var storageDB = &storageStore{apps: map[string]*stApp{}, cln: map[string]*stClean{}}
+var storageDB = &storageStore{apps: map[string]*stApp{}, cln: map[string]*stClean{}, fls: map[string]*stFile{}}
 
 func (s *storageStore) set(res *stResult) {
 	s.mu.Lock()
@@ -121,6 +155,10 @@ func (s *storageStore) set(res *stResult) {
 	s.last = res
 	s.apps = map[string]*stApp{}
 	s.cln = map[string]*stClean{}
+	s.fls = map[string]*stFile{}
+	for i := range res.Files {
+		s.fls[res.Files[i].ID] = &res.Files[i]
+	}
 	for i := range res.Apps {
 		s.apps[res.Apps[i].ID] = &res.Apps[i]
 	}
@@ -216,6 +254,15 @@ func finishStorage(res *stResult, now int64) {
 	if res.Big == nil {
 		res.Big = []stBig{}
 	}
+	if res.Files == nil {
+		res.Files = []stFile{}
+	}
+	if res.Cats == nil {
+		res.Cats = []stCat{}
+	}
+	if res.Dirs == nil {
+		res.Dirs = []stDir{}
+	}
 	if res.Recs == nil {
 		res.Recs = []stRec{}
 	}
@@ -288,6 +335,19 @@ func mountStorage(mux *http.ServeMux, base string, in *inspector) {
 		defer cancel()
 		return map[string]any{"items": storageUninstall(ctx, q.IDs)}
 	}))
+	mux.HandleFunc(base+"delete", secPost(func(r *http.Request, b []byte) any {
+		var q struct {
+			IDs []string `json:"ids"`
+		}
+		_ = json.Unmarshal(b, &q)
+		if len(q.IDs) == 0 {
+			return map[string]string{"error": "Nothing was selected."}
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+		defer cancel()
+		freed, n, log := storageDeleteFiles(ctx, q.IDs)
+		return map[string]any{"freed": freed, "freedText": fmtSize(freed), "count": n, "log": log}
+	}))
 	mux.HandleFunc(base+"drill", secPost(func(r *http.Request, b []byte) any {
 		var q struct {
 			Path string `json:"path"`
@@ -322,4 +382,91 @@ func (in *inspector) storageScan(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
 	_ = json.NewEncoder(&buf).Encode(res)
 	s.send("done", bytes.TrimSpace(buf.Bytes()))
+}
+
+// ---------------------------------------------------------------- file kinds (shared)
+
+var extCat = func() map[string]string {
+	m := map[string]string{}
+	add := func(cat string, exts ...string) {
+		for _, e := range exts {
+			m[e] = cat
+		}
+	}
+	add("video", ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".3gp", ".mpg", ".mpeg", ".ts")
+	add("photo", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".heic", ".heif", ".webp", ".tif", ".tiff", ".raw", ".cr2", ".nef", ".dng", ".psd")
+	add("audio", ".mp3", ".wav", ".flac", ".aac", ".m4a", ".ogg", ".wma", ".opus", ".amr")
+	add("doc", ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".txt", ".csv", ".odt", ".rtf", ".epub")
+	add("archive", ".zip", ".rar", ".7z", ".iso", ".exe", ".msi", ".apk", ".xapk", ".apks", ".cab", ".tar", ".gz", ".obb", ".vhd", ".vhdx", ".img")
+	return m
+}()
+
+func catOfName(name string) string {
+	if c, ok := extCat[strings.ToLower(filepath.Ext(name))]; ok {
+		return c
+	}
+	return "other"
+}
+
+// topFiles keeps the biggest files per kind so each kind is represented in the list.
+type topFiles struct {
+	per  int
+	list map[string][]stFile
+	cats map[string]*stCat
+}
+
+func newTopFiles(per int) *topFiles {
+	return &topFiles{per: per, list: map[string][]stFile{}, cats: map[string]*stCat{}}
+}
+
+func (t *topFiles) add(f stFile) {
+	c := t.cats[f.Cat]
+	if c == nil {
+		c = &stCat{Cat: f.Cat}
+		t.cats[f.Cat] = c
+	}
+	c.Bytes += f.Bytes
+	c.Count++
+	if f.Bytes < 1<<20 {
+		return
+	}
+	l := append(t.list[f.Cat], f)
+	if len(l) > t.per*3 {
+		sort.Slice(l, func(i, j int) bool { return l[i].Bytes > l[j].Bytes })
+		l = l[:t.per]
+	}
+	t.list[f.Cat] = l
+}
+
+func (t *topFiles) merge(o *topFiles) {
+	for k, c := range o.cats {
+		d := t.cats[k]
+		if d == nil {
+			d = &stCat{Cat: k}
+			t.cats[k] = d
+		}
+		d.Bytes += c.Bytes
+		d.Count += c.Count
+	}
+	for k, l := range o.list {
+		t.list[k] = append(t.list[k], l...)
+	}
+}
+
+func (t *topFiles) result() ([]stFile, []stCat) {
+	var files []stFile
+	for _, l := range t.list {
+		sort.Slice(l, func(i, j int) bool { return l[i].Bytes > l[j].Bytes })
+		if len(l) > t.per {
+			l = l[:t.per]
+		}
+		files = append(files, l...)
+	}
+	sort.Slice(files, func(i, j int) bool { return files[i].Bytes > files[j].Bytes })
+	var cats []stCat
+	for _, c := range t.cats {
+		cats = append(cats, *c)
+	}
+	sort.Slice(cats, func(i, j int) bool { return cats[i].Bytes > cats[j].Bytes })
+	return files, cats
 }

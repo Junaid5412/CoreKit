@@ -48,3 +48,7 @@ func storageUninstall(ctx context.Context, ids []string) []map[string]any {
 func storageDrill(ctx context.Context, path string) ([]stBig, error) {
 	return nil, fmt.Errorf("folder details are not available in the Linux preview yet")
 }
+
+func storageDeleteFiles(ctx context.Context, ids []string) (int64, int, []string) {
+	return 0, 0, []string{"Deleting files is not available in the Linux preview yet."}
+}

@@ -11,6 +11,7 @@ import android.os.Environment
 import android.os.Process
 import android.os.StatFs
 import android.os.storage.StorageManager
+import android.provider.MediaStore
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -58,11 +59,15 @@ object StorageScanner {
             val updatedSystem = ai.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP != 0
             var size = 0L
             var approx = false
+            var code = 0L; var dat = 0L; var cac = 0L; var ext = 0L
             if (exact && ssm != null) {
                 try {
                     val q = ssm.queryStatsForPackage(StorageManager.UUID_DEFAULT, ai.packageName, Process.myUserHandle())
-                    size = q.appBytes + q.dataBytes
+                    code = q.appBytes; dat = q.dataBytes; cac = q.cacheBytes
                     cacheAll += q.cacheBytes
+                    // game files / OBB / data kept on shared storage (PUBG and similar keep gigabytes here)
+                    ext = try { ssm.queryExternalStatsForUid(StorageManager.UUID_DEFAULT, ai.uid).appBytes } catch (_: Throwable) { 0L }
+                    size = code + maxOf(dat, ext)
                 } catch (_: Throwable) {}
             }
             if (size == 0L) { size = apkBytes(ai); approx = true } // only the installed package size is known
@@ -87,6 +92,10 @@ object StorageScanner {
                 .put("bloatWhy", why)
                 .put("removable", !system || updatedSystem)
             if (approx) o.put("approx", true)
+            if (code > 0) o.put("code", code)
+            if (dat > 0) o.put("data", dat)
+            if (cac > 0) o.put("cache", cac)
+            if (ext > 0) o.put("ext", ext)
             apps.put(o)
         }
         res.put("apps", apps)
@@ -125,6 +134,16 @@ object StorageScanner {
             }
         } catch (_: Throwable) {}
         res.put("drives", drives)
+
+        // ---- photos, videos, audio, documents ----
+        progress(62, "Reading photos, videos and files")
+        if (hasMedia(ctx)) {
+            val (files, cats, dirs) = mediaScan(ctx)
+            res.put("files", files).put("cats", cats).put("dirs", dirs)
+        } else {
+            needs.put("media")
+            res.put("files", JSONArray()).put("cats", JSONArray()).put("dirs", JSONArray())
+        }
 
         // ---- cleanables ----
         progress(75, "Checking caches and downloads")
@@ -255,6 +274,80 @@ object StorageScanner {
         else @Suppress("DEPRECATION") ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), ctx.packageName)
         mode == AppOpsManager.MODE_ALLOWED
     } catch (_: Throwable) { false }
+
+    private fun hasMedia(ctx: Context): Boolean {
+        fun ok(p: String) = ctx.checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED
+        return if (Build.VERSION.SDK_INT >= 33) ok(android.Manifest.permission.READ_MEDIA_IMAGES) || ok(android.Manifest.permission.READ_MEDIA_VIDEO) || ok(android.Manifest.permission.READ_MEDIA_AUDIO)
+        else ok(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+    }
+
+    private class Row(val id: String, val name: String, val bytes: Long, val mod: Long, val cat: String, val dir: String)
+
+    private fun catByName(name: String): String {
+        val e = name.substringAfterLast('.', "").lowercase()
+        return when (e) {
+            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "odt", "rtf", "epub" -> "doc"
+            "zip", "rar", "7z", "iso", "apk", "xapk", "apks", "obb", "tar", "gz" -> "archive"
+            "jpg", "jpeg", "png", "gif", "webp", "heic", "bmp" -> "photo"
+            "mp4", "mkv", "avi", "mov", "3gp", "webm" -> "video"
+            "mp3", "m4a", "wav", "flac", "aac", "ogg", "opus", "amr" -> "audio"
+            else -> "other"
+        }
+    }
+
+    /** One pass over everything Android lets this app see: totals per kind, per folder, and the biggest of each kind. */
+    @Suppress("DEPRECATION")
+    private fun mediaScan(ctx: Context): Triple<JSONArray, JSONArray, JSONArray> {
+        val uri = MediaStore.Files.getContentUri("external")
+        val proj = arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.DISPLAY_NAME, MediaStore.Files.FileColumns.SIZE,
+            MediaStore.Files.FileColumns.DATE_MODIFIED, MediaStore.Files.FileColumns.MEDIA_TYPE,
+            if (Build.VERSION.SDK_INT >= 29) MediaStore.MediaColumns.RELATIVE_PATH else MediaStore.MediaColumns.DATA)
+        val cats = HashMap<String, LongArray>()
+        val dirs = HashMap<String, LongArray>()
+        val lists = HashMap<String, ArrayList<Row>>()
+        try {
+            ctx.contentResolver.query(uri, proj, MediaStore.Files.FileColumns.SIZE + " > 0", null, null)?.use { c ->
+                while (c.moveToNext()) {
+                    val id = c.getLong(0); val name = c.getString(1) ?: ""; val size = c.getLong(2); val mod = c.getLong(3)
+                    val mt = c.getInt(4)
+                    var dir = c.getString(5) ?: ""
+                    if (Build.VERSION.SDK_INT < 29) dir = File(dir).parent ?: ""
+                    val cat = when (mt) { 1 -> "photo"; 3 -> "video"; 2 -> "audio"; else -> catByName(name) }
+                    val kind = when (mt) { 1 -> "i"; 3 -> "v"; 2 -> "a"; else -> "f" }
+                    val ca = cats.getOrPut(cat) { LongArray(2) }; ca[0] += size; ca[1]++
+                    val da = dirs.getOrPut(dir) { LongArray(2) }; da[0] += size; da[1]++
+                    if (size >= 1L shl 20) {
+                        val l = lists.getOrPut(cat) { ArrayList() }
+                        l.add(Row("$kind:$id", name, size, mod, cat, dir))
+                        if (l.size > 450) { l.sortByDescending { it.bytes }; while (l.size > 150) l.removeAt(l.size - 1) }
+                    }
+                }
+            }
+        } catch (_: Throwable) {}
+        val files = JSONArray()
+        val all = ArrayList<Row>()
+        for (l in lists.values) { l.sortByDescending { it.bytes }; all.addAll(l.take(150)) }
+        all.sortByDescending { it.bytes }
+        for (r in all) files.put(JSONObject().put("id", r.id).put("path", r.dir + r.name).put("name", r.name).put("dir", r.dir).put("bytes", r.bytes).put("mod", r.mod).put("cat", r.cat))
+        val catArr = JSONArray()
+        cats.entries.sortedByDescending { it.value[0] }.forEach { catArr.put(JSONObject().put("cat", it.key).put("bytes", it.value[0]).put("count", it.value[1])) }
+        val dirArr = JSONArray()
+        dirs.entries.sortedByDescending { it.value[0] }.take(40).forEach { dirArr.put(JSONObject().put("path", it.key).put("bytes", it.value[0]).put("count", it.value[1])) }
+        return Triple(files, catArr, dirArr)
+    }
+
+    /** A media id from the page ("v:123") back to the item Android should delete. */
+    fun mediaUri(id: String): android.net.Uri? {
+        val n = id.substringAfter(':', "").toLongOrNull() ?: return null
+        val base = when (id.substringBefore(':')) {
+            "i" -> MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            "v" -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+            "a" -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            "f" -> MediaStore.Files.getContentUri("external")
+            else -> return null
+        }
+        return android.content.ContentUris.withAppendedId(base, n)
+    }
 
     private fun downloadsInfo(dir: File): Pair<Long, Int> {
         if (!dir.isDirectory) return 0L to 0

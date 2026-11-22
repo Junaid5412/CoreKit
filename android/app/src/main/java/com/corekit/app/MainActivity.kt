@@ -140,6 +140,7 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_STORAGE) { web.evaluateJavascript("window.__stMediaGranted&&__stMediaGranted()", null); return }
         if (requestCode == REQ_NOTIF) { askScreenCapture(); return }
         if (requestCode != REQ_MEDIA) return
         val req = pendingPermission ?: return
@@ -211,8 +212,30 @@ class MainActivity : Activity() {
         web.evaluateJavascript("window.__ckStatus&&__ckStatus()", null)
     }
 
+    /** Storage page: ask for access to photos, videos and audio so they can be listed. */
+    fun requestMediaAccess() {
+        val perms = if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO)
+            else arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        val missing = perms.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
+        if (missing.isEmpty()) web.evaluateJavascript("window.__stMediaGranted&&__stMediaGranted()", null)
+        else requestPermissions(missing.toTypedArray(), REQ_STORAGE)
+    }
+
+    /** Storage page: delete the chosen media after Android's own confirmation. */
+    fun deleteMedia(uris: List<android.net.Uri>): Boolean {
+        if (uris.isEmpty()) return false
+        return try {
+            if (Build.VERSION.SDK_INT >= 30) {
+                val pi = android.provider.MediaStore.createDeleteRequest(contentResolver, uris)
+                startIntentSenderForResult(pi.intentSender, REQ_DELETE, null, 0, 0, 0)
+                true
+            } else { var n = 0; for (u in uris) n += try { contentResolver.delete(u, null, null) } catch (_: Throwable) { 0 }; web.evaluateJavascript("window.__stMediaDeleted&&__stMediaDeleted(${n > 0})", null); n > 0 }
+        } catch (_: Throwable) { false }
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_DELETE) { web.evaluateJavascript("window.__stMediaDeleted&&__stMediaDeleted(${resultCode == Activity.RESULT_OK})", null); return }
         if (requestCode == REQ_PROJECTION) {
             if (resultCode == RESULT_OK && data != null) {
                 val i = Intent(this, RemoteService::class.java).setAction(RemoteService.ACTION_START)
@@ -314,6 +337,8 @@ class MainActivity : Activity() {
     companion object {
         const val BG = 0xFF0A0E13.toInt()
         private const val REQ_MEDIA = 11
+        private const val REQ_STORAGE = 35
+        private const val REQ_DELETE = 36
         private const val REQ_LOCATION = 7
         private const val REQ_CAMERA_TEST = 31
         private const val REQ_PROJECTION = 32
