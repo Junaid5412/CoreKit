@@ -443,7 +443,7 @@ function appRow(a, max){
   </div>${appOpen.has(a.id) ? appDetail(a) : ''}`;
 }
 function appDetail(a){
-  const rows = [['App itself', a.code, '#38bdf8'], ['Saved data and settings', Math.max(0, (a.data || 0) - (a.cache || 0)), '#a78bfa'], ['Cache (safe to clear)', a.cache, '#34d399'], ['Game files and other files on shared storage', a.ext, '#fbbf24']].filter(x => x[1] > 0);
+  const rows = [['App itself', a.code, '#38bdf8'], ['Saved data and game files', Math.max(0, (a.data || 0) - (a.cache || 0)), '#a78bfa'], ['Cache (safe to clear)', a.cache, '#34d399'], ['Game files and other files on shared storage', a.ext, '#fbbf24']].filter(x => x[1] > 0);
   const tot = Math.max(a.size, 1);
   return `<div class="pickbar" style="display:block;padding:12px 18px 14px">
     <div class="dbar" style="height:10px;margin:0 0 10px">${rows.map(x => `<i style="width:${pctOf(x[1], tot)}%;background:${x[2]}"></i>`).join('')}</div>

@@ -59,15 +59,14 @@ object StorageScanner {
             val updatedSystem = ai.flags and ApplicationInfo.FLAG_UPDATED_SYSTEM_APP != 0
             var size = 0L
             var approx = false
-            var code = 0L; var dat = 0L; var cac = 0L; var ext = 0L
+            var code = 0L; var dat = 0L; var cac = 0L
             if (exact && ssm != null) {
                 try {
                     val q = ssm.queryStatsForPackage(StorageManager.UUID_DEFAULT, ai.packageName, Process.myUserHandle())
                     code = q.appBytes; dat = q.dataBytes; cac = q.cacheBytes
                     cacheAll += q.cacheBytes
-                    // game files / OBB / data kept on shared storage (PUBG and similar keep gigabytes here)
-                    ext = try { ssm.queryExternalStatsForUid(StorageManager.UUID_DEFAULT, ai.uid).appBytes } catch (_: Throwable) { 0L }
-                    size = code + maxOf(dat, ext)
+                    // data includes the game files an app keeps under Android/data (PUBG and similar keep gigabytes there)
+                    size = code + dat
                 } catch (_: Throwable) {}
             }
             if (size == 0L) { size = apkBytes(ai); approx = true } // only the installed package size is known
@@ -95,7 +94,6 @@ object StorageScanner {
             if (code > 0) o.put("code", code)
             if (dat > 0) o.put("data", dat)
             if (cac > 0) o.put("cache", cac)
-            if (ext > 0) o.put("ext", ext)
             apps.put(o)
         }
         res.put("apps", apps)
