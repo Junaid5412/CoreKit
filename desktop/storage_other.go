@@ -26,6 +26,7 @@ func storageScan(ctx context.Context, progress func(int, string)) (*stResult, er
 	res.Clean = []stClean{
 		{ID: "temp-user", Name: "Temporary files", Desc: "Leftover temp files.", Bytes: 1200 << 20, Safe: true, Group: "Windows"},
 		{ID: "cache", Name: "App caches", Desc: "Rebuilt automatically.", Bytes: 800 << 20, Safe: true, Group: "Apps"},
+		{ID: "left:/home/user/.config/oldapp", Name: "oldapp  (.config)", Desc: "No installed program matches this folder. Last changed 8 months ago.", Bytes: 300 << 20, Group: "Leftovers", Path: "/home/user/.config/oldapp"},
 	}
 	progress(90, "Working out recommendations")
 	finishStorage(res, time.Now().Unix())
@@ -33,7 +34,7 @@ func storageScan(ctx context.Context, progress func(int, string)) (*stResult, er
 	return res, nil
 }
 
-func storageClean(ctx context.Context, ids []string, pick map[string][]string) (int64, []string, error) {
+func storageClean(ctx context.Context, ids []string, pick map[string][]string, permanent bool) (int64, []string, error) {
 	return 0, []string{"Cleaning is not available in the Linux preview yet."}, nil
 }
 
@@ -49,6 +50,6 @@ func storageDrill(ctx context.Context, path string) ([]stBig, error) {
 	return nil, fmt.Errorf("folder details are not available in the Linux preview yet")
 }
 
-func storageDeleteFiles(ctx context.Context, ids []string) (int64, int, []string) {
+func storageDeleteFiles(ctx context.Context, ids, paths []string, permanent bool) (int64, int, []string) {
 	return 0, 0, []string{"Deleting files is not available in the Linux preview yet."}
 }

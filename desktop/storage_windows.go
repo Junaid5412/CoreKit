@@ -281,16 +281,95 @@ func expand(patterns ...string) []string {
 	return out
 }
 
-func cleanDefs(hiberOn bool) []cleanDef {
+// cache folders every Chromium-based program keeps inside a profile; all are rebuilt on demand
+var chromiumCacheDirs = []string{"Cache", "Code Cache", "GPUCache", "DawnCache", "DawnGraphiteCache", "DawnWebGPUCache", "GraphiteDawnCache", `Service Worker\CacheStorage`, `Service Worker\ScriptCache`}
+
+// and the ones beside the profiles
+var chromiumRootCaches = []string{"ShaderCache", "GrShaderCache", "GraphiteDawnCache", "BrowserMetrics", "component_crx_cache", `Crashpad\reports`}
+
+// cachesIn lists the cache folders that exist under each base folder.
+func cachesIn(names []string, bases ...string) []string {
+	var out []string
+	for _, b := range bases {
+		for _, n := range names {
+			if p := filepath.Join(b, n); dirExists(p) {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
+// corekitCaches are the caches of CoreKit's own Safe Browser profiles (its biggest data by far).
+// When cleaning, profiles that are open right now are left alone.
+func corekitCaches(skipOpen bool) []string {
+	var out []string
+	users := expand(filepath.Join(dataDir(), "Profiles", "*"))
+	users = append(users, filepath.Join(dataDir(), "Launcher"))
+	for _, u := range users {
+		eb := filepath.Join(u, "EBWebView")
+		if !dirExists(eb) || (skipOpen && profileRunning(eb)) {
+			continue
+		}
+		out = append(out, cachesIn(chromiumRootCaches, eb)...)
+		out = append(out, cachesIn(chromiumCacheDirs, expand(filepath.Join(eb, "*"))...)...)
+	}
+	return out
+}
+
+// oldPackages returns all but the newest update package in each Squirrel "packages" folder.
+func oldPackages(local string) []string {
+	var out []string
+	for _, dir := range expand(filepath.Join(local, "*", "packages")) {
+		pk := expand(filepath.Join(dir, "*.nupkg"))
+		if len(pk) < 2 {
+			continue
+		}
+		sort.Slice(pk, func(i, j int) bool {
+			a, _ := os.Stat(pk[i])
+			b, _ := os.Stat(pk[j])
+			return a != nil && b != nil && a.ModTime().After(b.ModTime())
+		})
+		out = append(out, pk[1:]...)
+	}
+	return out
+}
+
+// sysFileSize reads the size of a file Windows keeps locked (hiberfil.sys): first directly, then
+// from the folder listing, which works even when the file itself cannot be opened.
+func sysFileSize(p string) int64 {
+	if n := fileSize(p); n > 0 {
+		return n
+	}
+	ents, err := os.ReadDir(filepath.Dir(p))
+	if err != nil {
+		return 0
+	}
+	for _, e := range ents {
+		if strings.EqualFold(e.Name(), filepath.Base(p)) {
+			if info, err := e.Info(); err == nil {
+				return info.Size()
+			}
+		}
+	}
+	return 0
+}
+
+func hiberPath() string { return os.Getenv("SystemDrive") + `\hiberfil.sys` }
+
+// cleanDefs lists everything CoreKit knows how to clear. forClean is true when the list is used
+// to delete (rather than measure): CoreKit's own open browser profiles are then skipped.
+func cleanDefs(forClean bool) []cleanDef {
 	local := os.Getenv("LOCALAPPDATA")
 	roam := os.Getenv("APPDATA")
 	pdata := os.Getenv("ProgramData")
+	home := os.Getenv("USERPROFILE")
 	sd := os.Getenv("SystemDrive") + `\`
 	win := filepath.Join(sd, "Windows")
 	j := filepath.Join
 	chromium := func(vendor string) []string {
 		ud := j(local, vendor, "User Data")
-		return expand(j(ud, "*", "Cache"), j(ud, "*", "Code Cache"), j(ud, "*", "GPUCache"), j(ud, "ShaderCache"), j(ud, "GrShaderCache"))
+		return append(cachesIn(chromiumRootCaches, ud), cachesIn(chromiumCacheDirs, expand(j(ud, "*"))...)...)
 	}
 	defs := []cleanDef{
 		// browsers
@@ -298,24 +377,45 @@ func cleanDefs(hiberOn bool) []cleanDef {
 		{id: "edge", group: "Browsers", name: "Edge cache", desc: "Edge's temporary web files, every profile.", safe: true, paths: chromium(j("Microsoft", "Edge"))},
 		{id: "brave", group: "Browsers", name: "Brave cache", desc: "Brave's temporary web files, every profile.", safe: true, paths: chromium(j("BraveSoftware", "Brave-Browser"))},
 		{id: "firefox", group: "Browsers", name: "Firefox cache", desc: "Firefox's temporary web files, every profile.", safe: true, paths: expand(j(local, "Mozilla", "Firefox", "Profiles", "*", "cache2"))},
+		{id: "corekit", group: "Browsers", name: "CoreKit Safe Browser cache", desc: "Temporary web files of your Safe Browser profiles. Logins, bookmarks and settings stay.", safe: true, paths: corekitCaches(forClean)},
 		// Windows
 		{id: "temp-user", group: "Windows", name: "Temporary files", desc: "Leftover files in your temp folders.", safe: true, paths: []string{os.Getenv("TEMP"), j(win, "Temp")}},
 		{id: "update", group: "Windows", name: "Windows Update cache", desc: "Installer files Windows keeps after updating.", safe: true, paths: []string{j(win, "SoftwareDistribution", "Download")}},
 		{id: "delivery", group: "Windows", name: "Delivery Optimization", desc: "Update pieces shared with other PCs.", safe: true, paths: []string{j(win, "SoftwareDistribution", "DeliveryOptimization")}},
 		{id: "prefetch", group: "Windows", name: "Prefetch", desc: "Startup hints Windows rebuilds automatically.", safe: true, paths: []string{j(win, "Prefetch")}},
 		{id: "thumbs", group: "Windows", name: "Thumbnail cache", desc: "Preview images Windows rebuilds when needed.", safe: true, paths: []string{j(local, "Microsoft", "Windows", "Explorer")}},
+		{id: "inetcache", group: "Windows", name: "Windows web cache", desc: "Temporary web files kept by Windows and older apps.", safe: true, paths: []string{j(local, "Microsoft", "Windows", "INetCache")}},
+		{id: "storeapps", group: "Windows", name: "Store app temporary files", desc: "Temporary files of Microsoft Store apps.", safe: true, paths: expand(j(local, "Packages", "*", "AC", "INetCache"), j(local, "Packages", "*", "AC", "Temp"), j(local, "Packages", "*", "TempState"))},
 		{id: "wer", group: "Windows", name: "Error reports", desc: "Saved crash reports.", safe: true, paths: []string{j(local, "Microsoft", "Windows", "WER"), j(pdata, "Microsoft", "Windows", "WER")}},
 		{id: "dumps", group: "Windows", name: "Crash dumps", desc: "Memory dumps from crashes.", safe: true, paths: []string{j(local, "CrashDumps"), j(win, "Minidump"), j(win, "LiveKernelReports"), j(win, "MEMORY.DMP")}},
 		{id: "winlogs", group: "Windows", name: "Windows logs", desc: "Setup and servicing logs.", safe: true, paths: []string{j(win, "Logs", "CBS"), j(win, "Logs", "DISM")}},
 		{id: "recyclebin", group: "Windows", name: "Recycle Bin", desc: "Files you already deleted.", safe: true},
 		// apps & developer tools
 		{id: "gpu", group: "Apps", name: "Graphics shader caches", desc: "DirectX, NVIDIA and AMD caches; games rebuild them.", safe: true, paths: expand(j(local, "D3DSCache"), j(local, "NVIDIA", "DXCache"), j(local, "NVIDIA", "GLCache"), j(local, "AMD", "DxCache"), j(local, "AMD", "GLCache"))},
-		{id: "chat", group: "Apps", name: "Chat app caches", desc: "Discord, Slack and Teams temporary files.", safe: true, paths: expand(j(roam, "discord", "Cache"), j(roam, "discord", "Code Cache"), j(roam, "discord", "GPUCache"), j(roam, "Slack", "Cache"), j(roam, "Slack", "Code Cache"), j(roam, "Microsoft", "Teams", "Cache"), j(roam, "Microsoft", "Teams", "tmp"))},
 		{id: "spotify", group: "Apps", name: "Spotify cache", desc: "Songs saved for offline playback; they download again when needed.", safe: true, paths: expand(j(local, "Spotify", "Storage"), j(local, "Spotify", "Data"))},
-		{id: "devcache", group: "Apps", name: "Developer caches", desc: "npm, pip and NuGet download caches.", safe: true, paths: expand(j(local, "npm-cache"), j(local, "pip", "Cache"), j(local, "NuGet", "v3-cache"))},
+		{id: "appupd", group: "Apps", name: "Old app update files", desc: "Installers that apps downloaded to update themselves and no longer need.", safe: true, paths: append(expand(j(local, "*-updater"), j(local, "SquirrelTemp")), oldPackages(local)...)},
+		{id: "devcache", group: "Apps", name: "Developer caches", desc: "npm, Yarn, pip, NuGet, Go and Electron download caches.", safe: true, paths: expand(j(local, "npm-cache"), j(roam, "npm-cache"), j(local, "Yarn", "Cache"), j(local, "pip", "Cache"), j(local, "NuGet", "v3-cache"), j(local, "NuGet", "http-cache"), j(local, "go-build"), j(local, "electron", "Cache"), j(local, "electron-builder", "Cache"), j(local, "Microsoft", "TypeScript"), j(home, ".cache", "electron"))},
 	}
-	if hiberFile := sd + "hiberfil.sys"; hiberOn && fileSize(hiberFile) > 0 {
-		defs = append(defs, cleanDef{id: "hibernation", group: "Windows", name: "Hibernation file", desc: "Frees space by turning off hibernate (you can turn it back on).", safe: false, paths: []string{hiberFile}})
+	// every other program built on Chromium or WebView2 (chat apps, editors, launchers ...)
+	claimed := map[string]bool{}
+	for _, d := range defs {
+		for _, p := range d.paths {
+			claimed[strings.ToLower(p)] = true
+		}
+	}
+	var appCaches []string
+	bases := expand(j(roam, "*"), j(roam, "*", "*"), j(local, "*", "EBWebView", "*"), j(local, "*", "*", "EBWebView", "*"), j(local, "*", "User Data", "*"), j(local, "*", "*", "User Data", "*"))
+	for _, p := range append(cachesIn(chromiumCacheDirs, bases...), cachesIn(chromiumRootCaches, expand(j(local, "*", "EBWebView"), j(local, "*", "*", "EBWebView"), j(local, "*", "User Data"), j(local, "*", "*", "User Data"))...)...) {
+		if !claimed[strings.ToLower(p)] && !under(p, appDataRoot()) {
+			claimed[strings.ToLower(p)] = true
+			appCaches = append(appCaches, p)
+		}
+	}
+	appCaches = append(appCaches, expand(j(roam, "Code", "CachedData"), j(roam, "Code", "CachedExtensionVSIXs"))...)
+	defs = append(defs, cleanDef{id: "appcache", group: "Apps", name: "App caches", desc: "Temporary files of chat apps, editors, launchers and other apps. They rebuild them when needed.", safe: true, paths: appCaches})
+
+	if sysFileSize(hiberPath()) > 0 {
+		defs = append(defs, cleanDef{id: "hibernation", group: "Windows", name: "Hibernation file", desc: "Turns off Hibernate and Fast Startup and removes hiberfil.sys. You can turn it back on later.", safe: false, paths: []string{hiberPath()}})
 	}
 	if wo := sd + "Windows.old"; dirExists(wo) {
 		defs = append(defs, cleanDef{id: "windowsold", group: "Windows", name: "Previous Windows (Windows.old)", desc: "Your old Windows kept after an upgrade. Removing it means you can't roll back.", safe: false, paths: []string{wo}, whole: true})
@@ -427,13 +527,13 @@ func storageScan(ctx context.Context, progress func(int, string)) (*stResult, er
 	}
 
 	progress(38, "Measuring reclaimable space")
-	for _, def := range cleanDefs(pr.HiberOn) {
+	for _, def := range cleanDefs(false) {
 		c := stClean{ID: def.id, Name: def.name, Desc: def.desc, Safe: def.safe, Group: def.group}
 		switch def.id {
 		case "recyclebin":
 			c.Bytes = recycleSize(ctx, res.Drives)
 		case "hibernation":
-			c.Bytes = fileSize(def.paths[0])
+			c.Bytes = sysFileSize(def.paths[0])
 			c.Path = def.paths[0]
 		default:
 			var dirs []string
@@ -476,6 +576,10 @@ func storageScan(ctx context.Context, progress func(int, string)) (*stResult, er
 		}
 	}
 
+	// data that programs no longer on this PC left behind
+	progress(56, "Looking for leftovers of removed programs")
+	res.Clean = append(res.Clean, scanLeftovers(ctx, res.Apps, goneLoad(), time.Now().Unix())...)
+
 	// every drive, fully measured
 	var all []stBig
 	for i := range res.Drives {
@@ -511,20 +615,25 @@ func driveOf(path string) string {
 
 // ---------------------------------------------------------------- clean
 
-func storageClean(ctx context.Context, ids []string, pick map[string][]string) (int64, []string, error) {
-	hiberOn := false
-	if st, err := os.Stat(os.Getenv("SystemDrive") + `\hiberfil.sys`); err == nil {
-		hiberOn = st.Size() > 0
-	}
+func inUseNote(what string, left int64) string {
+	return fmt.Sprintf("%s: %s is in use and was skipped. Close the app and try again.", what, fmtSize(left))
+}
+
+func storageClean(ctx context.Context, ids []string, pick map[string][]string, permanent bool) (int64, []string, error) {
 	defsByID := map[string]cleanDef{}
-	for _, d := range cleanDefs(hiberOn) {
+	for _, d := range cleanDefs(true) {
 		defsByID[d.id] = d
 	}
 	var freed int64
 	var log []string
+	var left []string
 	for _, id := range ids {
 		if ctx.Err() != nil {
 			break
+		}
+		if strings.HasPrefix(id, "left:") {
+			left = append(left, strings.TrimPrefix(id, "left:"))
+			continue
 		}
 		switch id {
 		case "recyclebin":
@@ -537,12 +646,15 @@ func storageClean(ctx context.Context, ids []string, pick map[string][]string) (
 				log = append(log, "Could not empty the Recycle Bin (it may already be empty)")
 			}
 		case "hibernation":
-			before := fileSize(os.Getenv("SystemDrive") + `\hiberfil.sys`)
-			if err := runHidden(ctx, filepath.Join(os.Getenv("SystemRoot"), "System32", "powercfg.exe"), "/hibernate", "off"); err != nil {
-				log = append(log, "Could not turn off hibernation (CoreKit must run as administrator)")
-			} else {
+			before := sysFileSize(hiberPath())
+			err := runHidden(ctx, filepath.Join(os.Getenv("SystemRoot"), "System32", "powercfg.exe"), "/hibernate", "off")
+			if after := sysFileSize(hiberPath()); err == nil && after == 0 {
 				freed += before
 				log = append(log, "Turned off hibernation and removed the file ("+fmtSize(before)+")")
+			} else if !isAdmin() {
+				log = append(log, "Could not turn off hibernation: CoreKit must run as administrator")
+			} else {
+				log = append(log, "Windows did not turn off hibernation. A policy on this PC may be keeping it on")
 			}
 		case "windowsold":
 			wo := os.Getenv("SystemDrive") + `\Windows.old`
@@ -554,15 +666,18 @@ func storageClean(ctx context.Context, ids []string, pick map[string][]string) (
 				log = append(log, "Could not fully remove Windows.old (administrator needed)")
 			}
 		case "downloads":
-			n, b := removeDownloads(pick["downloads"])
+			n, b, failed := removeDownloads(ctx, pick["downloads"], permanent)
 			freed += b
-			log = append(log, fmt.Sprintf("Deleted %d item(s) from Downloads (%s)", n, fmtSize(b)))
+			log = append(log, fmt.Sprintf("%s %d item(s) from Downloads (%s)", deleteVerb(permanent), n, fmtSize(b)))
+			if len(failed) > 0 {
+				log = append(log, fmt.Sprintf("%d Downloads item(s) are in use and were skipped", len(failed)))
+			}
 		default:
 			def, ok := defsByID[id]
 			if !ok {
 				continue
 			}
-			var cf int64
+			var cf, stuck int64
 			for _, p := range def.paths {
 				if p == "" {
 					continue
@@ -573,68 +688,100 @@ func storageClean(ctx context.Context, ids []string, pick map[string][]string) (
 						cf += f
 					}
 				} else if dirExists(p) {
-					cf += clearContents(ctx, p)
+					f, l := clearContents(ctx, p)
+					cf += f
+					stuck += l
 				} else if sz := fileSize(p); sz > 0 && os.Remove(p) == nil {
 					cf += sz
 				}
 			}
 			freed += cf
 			log = append(log, "Cleared "+strings.ToLower(def.name)+" ("+fmtSize(cf)+")")
+			if stuck > 1<<20 {
+				log = append(log, inUseNote(def.name, stuck))
+			}
 		}
+	}
+	if len(left) > 0 {
+		var ok []string
+		for _, p := range left {
+			if leftoverAllowed(p) {
+				ok = append(ok, filepath.Clean(p))
+			}
+		}
+		n, b, failed := deletePaths(ctx, ok, permanent)
+		freed += b
+		log = append(log, fmt.Sprintf("%s %d leftover folder(s) (%s)", deleteVerb(permanent), n, fmtSize(b)))
+		for _, f := range failed {
+			log = append(log, "Could not remove "+f+": something on this PC is still using it")
+		}
+		if skipped := len(left) - len(ok); skipped > 0 {
+			log = append(log, fmt.Sprintf("Skipped %d leftover(s) that changed since the scan. Rescan and try again", skipped))
+		}
+	}
+	if !permanent && (len(left) > 0 || len(pick["downloads"]) > 0) {
+		log = append(log, "Items are in the Recycle Bin. Empty it to get the space back")
 	}
 	return freed, log, nil
 }
 
-// clearContents deletes the files inside a folder (keeping the folder), returning freed bytes.
-func clearContents(ctx context.Context, root string) int64 {
+func deleteVerb(permanent bool) string {
+	if permanent {
+		return "Deleted"
+	}
+	return "Moved to the Recycle Bin:"
+}
+
+// clearContents deletes what is inside a folder (keeping the folder). It returns the bytes that
+// really went and the bytes that stayed because a program has them open.
+func clearContents(ctx context.Context, root string) (freed, left int64) {
 	ents, err := os.ReadDir(root)
 	if err != nil {
-		return 0
+		return 0, 0
 	}
-	var freed int64
 	for _, e := range ents {
 		if ctx.Err() != nil {
 			break
 		}
 		full := filepath.Join(root, e.Name())
 		if e.IsDir() {
-			freed += stDirSize(ctx, full, time.Now().Add(3*time.Second))
-			_ = os.RemoveAll(full)
+			before := stDirSize(ctx, full, time.Now().Add(5*time.Second))
+			if os.RemoveAll(full) == nil {
+				freed += before
+				continue
+			}
+			after := stDirSize(ctx, full, time.Now().Add(5*time.Second))
+			if after < before {
+				freed += before - after
+			}
+			left += after
 		} else {
-			freed += fileSize(full)
-			_ = os.Remove(full)
+			sz := fileSize(full)
+			if os.Remove(full) == nil {
+				freed += sz
+			} else {
+				left += sz
+			}
 		}
 	}
-	return freed
+	return
 }
 
-// removeDownloads deletes the chosen files or folders, but only ones inside the Downloads folder.
-func removeDownloads(paths []string) (int, int64) {
-	var n int
-	var b int64
+// removeDownloads removes the chosen files or folders, but only ones inside the Downloads folder.
+func removeDownloads(ctx context.Context, paths []string, permanent bool) (int, int64, []string) {
 	dl := filepath.Clean(downloadsDir())
+	var ok []string
 	for _, p := range paths {
 		p = filepath.Clean(p)
 		rel, err := filepath.Rel(dl, p)
 		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			continue
 		}
-		st, err := os.Lstat(p)
-		if err != nil {
-			continue
-		}
-		if st.IsDir() {
-			s := stDirSize(context.Background(), p, time.Now().Add(30*time.Second))
-			if os.RemoveAll(p) == nil {
-				n++
-				b += s
-			}
-		} else if os.Remove(p) == nil {
-			n++
-			b += st.Size()
+		if _, err := os.Lstat(p); err == nil {
+			ok = append(ok, p)
 		}
 	}
-	return n, b
+	return deletePaths(ctx, ok, permanent)
 }
 
 func removeWindowsOld(ctx context.Context, path string) bool {
@@ -658,6 +805,7 @@ func runHidden(ctx context.Context, name string, args ...string) error {
 
 func storageUninstall(ctx context.Context, ids []string) []map[string]any {
 	var out []map[string]any
+	var asked []*stApp
 	for _, id := range ids {
 		storageDB.mu.Lock()
 		a := storageDB.apps[id]
@@ -667,8 +815,12 @@ func storageUninstall(ctx context.Context, ids []string) []map[string]any {
 			continue
 		}
 		ok, msg := uninstallOne(ctx, a)
+		if ok {
+			asked = append(asked, a) // the next scan looks for what it left behind
+		}
 		out = append(out, map[string]any{"id": id, "name": a.Name, "ok": ok, "msg": msg})
 	}
+	goneAdd(asked)
 	return out
 }
 
@@ -746,6 +898,9 @@ func storageDrill(ctx context.Context, path string) ([]stBig, error) {
 	items := childSizes(ctx, path, 30*time.Second)
 	if len(items) > 300 {
 		items = items[:300]
+	}
+	for i := range items {
+		items[i].Can = canDelete(items[i].Path)
 	}
 	return items, nil
 }

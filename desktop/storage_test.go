@@ -127,3 +127,34 @@ func TestTopFilesKeepsEachKind(t *testing.T) {
 		t.Fatal("wrong kind for an extension")
 	}
 }
+
+func TestLeftoverOwnership(t *testing.T) {
+	ix := newInstallIndex()
+	for _, a := range []stApp{
+		{ID: "lm", Name: "LM Studio 0.3.5", Pub: "LM Studio"},
+		{ID: "gh", Name: "GitHub Desktop", Pub: "GitHub, Inc."},
+		{ID: "ch", Name: "Google Chrome", Pub: "Google LLC", Loc: `C:\Program Files\Google\Chrome\Application`},
+		{ID: "vs", Name: "Microsoft Visual Studio Code (User)", Pub: "Microsoft Corporation", Loc: `C:\Users\me\AppData\Local\Programs\Microsoft VS Code`},
+		{ID: "Claude_pzs8sxrjxfjjc", Name: "Claude", Pub: "Anthropic PBC", Family: "Claude_pzs8sxrjxfjjc"},
+		{ID: "{8A69D345-D564-463C-AFF1-A69D9E530F96}", Name: "Discord", Pub: "Discord Inc."},
+	} {
+		a := a
+		ix.addApp(&a)
+	}
+	for _, n := range []string{"lm-studio-updater", "GitHubDesktop", "Google", "Code", "Claude-Data", "discord", "Discord_Crashes", "ab", "日本語"} {
+		if !ix.owns(n) {
+			t.Errorf("%q belongs to an installed program (or cannot be judged) and must not be a leftover", n)
+		}
+	}
+	for _, n := range []string{"antigravity-updater", "green-tunnel-desktop-updater", "@opencodedesktop-updater", "OldGameStudio", "Zoom"} {
+		if ix.owns(n) {
+			t.Errorf("%q has no installed owner and should be offered", n)
+		}
+	}
+	zebra := stApp{Name: "Zebra Notes 2.1 (x64)", Loc: `D:\Apps\ZebraNotes`}
+	for n, want := range map[string]bool{"Zebra Notes": true, "zebranotes-updater": true, "ZebraNotes": true, "Zeb": false, "Notes": false, "Microsoft": false} {
+		if belongsTo(n, &zebra) != want {
+			t.Errorf("belongsTo(%q) = %v, want %v", n, !want, want)
+		}
+	}
+}

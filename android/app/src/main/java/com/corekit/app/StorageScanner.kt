@@ -152,6 +152,8 @@ object StorageScanner {
         val dl = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
         val (dlBytes, dlCount) = downloadsInfo(dl)
         if (dlBytes > 0) clean.put(JSONObject().put("id", "downloads").put("name", "Downloads folder").put("desc", "$dlCount item(s) in your Downloads folder. Open it and choose what to delete.").put("bytes", dlBytes).put("count", dlCount).put("safe", false).put("path", dl.absolutePath).put("group", "Your files"))
+        // files left on shared storage by apps that are no longer installed
+        if (hasMedia(ctx)) for (l in leftovers(ctx)) clean.put(l)
         res.put("clean", clean)
 
         // Android does not let an app list other files, so the biggest things we can show are apps
@@ -173,6 +175,7 @@ object StorageScanner {
         for (i in 0 until clean.length()) {
             val c = clean.getJSONObject(i)
             if (c.optBoolean("safe") && c.optString("id") != "allcache") reclaim += c.optLong("bytes")
+            if (c.optString("group") == "Leftovers") recList.add(JSONObject().put("id", "c-" + c.optString("id")).put("title", "Remove leftover " + c.optString("name")).put("why", c.optString("desc")).put("bytes", c.optLong("bytes")).put("kind", "clean").put("target", c.optString("id")).put("safe", false))
             if (c.optString("id") == "owncache") recList.add(JSONObject().put("id", "c-owncache").put("title", "Clear CoreKit cache").put("why", c.optString("desc")).put("bytes", c.optLong("bytes")).put("kind", "clean").put("target", "owncache").put("safe", true))
         }
         val now = System.currentTimeMillis() / 1000
@@ -332,6 +335,53 @@ object StorageScanner {
         val dirArr = JSONArray()
         dirs.entries.sortedByDescending { it.value[0] }.take(40).forEach { dirArr.put(JSONObject().put("path", it.key).put("bytes", it.value[0]).put("count", it.value[1])) }
         return Triple(files, catArr, dirArr)
+    }
+
+    private val pkgName = Regex("^[A-Za-z0-9_]+(\\.[A-Za-z0-9_]+)+$")
+
+    private fun installed(ctx: Context, pkg: String): Boolean =
+        try { ctx.packageManager.getPackageInfo(pkg, 0); true } catch (_: Throwable) { false }
+
+    /** Android/media/<package> folders whose app is gone. Android normally removes these itself, so this is usually empty. */
+    private fun leftovers(ctx: Context): List<JSONObject> {
+        if (Build.VERSION.SDK_INT < 29) return emptyList()
+        val sums = HashMap<String, LongArray>() // pkg -> bytes, count, newest
+        try {
+            ctx.contentResolver.query(MediaStore.Files.getContentUri("external"),
+                arrayOf(MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.Files.FileColumns.SIZE, MediaStore.Files.FileColumns.DATE_MODIFIED),
+                MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?", arrayOf("Android/media/%"), null)?.use { c ->
+                while (c.moveToNext()) {
+                    val pkg = (c.getString(0) ?: "").removePrefix("Android/media/").substringBefore('/')
+                    if (!pkgName.matches(pkg)) continue
+                    val a = sums.getOrPut(pkg) { LongArray(3) }
+                    a[0] += c.getLong(1); a[1]++; if (c.getLong(2) > a[2]) a[2] = c.getLong(2)
+                }
+            }
+        } catch (_: Throwable) {}
+        return sums.filter { it.value[0] >= (1L shl 20) && !installed(ctx, it.key) }.entries.sortedByDescending { it.value[0] }.take(40).map {
+            JSONObject().put("id", "left:" + it.key).put("name", it.key).put("desc", "${it.value[1]} file(s) left by an app that is no longer installed.")
+                .put("bytes", it.value[0]).put("count", it.value[1]).put("safe", false).put("path", "Android/media/" + it.key).put("group", "Leftovers").put("mod", it.value[2])
+        }
+    }
+
+    /** The files of one leftover ("left:com.example.app"), for Android's delete confirmation. Never for an installed app. */
+    fun leftoverUris(ctx: Context, id: String): List<android.net.Uri> {
+        val pkg = id.removePrefix("left:")
+        if (Build.VERSION.SDK_INT < 29 || !pkgName.matches(pkg) || installed(ctx, pkg)) return emptyList()
+        val out = ArrayList<android.net.Uri>()
+        val prefix = "Android/media/$pkg/"
+        try {
+            ctx.contentResolver.query(MediaStore.Files.getContentUri("external"),
+                arrayOf(MediaStore.Files.FileColumns._ID, MediaStore.Files.FileColumns.MEDIA_TYPE, MediaStore.MediaColumns.RELATIVE_PATH),
+                MediaStore.MediaColumns.RELATIVE_PATH + " LIKE ?", arrayOf("$prefix%"), null)?.use { c ->
+                while (c.moveToNext() && out.size < 800) {
+                    if (!(c.getString(2) ?: "").startsWith(prefix)) continue
+                    val kind = when (c.getInt(1)) { 1 -> "i"; 3 -> "v"; 2 -> "a"; else -> "f" }
+                    mediaUri("$kind:" + c.getLong(0))?.let { out.add(it) }
+                }
+            }
+        } catch (_: Throwable) {}
+        return out
     }
 
     /** A media id from the page ("v:123") back to the item Android should delete. */
