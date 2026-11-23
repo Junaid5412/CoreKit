@@ -70,7 +70,8 @@ type stClean struct {
 	Count int    `json:"count"`
 	Safe  bool   `json:"safe"`
 	Path  string `json:"path,omitempty"`
-	Group string `json:"group,omitempty"` // Browsers | Windows | Apps | Your files
+	Group string `json:"group,omitempty"` // Browsers | Windows | Apps | Leftovers | Your files
+	Mod   int64  `json:"mod,omitempty"`   // last change inside (unix seconds), for leftovers
 }
 
 type stBig struct {
@@ -80,6 +81,7 @@ type stBig struct {
 	Kind  string `json:"kind"` // folder | file | app
 	Drive string `json:"drive,omitempty"`
 	Mod   int64  `json:"mod,omitempty"` // last modified (unix seconds), 0 if unknown
+	Can   bool   `json:"can,omitempty"` // the folder browser may delete this item
 }
 
 type stRec struct {
@@ -201,6 +203,16 @@ func finishStorage(res *stResult, now int64) {
 			})
 		}
 	}
+	// data left behind by programs that are no longer installed
+	for i := range res.Clean {
+		c := &res.Clean[i]
+		if c.Group == "Leftovers" && c.Bytes > 0 {
+			res.Recs = append(res.Recs, stRec{
+				ID: "c-" + c.ID, Title: "Remove leftover " + c.Name, Why: c.Desc,
+				Bytes: c.Bytes, Kind: "clean", Target: c.ID, Safe: false,
+			})
+		}
+	}
 	// apps not opened in a long time (we know this on Android; on Windows LastUsed is usually 0)
 	for i := range res.Apps {
 		a := &res.Apps[i]
@@ -236,6 +248,9 @@ func finishStorage(res *stResult, now int64) {
 	}
 	rank := map[string]int{"clean": 0, "app-unused": 1, "big-file": 2}
 	sort.SliceStable(res.Recs, func(i, j int) bool {
+		if res.Recs[i].Safe != res.Recs[j].Safe {
+			return res.Recs[i].Safe
+		}
 		if rank[res.Recs[i].Kind] != rank[res.Recs[j].Kind] {
 			return rank[res.Recs[i].Kind] < rank[res.Recs[j].Kind]
 		}
@@ -308,8 +323,9 @@ func mountStorage(mux *http.ServeMux, base string, in *inspector) {
 	mux.HandleFunc(base+"scan", in.storageScan)
 	mux.HandleFunc(base+"clean", secPost(func(r *http.Request, b []byte) any {
 		var q struct {
-			IDs  []string            `json:"ids"`
-			Pick map[string][]string `json:"pick"`
+			IDs       []string            `json:"ids"`
+			Pick      map[string][]string `json:"pick"`
+			Permanent bool                `json:"permanent"` // false: recoverable items go to the Recycle Bin
 		}
 		_ = json.Unmarshal(b, &q)
 		if len(q.IDs) == 0 {
@@ -317,7 +333,7 @@ func mountStorage(mux *http.ServeMux, base string, in *inspector) {
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 		defer cancel()
-		freed, log, err := storageClean(ctx, q.IDs, q.Pick)
+		freed, log, err := storageClean(ctx, q.IDs, q.Pick, q.Permanent)
 		if err != nil {
 			return map[string]any{"error": err.Error(), "log": log}
 		}
@@ -337,15 +353,17 @@ func mountStorage(mux *http.ServeMux, base string, in *inspector) {
 	}))
 	mux.HandleFunc(base+"delete", secPost(func(r *http.Request, b []byte) any {
 		var q struct {
-			IDs []string `json:"ids"`
+			IDs       []string `json:"ids"`       // files from the last scan
+			Paths     []string `json:"paths"`     // items picked in the folder browser (PC)
+			Permanent bool     `json:"permanent"` // false: move to the Recycle Bin
 		}
 		_ = json.Unmarshal(b, &q)
-		if len(q.IDs) == 0 {
+		if len(q.IDs) == 0 && len(q.Paths) == 0 {
 			return map[string]string{"error": "Nothing was selected."}
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
 		defer cancel()
-		freed, n, log := storageDeleteFiles(ctx, q.IDs)
+		freed, n, log := storageDeleteFiles(ctx, q.IDs, q.Paths, q.Permanent)
 		return map[string]any{"freed": freed, "freedText": fmtSize(freed), "count": n, "log": log}
 	}))
 	mux.HandleFunc(base+"drill", secPost(func(r *http.Request, b []byte) any {

@@ -515,7 +515,7 @@ class Host(private val act: MainActivity, private val web: WebView) {
         "media" -> { act.runOnUiThread { act.requestMediaAccess() }; JSONObject().put("ok", true) }
         "delete" -> {
             val ids = b.optJSONArray("ids")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList()
-            val uris = ids.mapNotNull { StorageScanner.mediaUri(it) }
+            val uris = ids.flatMap { if (it.startsWith("left:")) StorageScanner.leftoverUris(act, it) else listOfNotNull(StorageScanner.mediaUri(it)) }
             var ok = false
             act.runOnUiThread { ok = act.deleteMedia(uris) }
             Thread.sleep(150)

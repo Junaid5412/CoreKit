@@ -74,59 +74,48 @@ func scanFiles(ctx context.Context, drives []stDrive, budget time.Duration) ([]s
 	return files, cats, partial
 }
 
-// storageDeleteFiles sends files from the last scan to the Recycle Bin. Anything not in that scan,
-// or inside Windows / Program Files, is refused.
-func storageDeleteFiles(ctx context.Context, ids []string) (int64, int, []string) {
-	var paths []string
-	var freed int64
+// storageDeleteFiles removes files from the last scan (ids) and items picked in the folder browser
+// (paths). By default they go to the Recycle Bin. Files not in the scan, and anything the folder
+// browser guard refuses, are skipped.
+func storageDeleteFiles(ctx context.Context, ids, paths []string, permanent bool) (int64, int, []string) {
+	var ok []string
 	var log []string
-	protected := []string{os.Getenv("SystemRoot"), os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"), os.Getenv("ProgramData")}
+	skipped := 0
 	for _, id := range ids {
 		storageDB.mu.Lock()
 		f := storageDB.fls[id]
 		storageDB.mu.Unlock()
-		if f == nil {
-			log = append(log, "Skipped a file that is not in the last scan. Rescan and try again.")
+		if f == nil || !canDelete(f.Path) || !storFileExists(f.Path) {
+			skipped++
 			continue
 		}
-		bad := false
-		for _, pr := range protected {
-			if pr != "" && strings.HasPrefix(strings.ToLower(f.Path), strings.ToLower(pr)+`\`) {
-				bad = true
-			}
-		}
-		if bad || !storFileExists(f.Path) {
-			log = append(log, "Skipped "+f.Name)
-			continue
-		}
-		paths = append(paths, f.Path)
-		freed += f.Bytes
-	}
-	moved := 0
-	for i := 0; i < len(paths); i += 30 {
-		end := i + 30
-		if end > len(paths) {
-			end = len(paths)
-		}
-		var q []string
-		for _, p := range paths[i:end] {
-			q = append(q, psQuote(p))
-		}
-		ps := "Add-Type -AssemblyName Microsoft.VisualBasic; foreach ($p in @(" + strings.Join(q, ",") + ")) { try { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p,'OnlyErrorDialogs','SendToRecycleBin') } catch {} }"
-		if err := runHidden(ctx, filepath.Join(os.Getenv("SystemRoot"), `System32\WindowsPowerShell\v1.0\powershell.exe`), "-NoProfile", "-NonInteractive", "-Command", ps); err != nil {
-			log = append(log, "Windows could not move some files to the Recycle Bin.")
-		}
+		ok = append(ok, f.Path)
 	}
 	for _, p := range paths {
-		if !storFileExists(p) {
-			moved++
+		p = filepath.Clean(p)
+		if !canDelete(p) || !storFileExists(p) {
+			skipped++
+			continue
 		}
+		ok = append(ok, p)
 	}
-	if moved < len(paths) {
-		freed = freed * int64(moved) / int64(max(1, len(paths)))
+	n, freed, failed := deletePaths(ctx, ok, permanent)
+	if permanent {
+		log = append(log, "Deleted "+itoa(n)+" item(s) ("+fmtSize(freed)+")")
+	} else {
+		log = append(log, "Moved "+itoa(n)+" item(s) to the Recycle Bin ("+fmtSize(freed)+"). Empty it to get the space back")
 	}
-	log = append(log, "Moved "+itoa(moved)+" file(s) to the Recycle Bin. Empty the Recycle Bin to get the space back.")
-	return freed, moved, log
+	for i, f := range failed {
+		if i == 5 {
+			log = append(log, "and "+itoa(len(failed)-5)+" more could not be removed")
+			break
+		}
+		log = append(log, "Could not remove "+f+": it is in use")
+	}
+	if skipped > 0 {
+		log = append(log, "Skipped "+itoa(skipped)+" protected or changed item(s)")
+	}
+	return freed, n, log
 }
 
 func itoa(n int) string            { return strconv.Itoa(n) }

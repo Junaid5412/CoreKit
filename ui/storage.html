@@ -145,6 +145,14 @@ select.sel{height:42px;border-radius:12px;background:var(--panel);border:1px sol
 .empty{text-align:center;color:var(--muted);padding:44px 20px}
 .lead{color:var(--muted2);margin:2px 2px 8px;font-size:13.5px}
 .gr{color:var(--green)}
+.note.ok{background:#0e2219;border:1px solid #1c4a36;color:#a7f3d0;align-items:flex-start}
+.note.ok b{color:#d1fae5}
+.opt{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border:1px solid var(--line);border-radius:12px;margin:0 0 14px;color:var(--text);font-size:13px;line-height:1.45;cursor:pointer}
+.opt input{width:18px;height:18px;margin:1px 0 0;accent-color:var(--red);flex:none}
+.opt small{display:block;color:var(--muted2);font-size:12px}
+.gh .btn{height:28px;padding:0 10px;font-size:12px}
+.mrow .ck{width:20px;height:20px;border-radius:6px}
+.mrow.done span:first-child{color:var(--text)}.mrow.warn span:first-child{color:#fde68a;white-space:normal}
 
 /* modal */
 .modal{position:fixed;inset:0;z-index:70;display:none;place-items:center;background:rgba(3,6,9,.82);padding:20px}
@@ -259,22 +267,40 @@ const sel = { app: new Set(), clean: new Set(), rec: new Set(), file: new Set() 
 const appOpen = new Set();
 const dlPick = new Set(), dlSizes = {};
 let dlFiles = null;
+let lastAction = null, afterNote = '';
+const drillPick = new Set(), drillSizes = {};
+let drillDirty = false, drillPath = '';
 
 /* ---------- scan ---------- */
 function startScan(){
   sel.app.clear(); sel.clean.clear(); sel.rec.clear(); sel.file.clear(); dlPick.clear(); dlFiles = null; appLimit = 150; fileLimit = 100;
   $('#rescan').style.display = 'none';
+  if (!lastAction) afterNote = '';
   syncFab();
   $('#inner').innerHTML = `<div class="scan"><div class="radar"><i></i><i></i><i></i><b></b></div><h2 id="sl">Scanning this ${DEV}…</h2><p>Reading every drive, ${ANDROID ? 'app' : 'program'} and folder so nothing is missed.</p><div class="pbar"><i id="pb"></i></div><small id="pp">0%</small></div>`;
   const es = new EventSource(API + 'storage/scan');
   es.addEventListener('progress', e => { const m = JSON.parse(e.data); const pb = $('#pb'), sl = $('#sl'), pp = $('#pp'); if (pb) pb.style.width = m.pct + '%'; if (pp) pp.textContent = m.pct + '%'; if (sl && m.label) sl.textContent = m.label + '…'; });
-  es.addEventListener('done', e => { es.close(); try { RES = JSON.parse(e.data); } catch (x) { return fail('Could not read the result.'); } render(); });
+  es.addEventListener('done', e => { es.close(); try { RES = JSON.parse(e.data); } catch (x) { return fail('Could not read the result.'); } if (lastAction) { afterNote = buildAfter(lastAction); lastAction = null; } render(); });
   es.addEventListener('fail', e => { es.close(); let m = 'Scan failed.'; try { m = JSON.parse(e.data).error || m; } catch (x) {} fail(m); });
   es.onerror = () => { es.close(); if (!RES || $('#pb')) fail('The scan connection dropped.'); };
 }
 function fail(m){ $('#inner').innerHTML = `<div class="empty"><p>${esc(m)}</p><button class="btn pri" data-a="scan" style="margin-top:12px">Try again</button></div>`; }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && pendingUsage) { pendingUsage = false; startScan(); } });
 window.addEventListener('focus', () => { if (pendingUsage) { pendingUsage = false; startScan(); } });
+
+/* ---------- what the last clean-up really did ---------- */
+function buildAfter(a){
+  const gain = RES.free - a.free;
+  const still = a.asked.filter(x => RES.apps.some(y => y.id === x.id));
+  const left = RES.clean.filter(c => c.group === 'Leftovers' && /you uninstalled/.test(c.desc || ''));
+  const lines = [];
+  if (gain > 1048576) lines.push(`<b>Free space went from ${size(a.free)} to ${size(RES.free)}</b> — ${size(gain)} more.`);
+  else if (!ANDROID) lines.push(`<b>Free space is ${size(RES.free)}.</b> ${a.recycled ? 'What you removed is in the Recycle Bin; empty it to get the space back.' : 'It has not changed yet.'}`);
+  if (still.length && !ANDROID) lines.push(`Still installed: ${still.map(x => esc(x.name)).join(', ')}. Finish the uninstaller window if one opened, or restart the PC, then rescan.`);
+  if (left.length) lines.push(`The programs you removed left ${left.length} folder${left.length > 1 ? 's' : ''} behind (${size(left.reduce((s, c) => s + c.bytes, 0))}).`);
+  if (!lines.length) return '';
+  return `<div class="note ok"><svg class="i" viewBox="0 0 24 24">${IC.shield}</svg><div class="grow">${lines.join('<br>')}</div>${left.length ? '<button class="btn sm pri" data-a="leftovers">Review leftovers</button>' : ''}</div>`;
+}
 
 /* ---------- categories ---------- */
 const catOf = a => (a.system || a.source === 'system' || a.source === 'preinstalled') ? 'system' : a.source === 'store' ? 'store' : 'other';
@@ -291,7 +317,7 @@ function render(){
   $('#sub').textContent = `${r.platform === 'android' ? 'Phone' : r.platform === 'windows' ? 'Windows PC' : 'Computer'} · scanned in ${Math.max(1, Math.round((r.ms || 0) / 1000))}s`;
   const col = usedPct >= 90 ? '#f87171' : usedPct >= 75 ? '#fbbf24' : '#38bdf8';
   const C = 2 * Math.PI * 58, off = C * (1 - usedPct / 100);
-  let h = '';
+  let h = afterNote;
   if ((r.needs || []).includes('usage')) {
     h += `<div class="note warn"><svg class="i" viewBox="0 0 24 24">${IC.warn}</svg><div class="grow"><b>Some details are hidden.</b> Allow Usage access to see exact app sizes, photos, videos and when each app was last used.</div><button class="btn sm pri" data-a="usage">Allow access</button></div>`;
   }
@@ -352,7 +378,11 @@ function overview(){
   return h;
 }
 function bigRow(b, max){
-  const k = b.kind;
+  const k = b.kind, low = String(b.name).toLowerCase();
+  const fix = low === 'hiberfil.sys' ? 'hibernation' : low === 'windows.old' ? 'windowsold' : '';
+  const hasFix = fix && RES.clean.some(c => c.id === fix);
+  const managed = low === 'pagefile.sys' || low === 'swapfile.sys';
+  if (hasFix || managed) return `<div class="row"><span class="ico y">${ico(k === 'folder' ? 'folder' : 'file')}</span><div class="tx"><b>${esc(b.name)}${managed ? '<span class="tag">Windows needs this</span>' : ''}</b><small>${managed ? 'Windows uses this file as extra memory. It cannot be deleted safely.' : fix === 'hibernation' ? 'Used by Hibernate and Fast Startup. Turn those off to remove it.' : 'Your previous Windows, kept after an upgrade.'}</small></div><div class="sz"><b class="num">${size(b.bytes)}</b>${bar(b.bytes, max, 'y')}</div>${hasFix ? `<button class="btn sm" data-quick="${fix}">${ico('trash')}Remove</button>` : ''}</div>`;
   return `<div class="row"><span class="ico ${k === 'app' ? 'a' : ''}">${ico(k === 'folder' ? 'folder' : k === 'app' ? 'app' : 'file')}</span><div class="tx"><b>${esc(b.name)}</b><small>${esc(k === 'app' ? (b.drive || '') : b.path)}</small></div><div class="sz"><b class="num">${size(b.bytes)}</b>${bar(b.bytes, max)}</div>${k === 'folder' ? `<button class="btn sm gho" data-drill="${esc(b.path)}" aria-label="Open">${ico('chev')}</button>` : ''}</div>`;
 }
 
@@ -498,18 +528,22 @@ function fileRow(f, max){
 }
 
 /* ---------- junk ---------- */
-const GROUPS = ['Browsers', 'Windows', 'Apps', 'Your files', ''];
+const GROUPS = ['Browsers', 'Windows', 'Apps', 'Leftovers', 'Your files', ''];
+const GNAME = { Leftovers: 'Leftovers of removed programs' };
+const pickable = c => c.id !== 'allcache' && c.id !== 'downloads';
 function junk(){
   const r = RES;
   if (!r.clean.length) return `<div class="empty">No junk found — nothing to clear.</div>`;
   const max = Math.max(...r.clean.map(c => c.bytes), 1);
   let h = `<p class="lead">Caches, temporary files and leftovers. Items marked <span class="gr">Safe</span> rebuild on their own. Others need a quick look first.</p>
-    <div class="toolbar"><button class="btn sm gho" data-selsafe>Select all safe</button></div>`;
+    <div class="toolbar"><button class="btn sm gho" data-selsafe>Select all safe</button><button class="btn sm gho" data-selall>Select everything</button></div>`;
   GROUPS.forEach(g => {
     const items = r.clean.filter(c => (c.group || '') === g);
     if (!items.length) return;
     const tot = items.reduce((s, c) => s + c.bytes, 0);
-    h += `<div class="gh"><h4>${esc(g || 'Other')}</h4><span class="num">${size(tot)}</span></div><div class="card">`;
+    h += `<div class="gh"><h4>${esc(GNAME[g] || g || 'Other')}</h4><span class="num">${size(tot)}</span>${items.some(pickable) ? `<button class="btn sm gho" data-selgroup="${esc(g)}">Select all</button>` : ''}</div>`;
+    if (g === 'Leftovers') h += `<p class="lead" style="margin-top:0">Folders no installed program owns any more. Open one to look inside before you remove it.</p>`;
+    h += `<div class="card">`;
     items.forEach(c => h += cleanRow(c, max));
     h += `</div>`;
   });
@@ -518,7 +552,8 @@ function junk(){
 function cleanRow(c, max){
   const isDl = c.id === 'downloads', isAll = c.id === 'allcache';
   const on = isDl ? dlPick.size > 0 : sel.clean.has(c.id);
-  const ic = isDl ? 'folder' : 'broom';
+  const isLeft = c.group === 'Leftovers';
+  const ic = isDl || isLeft ? 'folder' : 'broom';
   const tagH = c.safe ? '<span class="tag green">Safe</span>' : '<span class="tag amber">Review</span>';
   const desc = isDl && dlPick.size ? `${dlPick.size} selected · ${size([...dlPick].reduce((s, p) => s + (dlSizes[p] || 0), 0))}` : c.desc;
   let h = `<div class="row selrow" data-clean="${esc(c.id)}">
@@ -527,6 +562,7 @@ function cleanRow(c, max){
     <div class="sz"><b class="num">${size(c.bytes)}</b>${bar(c.bytes, max, c.safe ? 'g' : 'y')}</div>
     ${isDl ? `<button class="btn sm gho" data-dl aria-label="Choose files">${ico('chev')}</button>` : ''}
     ${isAll ? `<button class="btn sm gho" data-freeup>Open settings</button>` : ''}
+    ${isLeft && c.path && !ANDROID ? `<button class="btn sm gho" data-drill="${esc(c.path)}" aria-label="Look inside">${ico('chev')}</button>` : ''}
   </div>`;
   if (isDl) h += `<div id="dlbox" style="display:none"></div>`;
   return h;
@@ -564,11 +600,12 @@ function plan(){
   const cById = {}; RES.clean.forEach(c => cById[c.id] = c);
   const A = [...apps].filter(id => byId[id] && byId[id].removable).map(id => byId[id]);
   const C = [...cleans].filter(id => cById[id] && id !== 'downloads' && id !== 'allcache').map(id => cById[id]);
+  const L = C.filter(c => c.group === 'Leftovers');
   const D = [...dlPick];
   const fById = {}; RES.files.forEach(f => fById[f.id] = f);
   const F = [...sel.file].filter(id => fById[id]).map(id => fById[id]);
   const bytes = A.reduce((s, a) => s + a.size, 0) + C.reduce((s, c) => s + c.bytes, 0) + D.reduce((s, p) => s + (dlSizes[p] || 0), 0) + F.reduce((s, f) => s + f.bytes, 0);
-  return { A, C, D, F, n: A.length + C.length + D.length + F.length, bytes };
+  return { A, C, D, F, L, n: A.length + C.length + D.length + F.length, bytes };
 }
 function syncFab(){
   if (!RES) return;
@@ -586,6 +623,13 @@ function toggle(set, id){ set.has(id) ? set.delete(id) : set.add(id); syncFab();
 
 /* ---------- actions ---------- */
 function mrow(name, sz){ return `<div class="mrow"><span>${esc(name)}</span><b class="num">${sz}</b></div>`; }
+function report(lines, title){
+  const rows = lines.map(l => { const bad = /could not|skipped|in use|not turn|did not|nothing/i.test(l); return `<div class="mrow ${bad ? 'warn' : 'done'}"><span>${ico(bad ? 'warn' : 'check').replace('class="i"', 'class="i" style="width:16px;height:16px;flex:none;color:' + (bad ? 'var(--amber)' : 'var(--green)') + '"')}<span style="white-space:normal">${esc(l)}</span></span></div>`; }).join('');
+  modal(`<h3>${esc(title || 'Done')}</h3><p>Here is what happened. CoreKit now rescans to show the real free space.</p><div class="mlist">${rows}</div><div class="drow"><button class="btn pri" data-mdone>OK</button></div>`);
+}
+function permOption(){
+  return ANDROID ? '' : `<label class="opt"><input type="checkbox" id="perm"><span>Delete for good<small>Off: files, downloads and leftovers go to the Recycle Bin, so you can restore them. Very large items may not fit there and are deleted directly.</small></span></label>`;
+}
 function confirmRemove(){
   const p = plan();
   if (!p.n) return;
@@ -594,40 +638,51 @@ function confirmRemove(){
   p.C.forEach(c => rows += mrow(c.name, size(c.bytes)));
   if (p.D.length) rows += mrow(p.D.length + ' item' + (p.D.length > 1 ? 's' : '') + ' from Downloads', size(p.D.reduce((s, x) => s + (dlSizes[x] || 0), 0)));
   if (p.F.length) rows += mrow(p.F.length + ' file' + (p.F.length > 1 ? 's' : '') + ' (photos, videos, documents…)', size(p.F.reduce((s, f) => s + f.bytes, 0)));
+  const junkN = p.C.length - p.L.length;
   const parts = [];
-  if (p.F.length) parts.push(`${p.F.length} file${p.F.length > 1 ? 's' : ''} will be deleted${ANDROID ? '' : ' (sent to the Recycle Bin)'}`);
+  if (p.F.length) parts.push(`${p.F.length} file${p.F.length > 1 ? 's' : ''} will be removed`);
   if (p.A.length) parts.push(`${p.A.length} ${ANDROID ? 'app' : 'program'}${p.A.length > 1 ? 's' : ''} will be uninstalled`);
-  if (p.C.length) parts.push(`${p.C.length} junk item${p.C.length > 1 ? 's' : ''} will be cleared`);
-  if (p.D.length) parts.push(`${p.D.length} download${p.D.length > 1 ? 's' : ''} will be deleted`);
-  const risky = p.A.length || p.D.length || (p.F.length && ANDROID) || p.C.some(c => !c.safe);
+  if (junkN) parts.push(`${junkN} junk item${junkN > 1 ? 's' : ''} will be cleared`);
+  if (p.L.length) parts.push(`${p.L.length} leftover folder${p.L.length > 1 ? 's' : ''} will be removed`);
+  if (p.D.length) parts.push(`${p.D.length} download${p.D.length > 1 ? 's' : ''} will be removed`);
+  const recycl = p.F.length || p.D.length || p.L.length;
+  const risky = p.A.length || (recycl && ANDROID) || p.C.some(c => !c.safe && c.group !== 'Leftovers');
   modal(`<h3>Remove ${p.n} item${p.n > 1 ? 's' : ''}?</h3>
     <p>${parts.join('. ')}. This frees about <b class="gr">${size(p.bytes)}</b>.${risky ? ' Some of this cannot be undone.' : ''}</p>
     <div class="mlist">${rows}</div>
+    ${recycl ? permOption() : ''}
     <div class="drow"><button class="btn gho" data-mclose>Cancel</button><button class="btn dng" id="goRemove">${ico('trash')}Remove</button></div>`);
   $('#goRemove').onclick = async () => {
+    const permanent = !!($('#perm') && $('#perm').checked);
     closeModal();
     $('#fabGo').innerHTML = '<span class="spin"></span>';
-    const msgs = [];
-    const ids = p.C.map(c => c.id);
-    if (p.D.length) ids.push('downloads');
-    if (ids.length) {
-      const r = await call('clean', {ids, pick: p.D.length ? {downloads: p.D} : {}});
-      if (r.error && !(r.log && r.log.length)) toast(r.error, true); else msgs.push('Freed ' + (r.freedText || size(r.freed || 0)));
-    }
-    if (p.F.length) {
-      const r = await call('delete', {ids: p.F.map(f => f.id)});
-      if (r.error) toast(r.error, true);
-      else if (r.pending) { waitingDelete = true; return; } // Android: the system asks you to confirm
-      else msgs.push(r.count + ' file(s) moved to the Recycle Bin');
+    const lines = [];
+    lastAction = { free: RES.free, asked: p.A.map(a => ({id: a.id, name: a.name})), recycled: !!recycl && !permanent && !ANDROID };
+    const cleanIds = p.C.filter(c => !(ANDROID && c.group === 'Leftovers')).map(c => c.id);
+    if (p.D.length) cleanIds.push('downloads');
+    if (cleanIds.length) {
+      const r = await call('clean', {ids: cleanIds, pick: p.D.length ? {downloads: p.D} : {}, permanent});
+      if (r.error && !(r.log && r.log.length)) lines.push('Could not clean: ' + r.error); else (r.log || []).forEach(l => lines.push(l));
     }
     if (p.A.length) {
       const r = await call('uninstall', {ids: p.A.map(a => a.id)});
-      const items = r.items || [], ok = items.filter(i => i.ok).length;
-      msgs.push(ok + ' of ' + items.length + ' removed' + (ANDROID ? ' — confirm each on screen' : ''));
+      (r.items || []).forEach(i => lines.push((i.name || 'A program') + ': ' + (i.ok ? (i.msg || 'Uninstalled.') : 'could not be uninstalled. ' + (i.msg || ''))));
+      if (ANDROID && p.A.length) lines.push('Confirm each uninstall on the screen Android shows.');
     }
-    if (msgs.length) toast(msgs.join(' · '));
-    startScan();
+    const delIds = p.F.map(f => f.id).concat(ANDROID ? p.L.map(c => c.id) : []);
+    if (delIds.length) {
+      const r = await call('delete', {ids: delIds, permanent});
+      if (r.error) lines.push('Could not delete: ' + r.error);
+      else if (r.pending) { waitingDelete = true; pendingLines = lines; return; } // Android: the system asks you to confirm
+      else (r.log || []).forEach(l => lines.push(l));
+    }
+    report(lines);
   };
+}
+let pendingLines = [];
+function quick(id){
+  sel.app.clear(); sel.rec.clear(); sel.file.clear(); sel.clean.clear(); dlPick.clear();
+  sel.clean.add(id); syncFab(); confirmRemove();
 }
 function freeAll(){
   sel.clean.clear(); sel.rec.clear(); sel.app.clear();
@@ -662,22 +717,43 @@ function paintDl(){
 
 /* ---------- folder browser ---------- */
 let trail = [], waitingDelete = false;
-window.__stMediaDeleted = ok => { if (!waitingDelete) return; waitingDelete = false; toast(ok ? 'Deleted.' : 'Nothing was deleted.', !ok); startScan(); };
+window.__stMediaDeleted = ok => { if (!waitingDelete) return; waitingDelete = false; report(pendingLines.concat([ok ? 'Deleted what you selected.' : 'Nothing was deleted.'])); pendingLines = []; };
 window.__stMediaGranted = () => startScan();
 const SEP = p => p.indexOf('\\') >= 0 ? '\\' : '/';
 async function showDrill(path, push){
   if (push !== false) trail.push(path);
-  modal(`<div class="crumb"><button class="btn sm gho" data-dback ${trail.length < 2 ? 'style="visibility:hidden"' : ''} aria-label="Back">${ico('back')}</button><p>${esc(path)}</p></div><div class="mlist" id="drillList"><div style="padding:14px;color:var(--muted)"><span class="spin"></span> Measuring…</div></div><div class="drow"><button class="btn pri" data-mclose>Close</button></div>`, true);
+  drillPath = path; drillPick.clear();
+  modal(`<div class="crumb"><button class="btn sm gho" data-dback ${trail.length < 2 ? 'style="visibility:hidden"' : ''} aria-label="Back">${ico('back')}</button><p>${esc(path)}</p></div><div class="mlist" id="drillList"><div style="padding:14px;color:var(--muted)"><span class="spin"></span> Measuring…</div></div><div id="drillOpt"></div><div class="drow"><button class="btn gho" data-mclose>Close</button><button class="btn dng" id="drillGo" style="display:none"></button></div>`, true);
   const r = await call('drill', {path});
-  const el = $('#drillList'); if (!el) return;
+  const el = $('#drillList'); if (!el || drillPath !== path) return;
   if (r.error || !r.items) { el.innerHTML = `<div style="padding:14px;color:var(--muted)">${esc(r.error || 'Nothing to show')}</div>`; return; }
   const max = r.items.length ? r.items[0].bytes : 1;
-  el.innerHTML = r.items.length ? r.items.map(b => `<div class="mrow ${b.kind === 'folder' ? 'go' : ''}" ${b.kind === 'folder' ? `data-dd="${esc(b.path)}"` : ''}><span style="flex:1">${ico(b.kind === 'folder' ? 'folder' : 'file').replace('class="i"', 'class="i" style="width:16px;height:16px;color:var(--muted)"')}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(b.name)}</span></span><span style="width:80px">${bar(b.bytes, max)}</span><b class="num" style="min-width:64px;text-align:right">${size(b.bytes)}</b></div>`).join('') : `<div style="padding:14px;color:var(--muted)">This folder is empty.</div>`;
+  r.items.forEach(b => drillSizes[b.path] = b.bytes);
+  el.innerHTML = r.items.length ? r.items.map(b => `<div class="mrow ${b.kind === 'folder' ? 'go' : ''}" ${b.kind === 'folder' ? `data-dd="${esc(b.path)}"` : ''}><span style="flex:1">${b.can ? `<span class="ck" data-dpick="${esc(b.path)}">${ico('check')}</span>` : `<span class="ck lock" title="Protected">${ico('lock')}</span>`}${ico(b.kind === 'folder' ? 'folder' : 'file').replace('class="i"', 'class="i" style="width:16px;height:16px;color:var(--muted);flex:none"')}<span style="min-width:0;overflow:hidden;text-overflow:ellipsis">${esc(b.name)}</span></span><span style="width:80px">${bar(b.bytes, max)}</span><b class="num" style="min-width:64px;text-align:right">${size(b.bytes)}</b></div>`).join('') : `<div style="padding:14px;color:var(--muted)">This folder is empty.</div>`;
+  syncDrill();
+}
+function syncDrill(){
+  const go = $('#drillGo'), opt = $('#drillOpt'); if (!go) return;
+  document.querySelectorAll('[data-dpick]').forEach(el => el.classList.toggle('on', drillPick.has(el.dataset.dpick)));
+  const n = drillPick.size, bytes = [...drillPick].reduce((s, p) => s + (drillSizes[p] || 0), 0);
+  go.style.display = n ? '' : 'none';
+  go.innerHTML = ico('trash') + `Remove ${n} (${size(bytes)})`;
+  if (n && !opt.innerHTML) opt.innerHTML = permOption(); else if (!n) opt.innerHTML = '';
+}
+async function drillRemove(){
+  const paths = [...drillPick]; if (!paths.length) return;
+  const permanent = !!($('#perm') && $('#perm').checked);
+  const go = $('#drillGo'); go.disabled = true; go.innerHTML = '<span class="spin"></span>';
+  const r = await call('delete', {paths, permanent});
+  drillDirty = true;
+  if (!lastAction) lastAction = { free: RES.free, asked: [], recycled: !permanent };
+  toast(r.error ? r.error : (r.log || []).join(' · '), !!r.error || /could not/i.test((r.log || []).join(' ')));
+  showDrill(drillPath, false);
 }
 
 /* ---------- modal ---------- */
 function modal(html, wide){ const d = $('#dlg'); d.className = 'dlg' + (wide ? ' wide' : ''); d.innerHTML = html; $('#modal').classList.add('show'); }
-function closeModal(){ $('#modal').classList.remove('show'); trail = []; }
+function closeModal(){ $('#modal').classList.remove('show'); trail = []; drillPath = ''; if (drillDirty) { drillDirty = false; startScan(); } }
 
 /* ---------- events ---------- */
 document.addEventListener('click', async e => {
@@ -707,6 +783,13 @@ document.addEventListener('click', async e => {
   const rc = T('[data-rec]'); if (rc) { toggle(sel.rec, rc.dataset.rec); return; }
   if (T('[data-selsafe]')) { RES.clean.forEach(c => { if (c.safe && c.id !== 'allcache') sel.clean.add(c.id); }); paint(); return; }
   if (T('[data-selvis]')) { appList().forEach(a => { if (a.removable) sel.app.add(a.id); }); paintApps(); return; }
+  const dp = T('[data-dpick]'); if (dp) { e.stopPropagation(); const k = dp.dataset.dpick; drillPick.has(k) ? drillPick.delete(k) : drillPick.add(k); syncDrill(); return; }
+  if (T('#drillGo')) return drillRemove();
+  if (T('[data-mdone]')) { $('#modal').classList.remove('show'); return startScan(); }
+  const qk = T('[data-quick]'); if (qk) return quick(qk.dataset.quick);
+  if (T('[data-a="leftovers"]')) { tab = 'junk'; render(); const g = [...document.querySelectorAll('.gh h4')].find(x => /Leftovers/.test(x.textContent)); if (g) g.scrollIntoView({block: 'center'}); return; }
+  if (T('[data-selall]')) { RES.clean.forEach(c => { if (pickable(c)) sel.clean.add(c.id); }); paint(); return; }
+  const sg = T('[data-selgroup]'); if (sg) { const items = RES.clean.filter(c => (c.group || '') === sg.dataset.selgroup && pickable(c)); const all = items.every(c => sel.clean.has(c.id)); items.forEach(c => all ? sel.clean.delete(c.id) : sel.clean.add(c.id)); paint(); return; }
   const dd = T('[data-dd]'); if (dd) return showDrill(dd.dataset.dd);
   if (T('[data-dback]')) { trail.pop(); const prev = trail.pop(); if (prev) showDrill(prev); return; }
   const drill = T('[data-drill]'); if (drill) { trail = []; return showDrill(drill.dataset.drill); }
@@ -714,7 +797,7 @@ document.addEventListener('click', async e => {
 });
 $('#fabClear').onclick = () => { sel.app.clear(); sel.clean.clear(); sel.rec.clear(); sel.file.clear(); dlPick.clear(); if (RES) { paint(); if (dlFiles) paintDl(); } };
 $('#fabGo').onclick = () => confirmRemove();
-$('#modal').addEventListener('click', e => { if (e.target.id === 'modal') closeModal(); });
+$('#modal').addEventListener('click', e => { if (e.target.id !== 'modal') return; if ($('#dlg [data-mdone]')) { $('#modal').classList.remove('show'); startScan(); } else closeModal(); });
 document.addEventListener('input', e => { if (e.target.id === 'fileSearch') { fileQ = e.target.value; fileLimit = 100; paintFiles(); } if (e.target.id === 'appSearch') { appQ = e.target.value; appLimit = 150; paintApps(); } });
 document.addEventListener('change', e => {
   if (e.target.id === 'fileSort') { fileS = e.target.value; paintFiles(); }

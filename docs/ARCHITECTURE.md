@@ -1,104 +1,135 @@
-//go:build windows
+# CoreKit architecture
 
-package main
+## One product, three hosts
 
-// Runs the Storage module against the real Windows of the CI runner (CK_LIVE=1 only).
+CoreKit's screens are **web UIs in `ui/`** shared by every platform. Each platform is a
+thin *host* that (1) shows those screens in the system web engine and (2) answers the
+screens' requests with data collected the platform's own way.
 
-import (
-	"context"
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
-)
+| | Windows | Android | Linux (planned) |
+|---|---|---|---|
+| Host | Go (`desktop/`) | Kotlin (`android/`) | Go (`desktop/`) |
+| Web engine | WebView2 (built into Windows) | Android System WebView | WebKitGTK |
+| Health data | PowerShell/CIM (`desktop/scripts/collector.ps1`) | BatteryManager, StatFs, ActivityManager, sensors | /sys, /proc, upower, lsblk/smartctl |
+| Network data/fixes | PowerShell (`desktop/scripts/net.ps1`) | ConnectivityManager, WifiManager, LinkProperties | NetworkManager, resolvectl |
+| Security scan/fixes | PowerShell (`security.ps1`, `security_fix.ps1`) + Go rules (`sec_rules.go`) | PackageManager, AppOps, Settings.Secure, DevicePolicyManager (`SecurityScanner.kt`) | /proc, systemd units, cron (planned) |
+| Proxy engine | Xray (downloaded, checksum-verified) | Xray (bundled) | Xray |
+| Screen-capture shield | SetWindowDisplayAffinity | FLAG_SECURE | — |
 
-func TestStorageLiveScan(t *testing.T) {
-	if testingLiveOff() {
-		t.Skip("set CK_LIVE=1 to run against this PC")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
-	res, err := storageScan(ctx, func(p int, label string) { t.Logf("%3d%% %s", p, label) })
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(res.Drives) == 0 {
-		t.Fatal("no drives found")
-	}
-	var sys *stDrive
-	for i := range res.Drives {
-		if res.Drives[i].Kind == "system" {
-			sys = &res.Drives[i]
-		}
-	}
-	if sys == nil || sys.Total == 0 || sys.Used == 0 {
-		t.Fatalf("system drive not measured: %+v", res.Drives)
-	}
-	t.Logf("system drive %s: %s used of %s, %d parts", sys.Name, fmtSize(sys.Used), fmtSize(sys.Total), len(sys.Parts))
-	if res.AppCount == 0 {
-		t.Fatal("no installed programs found (the registry list failed)")
-	}
-	t.Logf("programs: %d, cleanables: %d, reclaimable: %s, recs: %d", res.AppCount, len(res.Clean), fmtSize(res.Reclaim), len(res.Recs))
-	for _, c := range res.Clean {
-		t.Logf("  clean %-22s %s safe=%v", c.Name, fmtSize(c.Bytes), c.Safe)
-	}
-	t.Logf("files listed: %d, kinds: %+v", len(res.Files), res.Cats)
-	for _, f := range res.Files {
-		if f.ID == "" || f.Cat == "" || f.Bytes <= 0 {
-			t.Fatalf("bad file entry: %+v", f)
-		}
-	}
-	// every app we list must carry the fields the UI needs
-	for i, a := range res.Apps {
-		if a.ID == "" || a.Name == "" {
-			t.Fatalf("app %d missing id/name: %+v", i, a)
-		}
-		if i >= 3 {
-			break
-		}
-		t.Logf("  app %-40s %s [%s]", a.Name, fmtSize(a.Size), a.Source)
-	}
-	// drilling into a real folder must return sized children
-	if items, err := storageDrill(ctx, `C:\Windows`); err != nil || len(items) == 0 {
-		t.Fatalf("drill C:\\Windows: %v (%d items)", err, len(items))
-	}
+### Shared Go code on Android
 
-	// a safe, reversible clean: clear the user temp folder and confirm it reports freed bytes
-	storageDB.set(res)
-	freed, log, err := storageClean(ctx, []string{"temp-user"}, nil)
-	if err != nil {
-		t.Fatalf("clean temp: %v", err)
-	}
-	t.Logf("cleaned temp: freed %s, %v", fmtSize(freed), log)
-}
+Android runs the same Go code as Windows for proxy links, Xray configuration, the tunnel
+check, proxy-location lookup, translation and Google-in-your-language: `desktop/` is also
+built for `android/arm64` and shipped as `libcorekit.so`; the app calls
+`libcorekit.so --helper <command>` with JSON on stdin (see `desktop/helper.go`). The official
+Xray Android build is shipped as `libxray.so` (checksum-verified in the pipeline).
 
-func testingLiveOff() bool { return os.Getenv("CK_LIVE") != "1" }
+### The contract between UI and host
 
-// Only files inside Downloads may be deleted, whatever paths the page sends.
-func TestStorageLiveDownloadsGuard(t *testing.T) {
-	if testingLiveOff() {
-		t.Skip("set CK_LIVE=1 to run against this PC")
-	}
-	home := t.TempDir()
-	t.Setenv("USERPROFILE", home)
-	dl := downloadsDir()
-	_ = os.MkdirAll(filepath.Join(dl, "sub"), 0o755)
-	inside := filepath.Join(dl, "a.zip")
-	folder := filepath.Join(dl, "sub")
-	outside := filepath.Join(home, "keep.txt")
-	for _, p := range []string{inside, filepath.Join(folder, "b.bin"), outside} {
-		if err := os.WriteFile(p, []byte("12345"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	n, b := removeDownloads([]string{inside, folder, outside, dl, filepath.Join(dl, "..", "keep.txt")})
-	if n != 2 || b != 10 {
-		t.Fatalf("removed %d items, %d bytes; want 2 items, 10 bytes", n, b)
-	}
-	if _, err := os.Stat(outside); err != nil {
-		t.Fatal("a file outside Downloads was deleted")
-	}
-	if _, err := os.Stat(dl); err != nil {
-		t.Fatal("the Downloads folder itself was deleted")
-	}
-}
+The UIs never know which platform they run on. They talk to the host through:
+
+* **Health** – `GET api/scan` (Server-Sent Events): `progress`, `log`, `result` events;
+  the result JSON schema is the one produced by `collector.ps1` (see `desktop/testdata/sample.json`).
+* **Internet** – `GET api/net/scan` (SSE) + `POST api/net/fix` / `GET api/net/fixstatus`
+  (schema: `desktop/testdata/net_sample.json`).
+* **Browser chrome** – `chrome.webview.postMessage({t: ...})` from the UI and
+  `window.__corekit(msg)` / web messages from the host (message list in `desktop/sb_windows.go`
+  `onUIMessage`). Android provides the same `chrome.webview` object through a small shim.
+
+* **Security** – `GET api/sec/scan` (SSE): `progress`, `done` (result) or `fail`. Other calls use
+  the same paths on both platforms: Windows answers `api/sec/<path>` (POST JSON), Android answers
+  `CoreKitNative.secCall(id, path, body)` and replies through `window.__secReply(id, json)`.
+  Paths: `fix {id, action}`, `fixall {ids}`, `history`, `undo {id}`, `restore {id}`, `qdelete {id}`,
+  `settings` (GET; POST `{key}` / `{untrust:[]}`), `shield {on}`, `harden {ids}`, `asr`, `bloat {id}`,
+  `protstatus {ids}` (reads the real state of each protection), `inspect {id}` (reverse view of the
+  file), `trace {id}` (public DNS/RDAP records for the servers found), `second {id}`, `app {id}` (Windows: uninstall from All apps) / `app {pkg, action}` (Android),
+  `installed {pkg, id, name}` (Android: checks the app is gone after Android's uninstall prompt),
+  `open {what}` (Android settings screens). Android needs REQUEST_DELETE_PACKAGES for the prompt.
+  Result schema (`desktop/sec_rules.go` `secResult`, Android `SecurityScanner.kt`):
+  `platform, t, host, os, admin, score (0-100, higher is safer), verdict (clean|attention|danger),
+  counts{high,med,low,info}, scanned{processes,autoruns,files,connections,apps,lookups},
+  protection[{id,name,state(on|off|warn|unknown),detail,fix}],
+  findings[{id,kind(process|autorun|file|setting|threat|app),sev(high|med|low|info),score,title,sub,summary,
+  reasons[{t,w}],path,sha256,size,signer,signed,company,origin{by,user,how,url,ref,zone,via,text},inner,
+  chain[{pid,name,path,cmd,t,sig}],persist[{kind,where,value}],net[{remote,port,state}],first,last,
+  intel[{source,verdict,family,tags,link,first}],actions[{id,label,main}],advice,mitre[],pids[],pkg}],
+  bloat[{id,name,publisher,kind,rating(remove|optional|keep),why,size,action,on}],
+  apps[{id,name,pkg,publisher,kind(program|store|user|system),source,side,version,size,first,last,sev,score,fid,rating,flags[],canRemove,enabled}],
+  notes[], intel, ms`.
+  `harden {ids}` replies `{msg, note, items:[{id,name,ok,state(on|off|partial|unknown),detail,err,on,of}]}`:
+  each item is applied on its own and then READ BACK from Windows, so `ok` means Windows confirmed it.
+  Actions: `quarantine` (restorable), `delete` ("Delete it myself": stops it, removes it, no undo; a
+  threat found inside an archive deletes the archive), `defender`, `kill`, `remove`, `trust`.
+  `inspect` replies `{exists,kind,kindText,size,md5,sha1,sha256,created,modified,source[{k,v,link}],
+  creator[{k,v}],contents[{name,size,flag}],servers[{host,kind,count,why,sev,urls,link}],
+  caps[{t,why,ev,sev}],bad[],notes[],risk,summary}`; `trace` replies `{items:[{host,ips,owner,country,
+  registrar,created,ageDays,note,sev}]}`. Both come from the shared Go code (`sec_inspect.go`,
+  `sec_trace.go`); on Android the same code runs as `libcorekit.so --helper inspect|trace`.
+  History is stored as one file per record under `<secdir>/history/`, and settings are re-read when they change on disk, so the app and the Live Shield (separate processes) never overwrite each other's history or miss a newly trusted file. Windows collects with `desktop/scripts/security.ps1` and fixes with `security_fix.ps1` (everything
+  removed is backed up for undo); Live Shield is `CoreKit.exe --shield`, started at sign-in by Task
+  Scheduler from `Program Files\CoreKit`. Android's Live Shield is a periodic JobScheduler check of
+  changed packages (`SecurityJob`).
+
+* **Remote Access** – one Go engine on both platforms (Android runs it inside `libcorekit.so`).
+  State: `{t:"state", me, hosting, code, stage, session:{role, peer, since, w, h, ctl, quality,
+  tx, rx, capErr}}` (`tx`/`rx` = screen pictures sent/received, `capErr` = why the screen can't
+  be captured). Frames: `{t:"frame", w, h, seq, d}` (`d` = base64 JPEG). `events?lite=1` leaves
+  out `d`; the page then loads the picture from `remote/frame.jpg` (Android, served from the
+  engine's `lastframe`), and falls back to full frames if that fails. Viewer input `{t:"in", k:"lock"}` locks the PC (LockWorkStation — Win+L cannot be injected); `k:"lock", curtain:true` / `k:"unlock"` show and lift CoreKit's full-screen lock curtain, which also lifts itself when the session ends. On Android the screen is captured only once a device connects (no recording indicator while merely waiting).
+
+* **Storage & Performance** – drives and where space goes, every installed program/app (size,
+  source, bloat), reclaimable junk (caches, temp, Recycle Bin, hibernation file, Windows.old, old
+  downloads) and plain recommendations. Routes `storage/scan` (SSE), `storage/clean {ids,pick}`,
+  `storage/uninstall {ids}`, `storage/drill {path}`. Result shape in `desktop/storage.go`
+  (`stResult`); Windows collects in `storage_windows.go` (+ `scripts/storage.ps1`), Android in
+  `StorageScanner.kt`, both producing the same JSON for the one `storage.html`. Every drive is
+  measured top-level folder by folder (parallel, per-folder limits) so the "where did it go" bar
+  adds up; programs with no recorded size are measured from their folder. Fields beyond the
+  basics: `clean[].group` (Browsers | Windows | Apps | Your files), `big[].mod` and `big[].kind`
+  (`folder|file|app`), `apps[].approx` (size is only the package size), and `needs: ["usage"]`
+  (Android: the page offers to open Usage access, which unlocks exact app sizes, photo/video/audio
+  totals and last-used dates; no media permissions are requested). Routes `storage/usage` and
+  `storage/freeup` (Android only) open the matching system screens. Downloads deletes are
+  restricted to paths inside the Downloads folder on both platforms. The remote "wants to connect"
+  notification buttons go through `AskReceiver` (a broadcast), not the service.
+  Photos, videos, audio, documents and archives come as `cats` (totals per kind), `files` (the
+  biggest of each kind; `id` is a path on PC and a MediaStore id like `v:123` on Android), `dirs`
+  (Android: folders using the most space) and `needs: ["media"]` until the phone grants
+  photo/video/audio access. App rows may carry `code`, `data` (includes game files under
+  Android/data) and `cache` for the per-app breakdown.
+* **Storage: leftovers and deleting** – `clean[]` items in group `Leftovers` (id `left:<path>` on
+  PC, `left:<package>` on Android, with `path` and `mod`) are data folders no installed program
+  owns. Windows (`storage_leftover_windows.go`, matching rules in `storage_leftover.go`): folders
+  directly in AppData Local/Roaming/LocalLow that match no installed program, Start-menu shortcut
+  or Program Files folder and have not changed for 14 days; Program Files folders with no match
+  and no program files left inside; and whatever programs uninstalled through CoreKit left behind
+  (remembered for 30 days in `storage-uninstalled.json`). They are never marked safe. Android:
+  `Android/media/<package>` files of apps that are no longer installed. `storage/clean
+  {ids, pick, permanent}` and `storage/delete {ids, paths, permanent}`: with `permanent` false the
+  PC moves files, Downloads picks, leftovers and folder-browser picks to the Recycle Bin
+  (`SHFileOperation`); every delete is checked afterwards and the log says what was really freed
+  and what was in use. `storage/drill` items carry `can` when the folder browser may delete them;
+  the guard (`canDelete`) refuses Windows, Program Files, ProgramData, other accounts, profile
+  shell folders, AppData roots and CoreKit's own data outside a browser profile. Leftovers can be
+  removed only if the last scan listed them. The hibernation item is offered whenever
+  `hiberfil.sys` has a size (read natively; PowerShell's `Test-Path` reports it missing).
+
+* **Virtual Environment** – not part of CoreKit. Its code (engine, page, image tools and
+  workflows) is kept on the `virtual-environment` branch for a separate app.
+
+Because the contract is identical, **a UI change ships to every platform at once**, and a new
+check only needs its collector written per platform, returning the same JSON fields.
+
+## Versions and releases
+
+`VERSION` is the only version number. The pipeline stamps it into the Windows exe
+(resources + `main.appVersion`) and the Android app (`versionName`), then publishes
+`v<VERSION>` with every platform's file. Bump `VERSION` for a new release; pushes without a
+bump refresh the current release.
+
+## Security rules
+
+* No credentials in the repository. Proxy links are entered in the app and stored encrypted
+  (Windows DPAPI / Android Keystore).
+* With a proxy on, the browser fails closed: local DNS disabled, WebRTC restricted, pages hidden
+  until the in-engine leak checks pass.
