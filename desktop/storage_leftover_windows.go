@@ -237,7 +237,7 @@ func scanLeftovers(ctx context.Context, apps []stApp, gone []goneApp, now int64)
 		a := stApp{Name: g.Name, Loc: g.Loc}
 		why := "Left behind by " + g.Name + ", which you uninstalled."
 		if g.Kind != "appx" && g.Loc != "" && locNamedFor(g.Loc, g.Name, g.Pub) && safeInstallDir(g.Loc, apps) {
-			add(leftCand{path: filepath.Clean(g.Loc), name: filepath.Base(g.Loc), where: filepath.Dir(g.Loc), why: why, pf: true, sure: true})
+			add(leftCand{path: filepath.Clean(g.Loc), name: filepath.Base(g.Loc), where: filepath.Base(filepath.Dir(filepath.Clean(g.Loc))), why: why, pf: true, sure: true})
 		}
 		for _, r := range []struct{ root, where string }{{local, `AppData\Local`}, {roam, `AppData\Roaming`}, {low, `AppData\LocalLow`}} {
 			for _, n := range subDirs(r.root) {
