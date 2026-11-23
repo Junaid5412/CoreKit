@@ -224,7 +224,7 @@ const ANDROID = !!(N && N.stCall);
 const DEV = ANDROID ? 'phone' : 'PC';
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); }
+if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); addEventListener('pagehide', () => navigator.sendBeacon(API + 'bye')); }
 
 const IC = {
   drive:'<rect x="3" y="4" width="18" height="6" rx="2"/><rect x="3" y="14" width="18" height="6" rx="2"/><path d="M7 7h.01M7 17h.01"/>',

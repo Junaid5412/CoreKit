@@ -112,10 +112,10 @@ func runInspector(module string) {
 			break
 		}
 		busy := in.jobRunning()
-		if got && exited && time.Since(last) > 12*time.Second && !busy {
+		if got && exited && time.Since(last) > 4*time.Second && !busy { // window process gone and the page is silent
 			break
 		}
-		if got && time.Since(last) > 120*time.Second && !busy {
+		if got && time.Since(last) > 40*time.Second && !busy { // browser still running in the background, page gone
 			break
 		}
 		if !got && time.Since(start) > 25*time.Second {
@@ -140,7 +140,7 @@ func runInspector(module string) {
 	_ = srv.Shutdown(sctx)
 	c2()
 	if win != nil {
-		win.cleanup()
+		go win.cleanup() // removing the window's temp profile can take seconds; the menu need not wait
 	}
 }
 

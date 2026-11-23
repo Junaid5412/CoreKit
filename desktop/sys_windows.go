@@ -249,6 +249,7 @@ func launchWindow(url string) *appWindow {
 		fmt.Sprintf("--window-size=%d,%d", w, h),
 		fmt.Sprintf("--window-position=%d,%d", x, y),
 		"--no-first-run", "--no-default-browser-check", "--disable-sync", "--disable-extensions",
+		"--disable-background-mode", // the browser must exit when the window closes
 		"--hide-crash-restore-bubble", "--disable-background-timer-throttling",
 		"--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows",
 		"--disable-features=Translate,msEdgeShopping,msUndersideButton,msEdgeSidebarV2,EdgeCollections",

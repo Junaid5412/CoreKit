@@ -216,7 +216,7 @@ const ANDROID = !!(N && N.activityLog);
 const MAXDAYS = 90;
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); }
+if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); addEventListener('pagehide', () => navigator.sendBeacon(API + 'bye')); }
 
 /* ---------- icons ---------- */
 const IC = {

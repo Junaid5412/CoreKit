@@ -317,7 +317,7 @@ const N = window.CoreKitNative;
 const ANDROID = !!(N && N.secCall);
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); }
+if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); addEventListener('pagehide', () => navigator.sendBeacon(API + 'bye')); }
 const DEV = ANDROID ? 'phone' : 'PC';
 
 /* ---------- icons ---------- */

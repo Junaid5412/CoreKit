@@ -380,7 +380,7 @@ const ANDROID = !!(N && N.remote);
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const TOUCH = matchMedia('(pointer:coarse)').matches;
-if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); }
+if (!ANDROID) { const p = () => fetch(API + 'ping', {cache:'no-store'}).catch(() => {}); p(); setInterval(p, 1000); addEventListener('pagehide', () => navigator.sendBeacon(API + 'bye')); }
 
 const IC = {
   windows:'<rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
